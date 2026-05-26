@@ -1,0 +1,12 @@
+[repository]
+name = "hypr-radiant"
+authors = ["Nika Sumbadze (@nsumbadze)"]
+
+[hypr-radiant]
+description = "Minimal Hyprland plugin skeleton for radiant overview experiments."
+authors = ["Nika Sumbadze (@nsumbadze)"]
+output = "build/hypr-radiant.so"
+build = [
+    "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release",
+    "cmake --build build"
+]
