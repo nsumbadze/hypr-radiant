@@ -15,7 +15,10 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland)
 
 add_library(hypr-radiant MODULE
+    src/Config.cpp
+    src/FadeAnimation.cpp
     src/main.cpp
+    src/OverlayRenderer.cpp
 )
 
 target_include_directories(hypr-radiant

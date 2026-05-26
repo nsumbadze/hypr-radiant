@@ -20,6 +20,9 @@ HANDLE g_pluginHandle = nullptr;
 std::unique_ptr<hypr_radiant::RadiantPlugin> g_plugin;
 
 void resetPluginState() {
+    if (g_plugin)
+        g_plugin->shutdown();
+
     g_plugin.reset();
     g_pluginHandle = nullptr;
 }
@@ -46,19 +49,35 @@ void assertCompatibleHeaders() {
 
 namespace hypr_radiant {
 
+RadiantPlugin::RadiantPlugin(HANDLE handle) : m_handle(handle), m_overlay(m_config) {}
+
+bool RadiantPlugin::initialize() {
+    if (!m_config.registerValues(m_handle)) {
+        log::error("failed to register config values");
+        return false;
+    }
+
+    m_overlay.install();
+    return true;
+}
+
+void RadiantPlugin::shutdown() {
+    m_overlay.uninstall();
+}
+
 SDispatchResult RadiantPlugin::toggle(const std::string& args) {
     if (!args.empty())
         log::warn("radiant:toggle ignores dispatcher arguments: {}", args);
 
-    m_active = !m_active;
+    m_overlay.toggle();
 
-    log::info("radiant state changed: {}", m_active ? "active" : "inactive");
+    log::info("radiant overlay {}", m_overlay.active() ? "opened" : "closed");
 
     return {.passEvent = false, .success = true, .error = ""};
 }
 
 bool RadiantPlugin::active() const noexcept {
-    return m_active;
+    return m_overlay.active();
 }
 
 } // namespace hypr_radiant
@@ -73,7 +92,12 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_pluginHandle = handle;
     assertCompatibleHeaders();
 
-    g_plugin       = std::make_unique<hypr_radiant::RadiantPlugin>();
+    g_plugin = std::make_unique<hypr_radiant::RadiantPlugin>(g_pluginHandle);
+
+    if (!g_plugin->initialize()) {
+        resetPluginState();
+        throw std::runtime_error{"hypr-radiant: failed to initialize"};
+    }
 
     const auto registered = HyprlandAPI::addDispatcherV2(
         g_pluginHandle,

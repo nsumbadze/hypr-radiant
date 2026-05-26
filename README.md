@@ -69,8 +69,22 @@ After loading the plugin, run:
 hyprctl dispatch radiant:toggle
 ```
 
-The command toggles an internal boolean and logs whether radiant is now active or
-inactive.
+The command toggles internal state and logs whether radiant is active. In v0.2 it
+also fades a fullscreen translucent overlay in and out on each active monitor.
+
+## Configuration
+
+```ini
+plugin {
+    radiant {
+        opacity = 0.55
+        animation_duration = 180
+    }
+}
+```
+
+- `opacity`: overlay opacity from `0.0` to `1.0`
+- `animation_duration`: fade duration in milliseconds from `0` to `2000`
 
 For development without installing through `hyprpm`, build the plugin and load
 the generated shared object directly:
