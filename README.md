@@ -1,12 +1,11 @@
 # hypr-radiant
 
 `hypr-radiant` is a small Hyprland C++ plugin targeting Hyprland 0.55.x. It
-currently provides a `radiant:toggle` dispatcher that fades a fullscreen overlay
-and collects a snapshot of monitor, workspace, and window state for upcoming
-overview UI work.
+provides a `radiant:toggle` dispatcher that opens a native Workspace Wall
+overview for switching between workspaces and open windows.
 
-Window previews, input capture, and workspace/window rearrangement are not
-implemented yet.
+Window previews, search, and workspace/window rearrangement are not implemented
+yet.
 
 ## Requirements
 
@@ -70,9 +69,17 @@ After loading the plugin, run:
 hyprctl dispatch radiant:toggle
 ```
 
-The command toggles internal overlay state, logs whether radiant is active, and
-logs a concise state snapshot count for monitors, workspaces, windows, and
-mapped windows. The snapshot is the foundation for future overview rendering.
+The command opens or closes the Workspace Wall overview. The overview shows
+workspace cards and labeled window cards from the current compositor state.
+
+## Controls
+
+- `hyprctl dispatch radiant:toggle`: open or close overview
+- Click workspace card: switch workspace
+- Click window card: switch workspace and focus window
+- Arrow keys: move selection
+- `Enter`: activate selection
+- `Esc`: close overview
 
 ## Configuration
 
