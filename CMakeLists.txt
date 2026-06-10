@@ -19,6 +19,7 @@ add_library(hypr-radiant MODULE
     src/FadeAnimation.cpp
     src/main.cpp
     src/OverlayRenderer.cpp
+    src/WorkspaceWallLayout.cpp
 )
 
 target_include_directories(hypr-radiant
@@ -45,3 +46,22 @@ set_target_properties(hypr-radiant PROPERTIES
     OUTPUT_NAME "hypr-radiant"
     SUFFIX ".so"
 )
+
+include(CTest)
+
+if(BUILD_TESTING)
+    add_executable(hypr-radiant-tests
+        tests/WorkspaceWallLayoutTest.cpp
+        src/WorkspaceWallLayout.cpp
+    )
+
+    target_include_directories(hypr-radiant-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
+    target_compile_features(hypr-radiant-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-tests PRIVATE -UNDEBUG)
+
+    add_test(NAME hypr-radiant-tests COMMAND hypr-radiant-tests)
+endif()
