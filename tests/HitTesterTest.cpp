@@ -35,12 +35,51 @@ void navigationMovesThroughWorkspaceGrid() {
     assert(target.workspaceId == 2);
 }
 
+void windowCurrentNavigationMovesFromContainingWorkspace() {
+    const auto target = HitTester{}.moveSelection(frame(), {.type = OverviewTargetType::Window, .workspaceId = 1, .windowId = 11}, NavigationDirection::Right);
+    assert(target.type == OverviewTargetType::Workspace);
+    assert(target.workspaceId == 2);
+}
+
+void rightAndBottomEdgesAreOutsideHitBounds() {
+    const auto rightEdge = HitTester{}.hitTest(frame(), 390, 40);
+    assert(rightEdge.type == OverviewTargetType::None);
+
+    const auto bottomEdge = HitTester{}.hitTest(frame(), 220, 130);
+    assert(bottomEdge.type == OverviewTargetType::None);
+}
+
+void zeroSizedRectsAreNotHittable() {
+    WorkspaceWallFrame zeroFrame{.monitorId = 1, .bounds = {.width = 100, .height = 100}};
+    zeroFrame.workspaces.push_back({.workspaceId = 1, .name = "1", .rect = {.x = 10, .y = 10, .width = 0, .height = 50}, .empty = false});
+    zeroFrame.workspaces.back().windows.push_back({.stableId = 11, .workspaceId = 1, .rect = {.x = 10, .y = 10, .width = 50, .height = 0}, .label = "A"});
+
+    const auto target = HitTester{}.hitTest(zeroFrame, 10, 10);
+    assert(target.type == OverviewTargetType::None);
+}
+
+void emptyFrameHasNoInitialSelection() {
+    const auto target = HitTester{}.initialSelection({});
+    assert(target.type == OverviewTargetType::None);
+}
+
+void missingCurrentFallsBackToInitialSelection() {
+    const auto target = HitTester{}.moveSelection(frame(), {.type = OverviewTargetType::Workspace, .workspaceId = 99}, NavigationDirection::Right);
+    assert(target.type == OverviewTargetType::Workspace);
+    assert(target.workspaceId == 1);
+}
+
 } // namespace
 
 int main() {
     windowHitWinsOverWorkspaceHit();
     workspaceBackgroundHitWorks();
     navigationMovesThroughWorkspaceGrid();
+    windowCurrentNavigationMovesFromContainingWorkspace();
+    rightAndBottomEdgesAreOutsideHitBounds();
+    zeroSizedRectsAreNotHittable();
+    emptyFrameHasNoInitialSelection();
+    missingCurrentFallsBackToInitialSelection();
     std::cout << "HitTesterTest passed\n";
     return 0;
 }

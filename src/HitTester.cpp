@@ -8,7 +8,7 @@ namespace hypr_radiant {
 namespace {
 
 bool contains(const LayoutRect& rect, double x, double y) {
-    return x >= rect.x && y >= rect.y && x <= rect.x + rect.width && y <= rect.y + rect.height;
+    return rect.width > 0.0 && rect.height > 0.0 && x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
 }
 
 LayoutRect rectFor(const WorkspaceWallFrame& frame, OverviewTarget target) {
@@ -30,6 +30,20 @@ std::vector<OverviewTarget> workspaceTargets(const WorkspaceWallFrame& frame) {
     for (const auto& workspace : frame.workspaces)
         targets.push_back({.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
     return targets;
+}
+
+OverviewTarget normalizeCurrent(const WorkspaceWallFrame& frame, OverviewTarget current) {
+    if (current.type != OverviewTargetType::Window)
+        return current;
+
+    for (const auto& workspace : frame.workspaces) {
+        for (const auto& window : workspace.windows) {
+            if (window.stableId == current.windowId)
+                return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
+        }
+    }
+
+    return current;
 }
 
 double centerX(const LayoutRect& rect) { return rect.x + rect.width / 2.0; }
@@ -70,18 +84,19 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
     if (targets.empty())
         return {};
 
-    const auto currentRect = rectFor(frame, current);
-    if (current.type == OverviewTargetType::None || currentRect.width <= 0.0 || currentRect.height <= 0.0)
+    const auto normalizedCurrent = normalizeCurrent(frame, current);
+    const auto currentRect       = rectFor(frame, normalizedCurrent);
+    if (normalizedCurrent.type == OverviewTargetType::None || currentRect.width <= 0.0 || currentRect.height <= 0.0)
         return initialSelection(frame);
 
     const auto cx = centerX(currentRect);
     const auto cy = centerY(currentRect);
 
-    auto best      = current;
+    auto best      = normalizedCurrent;
     auto bestScore = 1.0e18;
 
     for (const auto& target : targets) {
-        if (target.type == current.type && target.workspaceId == current.workspaceId && target.windowId == current.windowId)
+        if (target.type == normalizedCurrent.type && target.workspaceId == normalizedCurrent.workspaceId && target.windowId == normalizedCurrent.windowId)
             continue;
 
         const auto rect = rectFor(frame, target);

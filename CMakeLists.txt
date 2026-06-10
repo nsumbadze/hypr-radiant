@@ -14,6 +14,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland)
 
+function(hypr_radiant_enable_warnings target)
+    target_compile_options(${target}
+        PRIVATE
+            -Wall
+            -Wextra
+            -Wpedantic
+    )
+endfunction()
+
 add_library(hypr-radiant MODULE
     src/Config.cpp
     src/FadeAnimation.cpp
@@ -32,10 +41,9 @@ target_include_directories(hypr-radiant
 target_compile_options(hypr-radiant
     PRIVATE
         -fno-gnu-unique
-        -Wall
-        -Wextra
-        -Wpedantic
 )
+
+hypr_radiant_enable_warnings(hypr-radiant)
 
 target_link_libraries(hypr-radiant
     PRIVATE
@@ -63,13 +71,13 @@ if(BUILD_TESTING)
     )
 
     target_compile_features(hypr-radiant-layout-tests PRIVATE cxx_std_23)
-    target_compile_options(hypr-radiant-layout-tests PRIVATE -UNDEBUG)
+    target_compile_options(hypr-radiant-layout-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-layout-tests)
 
     add_test(NAME hypr-radiant-layout-tests COMMAND hypr-radiant-layout-tests)
 
     add_executable(hypr-radiant-hit-tests
         tests/HitTesterTest.cpp
-        src/WorkspaceWallLayout.cpp
         src/HitTester.cpp
     )
 
@@ -79,7 +87,8 @@ if(BUILD_TESTING)
     )
 
     target_compile_features(hypr-radiant-hit-tests PRIVATE cxx_std_23)
-    target_compile_options(hypr-radiant-hit-tests PRIVATE -UNDEBUG)
+    target_compile_options(hypr-radiant-hit-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-hit-tests)
 
     add_test(NAME hypr-radiant-hit-tests COMMAND hypr-radiant-hit-tests)
 endif()
