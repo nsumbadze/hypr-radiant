@@ -69,6 +69,15 @@ SDispatchResult RadiantPlugin::toggle(const std::string& args) {
     if (!args.empty())
         log::warn("radiant:toggle ignores dispatcher arguments: {}", args);
 
+    const auto state = m_stateCollector.collect();
+
+    log::info(
+        "state snapshot: {} monitors, {} workspaces, {} windows ({} mapped)",
+        state.monitors.size(),
+        state.workspaces.size(),
+        state.windows.size(),
+        state.mappedWindowCount());
+
     m_overlay.toggle();
 
     log::info("radiant overlay {}", m_overlay.active() ? "opened" : "closed");

@@ -20,6 +20,7 @@ add_library(hypr-radiant MODULE
     src/main.cpp
     src/OverlayRenderer.cpp
     src/WorkspaceWallLayout.cpp
+    src/StateCollector.cpp
 )
 
 target_include_directories(hypr-radiant

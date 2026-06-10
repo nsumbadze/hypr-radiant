@@ -2,6 +2,7 @@
 
 #include <hypr-radiant/Config.hpp>
 #include <hypr-radiant/OverlayRenderer.hpp>
+#include <hypr-radiant/StateCollector.hpp>
 
 #include <hyprland/src/SharedDefs.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
@@ -22,6 +23,7 @@ class RadiantPlugin {
   private:
     HANDLE          m_handle = nullptr;
     RadiantConfig     m_config;
+    StateCollector  m_stateCollector;
     OverlayRenderer m_overlay;
 };
 
