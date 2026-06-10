@@ -27,7 +27,7 @@ CBox boxFor(const LayoutRect& rect) {
     return CBox{std::round(rect.x), std::round(rect.y), std::round(rect.width), std::round(rect.height)};
 }
 
-void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int round = 0) {
+void drawRect(const CBox& box, CHyprColor color, int round = 0) {
     if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
         return;
 
@@ -36,18 +36,18 @@ void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int roun
     data.color = color;
     data.round = round;
 
-    g_pHyprRenderer->draw(data, damage);
+    g_pHyprRenderer->draw(data);
 }
 
-void drawBorder(const CBox& box, double size, CHyprColor color, const CRegion& damage) {
+void drawBorder(const CBox& box, double size, CHyprColor color) {
     if (box.w <= 0.0 || box.h <= 0.0 || size <= 0.0)
         return;
 
     const auto border = std::min({size, box.w / 2.0, box.h / 2.0});
-    drawRect(CBox{box.x, box.y, box.w, border}, color, damage);
-    drawRect(CBox{box.x, box.y + box.h - border, box.w, border}, color, damage);
-    drawRect(CBox{box.x, box.y, border, box.h}, color, damage);
-    drawRect(CBox{box.x + box.w - border, box.y, border, box.h}, color, damage);
+    drawRect(CBox{box.x, box.y, box.w, border}, color);
+    drawRect(CBox{box.x, box.y + box.h - border, box.w, border}, color);
+    drawRect(CBox{box.x, box.y, border, box.h}, color);
+    drawRect(CBox{box.x + box.w - border, box.y, border, box.h}, color);
 }
 
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
@@ -59,11 +59,51 @@ const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64
     return nullptr;
 }
 
+bool contains(const LayoutRect& rect, double x, double y) {
+    return rect.width > 0.0 && rect.height > 0.0 && x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
+}
+
+bool targetInFrame(const WorkspaceWallFrame& frame, OverviewTarget target) {
+    if (target.type == OverviewTargetType::None)
+        return false;
+
+    for (const auto& workspace : frame.workspaces) {
+        if (target.type == OverviewTargetType::Workspace && workspace.workspaceId == target.workspaceId)
+            return true;
+
+        for (const auto& window : workspace.windows) {
+            if (target.type == OverviewTargetType::Window && window.stableId == target.windowId)
+                return true;
+        }
+    }
+
+    return false;
+}
+
+RadiantSize renderSizeForMonitor(const PHLMONITOR& monitor) {
+    return {
+        .width  = std::max(1.0, monitor->m_transformedSize.x),
+        .height = std::max(1.0, monitor->m_transformedSize.y),
+    };
+}
+
+LayoutRect globalBoundsForMonitor(const PHLMONITOR& monitor, RadiantSize renderSize) {
+    return {
+        .x      = monitor->m_position.x,
+        .y      = monitor->m_position.y,
+        .width  = renderSize.width,
+        .height = renderSize.height,
+    };
+}
+
 MonitorSnapshot snapshotForCurrentMonitor(const PHLMONITOR& monitor) {
     MonitorSnapshot snapshot;
     snapshot.id       = monitor->m_id;
     snapshot.name     = monitor->m_name;
-    snapshot.geometry = {.position = {}, .size = {.width = monitor->m_size.x, .height = monitor->m_size.y}};
+    snapshot.geometry = {
+        .position = {.x = monitor->m_position.x, .y = monitor->m_position.y},
+        .size     = {.width = monitor->m_size.x, .height = monitor->m_size.y},
+    };
     snapshot.scale    = monitor->m_scale;
 
     if (monitor->m_activeWorkspace) {
@@ -83,17 +123,33 @@ void OverlayRenderer::install() {
         throw std::runtime_error{"hypr-radiant: Hyprland event bus is not available"};
 
     m_renderStageListener = Event::bus()->m_events.render.stage.listen([this](eRenderStage stage) { onRenderStage(stage); });
+    m_monitorLayoutListener = Event::bus()->m_events.monitor.layoutChanged.listen([this]() {
+        if (!m_animation.targetVisible() && !m_animation.renderable())
+            return;
+
+        rebuildFrames();
+        damageAllMonitors();
+    });
 }
 
 void OverlayRenderer::uninstall() {
     hideImmediate();
+    m_monitorLayoutListener.reset();
     m_renderStageListener.reset();
 }
 
 void OverlayRenderer::show(RadiantState state) {
     m_state = std::move(state);
-    computeFrames();
-    m_selectedTarget = m_frames.empty() ? OverviewTarget{} : m_hitTester.initialSelection(m_frames.front());
+    rebuildFrames();
+
+    if (const auto* frame = activeMonitorFrame()) {
+        m_selectedFrameMonitorId = frame->monitorId;
+        m_selectedTarget         = m_hitTester.initialSelection(*frame);
+    } else {
+        m_selectedFrameMonitorId = -1;
+        m_selectedTarget         = {};
+    }
+
     m_textures.clear();
     m_animation.animateTo(true, m_config.animationDurationMs());
     damageAllMonitors();
@@ -102,7 +158,7 @@ void OverlayRenderer::show(RadiantState state) {
 void OverlayRenderer::toggle(RadiantState state) {
     if (m_animation.targetVisible()) {
         m_state = std::move(state);
-        computeFrames();
+        rebuildFrames();
         m_animation.animateTo(false, m_config.animationDurationMs());
         damageAllMonitors();
         return;
@@ -112,11 +168,12 @@ void OverlayRenderer::toggle(RadiantState state) {
 }
 
 void OverlayRenderer::moveSelection(NavigationDirection direction) {
-    const auto* frame = firstFrame();
+    const auto* frame = frameForSelectedTarget();
     if (!frame)
         return;
 
     m_selectedTarget = m_hitTester.moveSelection(*frame, m_selectedTarget, direction);
+    m_selectedFrameMonitorId = frame->monitorId;
     damageAllMonitors();
 }
 
@@ -124,8 +181,10 @@ void OverlayRenderer::hideImmediate() {
     const auto wasRenderable = m_animation.renderable();
     m_animation.hideImmediate();
     m_frames.clear();
+    m_frameBoundsByMonitor.clear();
     m_textures.clear();
     m_selectedTarget = {};
+    m_selectedFrameMonitorId = -1;
 
     if (wasRenderable)
         damageAllMonitors();
@@ -140,11 +199,13 @@ OverviewTarget OverlayRenderer::selectedTarget() const noexcept {
 }
 
 OverviewTarget OverlayRenderer::hitTest(double x, double y) const {
-    const auto* frame = firstFrame();
+    double localX = x;
+    double localY = y;
+    const auto* frame = frameForPoint(x, y, localX, localY);
     if (!frame)
         return {};
 
-    return m_hitTester.hitTest(*frame, x, y);
+    return m_hitTester.hitTest(*frame, localX, localY);
 }
 
 void OverlayRenderer::onRenderStage(eRenderStage stage) {
@@ -177,40 +238,62 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
 
     auto box = CBox{0, 0, width, height};
 
-    const CRegion fullMonitorDamage{box};
+    drawRect(box, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(alpha)});
 
-    drawRect(box, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(alpha)}, fullMonitorDamage);
+    const auto* frame = frameForMonitor(monitor->m_id);
+    if (!frame)
+        return;
 
-    auto snapshot = snapshotForCurrentMonitor(monitor);
-    if (const auto* collected = findMonitorSnapshot(m_state, monitor->m_id))
-        snapshot = *collected;
+    const auto sizeChanged = std::abs(frame->bounds.width - width) > 1.0 || std::abs(frame->bounds.height - height) > 1.0;
+    if (sizeChanged)
+        return;
 
-    auto frame = m_layout.compute(m_state, snapshot, {.width = width, .height = height});
-    auto storedFrame = std::ranges::find_if(m_frames, [&](const WorkspaceWallFrame& stored) { return stored.monitorId == frame.monitorId; });
-    if (storedFrame != m_frames.end())
-        *storedFrame = frame;
-    else
-        m_frames.push_back(frame);
-
-    if (m_selectedTarget.type == OverviewTargetType::None)
-        m_selectedTarget = m_hitTester.initialSelection(frame);
-
-    renderFrame(frame, alpha, fullMonitorDamage);
+    renderFrame(*frame, alpha);
 }
 
-void OverlayRenderer::computeFrames() {
+void OverlayRenderer::rebuildFrames() {
     m_frames.clear();
+    m_frameBoundsByMonitor.clear();
 
-    for (const auto& monitor : m_state.monitors) {
-        const auto renderSize = RadiantSize{
-            .width  = std::max(1.0, monitor.geometry.size.width),
-            .height = std::max(1.0, monitor.geometry.size.height),
-        };
-        m_frames.push_back(m_layout.compute(m_state, monitor, renderSize));
+    if (g_pCompositor) {
+        for (const auto& monitor : g_pCompositor->m_monitors) {
+            if (!monitor || !g_pCompositor->monitorExists(monitor))
+                continue;
+
+            auto snapshot = snapshotForCurrentMonitor(monitor);
+            if (const auto* collected = findMonitorSnapshot(m_state, monitor->m_id)) {
+                const auto liveGeometry = snapshot.geometry;
+                snapshot                = *collected;
+                snapshot.geometry       = liveGeometry;
+            }
+
+            const auto renderSize = renderSizeForMonitor(monitor);
+            m_frameBoundsByMonitor[snapshot.id] = globalBoundsForMonitor(monitor, renderSize);
+            m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize));
+        }
     }
+
+    if (m_frames.empty()) {
+        for (const auto& monitor : m_state.monitors) {
+            const auto renderSize = RadiantSize{
+                .width  = std::max(1.0, monitor.geometry.size.width),
+                .height = std::max(1.0, monitor.geometry.size.height),
+            };
+            m_frameBoundsByMonitor[monitor.id] = {
+                .x      = monitor.geometry.position.x,
+                .y      = monitor.geometry.position.y,
+                .width  = renderSize.width,
+                .height = renderSize.height,
+            };
+            m_frames.push_back(m_layout.compute(m_state, monitor, renderSize));
+        }
+    }
+
+    if (m_selectedFrameMonitorId != -1 && !frameForMonitor(m_selectedFrameMonitorId))
+        m_selectedFrameMonitorId = -1;
 }
 
-void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
+void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha) {
     const auto cardFill      = CHyprColor{0.10F, 0.12F, 0.16F, static_cast<float>(0.82 * alpha)};
     const auto emptyFill     = CHyprColor{0.07F, 0.08F, 0.11F, static_cast<float>(0.58 * alpha)};
     const auto windowFill    = CHyprColor{0.18F, 0.22F, 0.29F, static_cast<float>(0.88 * alpha)};
@@ -221,37 +304,37 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
     for (const auto& workspace : frame.workspaces) {
         const auto workspaceBox = boxFor(workspace.rect);
-        drawRect(workspaceBox, workspace.empty ? emptyFill : cardFill, damage, 14);
-        drawBorder(workspaceBox, 1.0, border, damage);
+        drawRect(workspaceBox, workspace.empty ? emptyFill : cardFill, 14);
+        drawBorder(workspaceBox, 1.0, border);
 
         if (workspace.active) {
-            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 4.0}, activeAccent, damage);
-            drawBorder(workspaceBox, 2.0, activeAccent, damage);
+            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 4.0}, activeAccent);
+            drawBorder(workspaceBox, 2.0, activeAccent);
         }
 
-        if (sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId}))
-            drawBorder(workspaceBox, 4.0, selectAccent, damage);
+        if (frame.monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId}))
+            drawBorder(workspaceBox, 4.0, selectAccent);
 
-        renderLabel(workspace.name, workspace.rect.x + 14.0, workspace.rect.y + 12.0, std::max(1.0, workspace.rect.width - 28.0), 14, alpha, damage);
+        renderLabel(workspace.name, workspace.rect.x + 14.0, workspace.rect.y + 12.0, std::max(1.0, workspace.rect.width - 28.0), 14, alpha);
 
         for (const auto& window : workspace.windows) {
             const auto windowBox = boxFor(window.rect);
-            drawRect(windowBox, windowFill, damage, 8);
-            drawBorder(windowBox, 1.0, windowBorder, damage);
+            drawRect(windowBox, windowFill, 8);
+            drawBorder(windowBox, 1.0, windowBorder);
 
-            if (sameTarget(m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId}))
-                drawBorder(windowBox, 3.0, selectAccent, damage);
+            if (frame.monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId}))
+                drawBorder(windowBox, 3.0, selectAccent);
 
-            renderLabel(window.label, window.rect.x + 8.0, window.rect.y + 7.0, std::max(1.0, window.rect.width - 16.0), 11, alpha, damage);
+            renderLabel(window.label, window.rect.x + 8.0, window.rect.y + 7.0, std::max(1.0, window.rect.width - 16.0), 11, alpha);
         }
     }
 }
 
-void OverlayRenderer::renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage) {
+void OverlayRenderer::renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha) {
     if (!g_pHyprRenderer || text.empty() || maxWidth <= 0.0 || alpha <= 0.001)
         return;
 
-    const auto key = std::format("{}:{}", pointSize, text);
+    const auto key = std::format("{}:{}:{}", pointSize, static_cast<int>(std::ceil(maxWidth)), text);
     auto       it  = m_textures.find(key);
     if (it == m_textures.end()) {
         it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, CHyprColor{0.92F, 0.95F, 1.0F, 1.0F}, pointSize, false, "", static_cast<int>(maxWidth))).first;
@@ -265,12 +348,77 @@ void OverlayRenderer::renderLabel(const std::string& text, double x, double y, d
     data.tex      = texture;
     data.box      = CBox{std::round(x), std::round(y), std::min(texture->m_size.x, maxWidth), texture->m_size.y};
     data.overallA = static_cast<float>(std::clamp(alpha, 0.0, 1.0));
-    data.damage   = damage;
 
-    g_pHyprRenderer->draw(data, damage);
+    g_pHyprRenderer->draw(data);
 }
 
-const WorkspaceWallFrame* OverlayRenderer::firstFrame() const noexcept {
+const WorkspaceWallFrame* OverlayRenderer::frameForMonitor(std::int64_t monitorId) const noexcept {
+    const auto found = std::ranges::find_if(m_frames, [monitorId](const WorkspaceWallFrame& frame) { return frame.monitorId == monitorId; });
+    return found == m_frames.end() ? nullptr : &*found;
+}
+
+const WorkspaceWallFrame* OverlayRenderer::frameForPoint(double x, double y, double& localX, double& localY) const noexcept {
+    for (const auto& frame : m_frames) {
+        const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
+        if (bounds == m_frameBoundsByMonitor.end())
+            continue;
+
+        if (!contains(bounds->second, x, y))
+            continue;
+
+        localX = x - bounds->second.x;
+        localY = y - bounds->second.y;
+        return &frame;
+    }
+
+    const WorkspaceWallFrame* localHit = nullptr;
+    for (const auto& frame : m_frames) {
+        if (!contains(frame.bounds, x, y))
+            continue;
+
+        if (localHit) {
+            localX = x;
+            localY = y;
+            return activeMonitorFrame();
+        }
+
+        localHit = &frame;
+    }
+
+    if (localHit) {
+        localX = x;
+        localY = y;
+    }
+
+    return localHit;
+}
+
+const WorkspaceWallFrame* OverlayRenderer::frameForSelectedTarget() const noexcept {
+    if (const auto* selectedMonitorFrame = frameForMonitor(m_selectedFrameMonitorId))
+        return selectedMonitorFrame;
+
+    const WorkspaceWallFrame* matchingFrame = nullptr;
+    for (const auto& frame : m_frames) {
+        if (!targetInFrame(frame, m_selectedTarget))
+            continue;
+
+        if (matchingFrame)
+            return activeMonitorFrame();
+
+        matchingFrame = &frame;
+    }
+
+    return matchingFrame ? matchingFrame : activeMonitorFrame();
+}
+
+const WorkspaceWallFrame* OverlayRenderer::activeMonitorFrame() const noexcept {
+    if (g_pCompositor) {
+        if (const auto monitor = g_pCompositor->getMonitorFromCursor()) {
+            if (const auto* frame = frameForMonitor(monitor->m_id))
+                return frame;
+        }
+    }
+
     if (m_frames.empty())
         return nullptr;
 

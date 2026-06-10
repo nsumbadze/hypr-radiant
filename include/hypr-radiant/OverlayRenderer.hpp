@@ -38,20 +38,26 @@ class OverlayRenderer {
     void onRenderStage(eRenderStage stage);
     void renderCurrentMonitor(double alpha);
     void damageAllMonitors() const;
-    void computeFrames();
-    void renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
-    void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
+    void rebuildFrames();
+    void renderFrame(const WorkspaceWallFrame& frame, double alpha);
+    void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha);
 
-    [[nodiscard]] const WorkspaceWallFrame* firstFrame() const noexcept;
+    [[nodiscard]] const WorkspaceWallFrame* frameForMonitor(std::int64_t monitorId) const noexcept;
+    [[nodiscard]] const WorkspaceWallFrame* frameForPoint(double x, double y, double& localX, double& localY) const noexcept;
+    [[nodiscard]] const WorkspaceWallFrame* frameForSelectedTarget() const noexcept;
+    [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;
     CHyprSignalListener                                m_renderStageListener;
+    CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;
     WorkspaceWallLayout                                m_layout;
     HitTester                                          m_hitTester;
     std::vector<WorkspaceWallFrame>                       m_frames;
+    std::unordered_map<std::int64_t, LayoutRect>          m_frameBoundsByMonitor;
     OverviewTarget                                        m_selectedTarget;
+    std::int64_t                                          m_selectedFrameMonitorId = -1;
     std::unordered_map<std::string, SP<Render::ITexture>> m_textures;
 };
 
