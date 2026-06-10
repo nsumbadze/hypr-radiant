@@ -59,11 +59,28 @@ bool RadiantPlugin::initialize() {
     }
 
     m_overlay.install();
+    m_input.install(
+        [this] { return m_overlay.active(); },
+        [this](double x, double y) { return m_overlay.hitTest(x, y); },
+        [this](OverviewTarget target) { activate(target); },
+        [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
+        [this] { m_overlay.hideImmediate(); });
     return true;
 }
 
 void RadiantPlugin::shutdown() {
+    m_input.uninstall();
     m_overlay.uninstall();
+}
+
+void RadiantPlugin::activate(OverviewTarget target) {
+    if (target.type == OverviewTargetType::None)
+        target = m_overlay.selectedTarget();
+
+    if (!m_activation.activate(target))
+        log::warn("overview activation target disappeared or was invalid");
+
+    m_overlay.hideImmediate();
 }
 
 SDispatchResult RadiantPlugin::toggle(const std::string& args) {

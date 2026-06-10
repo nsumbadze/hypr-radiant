@@ -28,6 +28,7 @@ add_library(hypr-radiant MODULE
     src/Config.cpp
     src/FadeAnimation.cpp
     src/HitTester.cpp
+    src/InputController.cpp
     src/main.cpp
     src/OverlayRenderer.cpp
     src/WorkspaceWallLayout.cpp

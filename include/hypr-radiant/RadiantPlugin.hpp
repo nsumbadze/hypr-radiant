@@ -1,6 +1,8 @@
 #pragma once
 
+#include <hypr-radiant/ActivationController.hpp>
 #include <hypr-radiant/Config.hpp>
+#include <hypr-radiant/InputController.hpp>
 #include <hypr-radiant/OverlayRenderer.hpp>
 #include <hypr-radiant/StateCollector.hpp>
 
@@ -21,8 +23,12 @@ class RadiantPlugin {
     [[nodiscard]] bool active() const noexcept;
 
   private:
+    void activate(OverviewTarget target);
+
     HANDLE          m_handle = nullptr;
+    ActivationController m_activation;
     RadiantConfig     m_config;
+    InputController m_input;
     StateCollector  m_stateCollector;
     OverlayRenderer m_overlay;
 };
