@@ -28,10 +28,26 @@ void computesMinimumWorkspaceSlots() {
     assert(frame.workspaces.at(1).windows.front().label == "Editor");
 }
 
+void fillsEmptySlotsAndFallsBackToClassName() {
+    RadiantState state;
+    state.monitors.push_back({.id = 7, .name = "HDMI-A-1", .geometry = {.size = {.width = 1280, .height = 720}}, .activeWorkspaceId = 4, .activeWorkspaceName = "4"});
+    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 7, .monitorName = "HDMI-A-1", .visible = true});
+    state.windows.push_back({.stableId = 44, .className = "Firefox", .workspaceId = 4, .monitorId = 7, .mapped = true});
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1280, .height = 720});
+
+    assert(frame.workspaces.size() == 6);
+    assert(frame.workspaces.at(0).workspaceId == 1);
+    assert(frame.workspaces.at(3).workspaceId == 4);
+    assert(frame.workspaces.at(3).windows.front().label == "Firefox");
+    assert(frame.workspaces.at(5).empty);
+}
+
 } // namespace
 
 int main() {
     computesMinimumWorkspaceSlots();
+    fillsEmptySlotsAndFallsBackToClassName();
     std::cout << "WorkspaceWallLayoutTest passed\n";
     return 0;
 }
