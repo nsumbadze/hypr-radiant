@@ -8,8 +8,9 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
     const RadiantSize& renderSize,
     const WorkspaceWallOptions&) const {
     return {
-        .monitorId = monitor.id,
-        .bounds    = {.x = 0.0, .y = 0.0, .width = renderSize.width, .height = renderSize.height},
+        .monitorId   = monitor.id,
+        .bounds      = {.x = 0.0, .y = 0.0, .width = renderSize.width, .height = renderSize.height},
+        .workspaces  = {},
     };
 }
 
