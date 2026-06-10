@@ -24,6 +24,7 @@ function(hypr_radiant_enable_warnings target)
 endfunction()
 
 add_library(hypr-radiant MODULE
+    src/ActivationController.cpp
     src/Config.cpp
     src/FadeAnimation.cpp
     src/HitTester.cpp
