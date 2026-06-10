@@ -58,8 +58,8 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
 
     const auto gridWidth  = std::max(1.0, renderSize.width - options.outerPadding * 2.0);
     const auto gridHeight = std::max(1.0, renderSize.height - options.outerPadding * 2.0);
-    const auto cardWidth  = (gridWidth - options.cardGap * static_cast<double>(cols - 1)) / static_cast<double>(cols);
-    const auto cardHeight = (gridHeight - options.cardGap * static_cast<double>(rows - 1)) / static_cast<double>(rows);
+    const auto cardWidth  = std::max(0.0, gridWidth - options.cardGap * static_cast<double>(cols - 1)) / static_cast<double>(cols);
+    const auto cardHeight = std::max(0.0, gridHeight - options.cardGap * static_cast<double>(rows - 1)) / static_cast<double>(rows);
 
     for (int id = 1; id <= maxWorkspaceId; ++id) {
         const auto index = id - 1;
@@ -94,14 +94,17 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
 
             windows.push_back(window);
         }
+        std::sort(windows.begin(), windows.end(), [](const WindowSnapshot& lhs, const WindowSnapshot& rhs) {
+            return lhs.stableId < rhs.stableId;
+        });
 
         const auto windowCount = windows.size();
         if (windowCount > 0) {
             card.empty = false;
             const auto winCols = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(windowCount)))));
             const auto winRows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(windowCount) / static_cast<double>(winCols))));
-            const auto winW    = (inner.width - options.windowGap * static_cast<double>(winCols - 1)) / static_cast<double>(winCols);
-            const auto winH    = (inner.height - options.windowGap * static_cast<double>(winRows - 1)) / static_cast<double>(winRows);
+            const auto winW    = std::max(0.0, inner.width - options.windowGap * static_cast<double>(winCols - 1)) / static_cast<double>(winCols);
+            const auto winH    = std::max(0.0, inner.height - options.windowGap * static_cast<double>(winRows - 1)) / static_cast<double>(winRows);
 
             for (std::size_t i = 0; i < windows.size(); ++i) {
                 const auto winRow = static_cast<int>(i) / winCols;

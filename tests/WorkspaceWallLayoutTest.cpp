@@ -39,8 +39,42 @@ void fillsEmptySlotsAndFallsBackToClassName() {
     assert(frame.workspaces.size() == 6);
     assert(frame.workspaces.at(0).workspaceId == 1);
     assert(frame.workspaces.at(3).workspaceId == 4);
+    assert(frame.workspaces.at(3).windows.size() == 1);
     assert(frame.workspaces.at(3).windows.front().label == "Firefox");
     assert(frame.workspaces.at(5).empty);
+}
+
+void tinyRenderSizeDoesNotProduceNegativeRects() {
+    RadiantState state;
+    state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 20, .height = 20}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.windows.push_back({.stableId = 2, .title = "Two", .workspaceId = 1, .monitorId = 1, .mapped = true});
+    state.windows.push_back({.stableId = 1, .title = "One", .workspaceId = 1, .monitorId = 1, .mapped = true});
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 20, .height = 20});
+
+    for (const auto& workspace : frame.workspaces) {
+        assert(workspace.rect.width >= 0.0);
+        assert(workspace.rect.height >= 0.0);
+        for (const auto& window : workspace.windows) {
+            assert(window.rect.width >= 0.0);
+            assert(window.rect.height >= 0.0);
+        }
+    }
+}
+
+void sortsWindowsByStableId() {
+    RadiantState state;
+    state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.windows.push_back({.stableId = 30, .title = "Thirty", .workspaceId = 1, .monitorId = 1, .mapped = true});
+    state.windows.push_back({.stableId = 10, .title = "Ten", .workspaceId = 1, .monitorId = 1, .mapped = true});
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080});
+
+    assert(frame.workspaces.front().windows.size() == 2);
+    assert(frame.workspaces.front().windows.at(0).stableId == 10);
+    assert(frame.workspaces.front().windows.at(1).stableId == 30);
 }
 
 } // namespace
@@ -48,6 +82,8 @@ void fillsEmptySlotsAndFallsBackToClassName() {
 int main() {
     computesMinimumWorkspaceSlots();
     fillsEmptySlotsAndFallsBackToClassName();
+    tinyRenderSizeDoesNotProduceNegativeRects();
+    sortsWindowsByStableId();
     std::cout << "WorkspaceWallLayoutTest passed\n";
     return 0;
 }
