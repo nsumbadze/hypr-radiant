@@ -17,6 +17,7 @@ pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland)
 add_library(hypr-radiant MODULE
     src/Config.cpp
     src/FadeAnimation.cpp
+    src/HitTester.cpp
     src/main.cpp
     src/OverlayRenderer.cpp
     src/WorkspaceWallLayout.cpp
@@ -51,18 +52,34 @@ set_target_properties(hypr-radiant PROPERTIES
 include(CTest)
 
 if(BUILD_TESTING)
-    add_executable(hypr-radiant-tests
+    add_executable(hypr-radiant-layout-tests
         tests/WorkspaceWallLayoutTest.cpp
         src/WorkspaceWallLayout.cpp
     )
 
-    target_include_directories(hypr-radiant-tests
+    target_include_directories(hypr-radiant-layout-tests
         PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
     )
 
-    target_compile_features(hypr-radiant-tests PRIVATE cxx_std_23)
-    target_compile_options(hypr-radiant-tests PRIVATE -UNDEBUG)
+    target_compile_features(hypr-radiant-layout-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-layout-tests PRIVATE -UNDEBUG)
 
-    add_test(NAME hypr-radiant-tests COMMAND hypr-radiant-tests)
+    add_test(NAME hypr-radiant-layout-tests COMMAND hypr-radiant-layout-tests)
+
+    add_executable(hypr-radiant-hit-tests
+        tests/HitTesterTest.cpp
+        src/WorkspaceWallLayout.cpp
+        src/HitTester.cpp
+    )
+
+    target_include_directories(hypr-radiant-hit-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
+    target_compile_features(hypr-radiant-hit-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-hit-tests PRIVATE -UNDEBUG)
+
+    add_test(NAME hypr-radiant-hit-tests COMMAND hypr-radiant-hit-tests)
 endif()
