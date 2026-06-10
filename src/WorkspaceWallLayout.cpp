@@ -83,7 +83,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             .empty  = true,
         };
 
-        const auto inner = inset(card.rect, 18.0);
+        const auto inner = inset(card.rect, options.windowInset);
         std::vector<WindowSnapshot> windows;
         for (const auto& window : state.windows) {
             if (!window.mapped || window.workspaceId != id)

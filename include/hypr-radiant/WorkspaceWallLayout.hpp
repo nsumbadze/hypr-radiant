@@ -40,9 +40,10 @@ struct WorkspaceWallFrame {
 
 struct WorkspaceWallOptions {
     int    minimumWorkspaceSlots = 6;
-    double outerPadding          = 96.0;
-    double cardGap               = 22.0;
-    double windowGap             = 8.0;
+    double outerPadding          = 112.0;
+    double cardGap               = 24.0;
+    double windowGap             = 10.0;
+    double windowInset           = 22.0;
 };
 
 class WorkspaceWallLayout {

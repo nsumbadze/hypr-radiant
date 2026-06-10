@@ -28,6 +28,17 @@ void computesMinimumWorkspaceSlots() {
     assert(frame.workspaces.at(1).windows.front().label == "Editor");
 }
 
+void polishedDefaultsLeaveBreathingRoom() {
+    const auto state = sampleState();
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080});
+
+    assert(frame.workspaces.front().rect.x >= 100.0);
+    assert(frame.workspaces.front().rect.y >= 100.0);
+    assert(frame.workspaces.at(1).windows.size() == 1);
+    assert(frame.workspaces.at(1).windows.front().rect.x > frame.workspaces.at(1).rect.x + 20.0);
+    assert(frame.workspaces.at(1).windows.front().rect.y > frame.workspaces.at(1).rect.y + 20.0);
+}
+
 void fillsEmptySlotsAndFallsBackToClassName() {
     RadiantState state;
     state.monitors.push_back({.id = 7, .name = "HDMI-A-1", .geometry = {.size = {.width = 1280, .height = 720}}, .activeWorkspaceId = 4, .activeWorkspaceName = "4"});
@@ -81,6 +92,7 @@ void sortsWindowsByStableId() {
 
 int main() {
     computesMinimumWorkspaceSlots();
+    polishedDefaultsLeaveBreathingRoom();
     fillsEmptySlotsAndFallsBackToClassName();
     tinyRenderSizeDoesNotProduceNegativeRects();
     sortsWindowsByStableId();

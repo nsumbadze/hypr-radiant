@@ -297,28 +297,28 @@ void OverlayRenderer::rebuildFrames() {
 }
 
 void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
-    const auto cardFill      = CHyprColor{0.08F, 0.20F, 0.18F, static_cast<float>(0.94 * alpha)};
-    const auto emptyFill     = CHyprColor{0.05F, 0.12F, 0.11F, static_cast<float>(0.72 * alpha)};
-    const auto windowFill    = CHyprColor{0.13F, 0.32F, 0.28F, static_cast<float>(0.94 * alpha)};
-    const auto border        = CHyprColor{0.50F, 1.0F, 0.80F, static_cast<float>(0.78 * alpha)};
-    const auto activeAccent  = CHyprColor{0.37F, 0.78F, 1.0F, static_cast<float>(0.95 * alpha)};
-    const auto selectAccent  = CHyprColor{0.95F, 0.80F, 0.32F, static_cast<float>(1.0 * alpha)};
-    const auto windowBorder  = CHyprColor{0.70F, 0.78F, 0.90F, static_cast<float>(0.42 * alpha)};
+    const auto cardFill      = CHyprColor{0.04F, 0.19F, 0.16F, static_cast<float>(0.90 * alpha)};
+    const auto emptyFill     = CHyprColor{0.02F, 0.08F, 0.07F, static_cast<float>(0.52 * alpha)};
+    const auto windowFill    = CHyprColor{0.10F, 0.30F, 0.25F, static_cast<float>(0.88 * alpha)};
+    const auto border        = CHyprColor{0.26F, 0.88F, 0.70F, static_cast<float>(0.72 * alpha)};
+    const auto activeAccent  = CHyprColor{0.20F, 0.95F, 0.78F, static_cast<float>(0.95 * alpha)};
+    const auto selectAccent  = CHyprColor{0.95F, 0.79F, 0.25F, static_cast<float>(1.0 * alpha)};
+    const auto windowBorder  = CHyprColor{0.42F, 0.95F, 0.78F, static_cast<float>(0.38 * alpha)};
 
     for (const auto& workspace : frame.workspaces) {
         const auto workspaceBox = boxFor(workspace.rect);
         drawRect(workspaceBox, workspace.empty ? emptyFill : cardFill, damage, 14);
-        drawBorder(workspaceBox, 1.0, border, damage);
+        drawBorder(workspaceBox, 1.5, border, damage);
 
         if (workspace.active) {
-            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 4.0}, activeAccent, damage);
-            drawBorder(workspaceBox, 2.0, activeAccent, damage);
+            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 5.0}, activeAccent, damage);
+            drawBorder(workspaceBox, 2.5, activeAccent, damage);
         }
 
         if (frame.monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId}))
-            drawBorder(workspaceBox, 4.0, selectAccent, damage);
+            drawBorder(workspaceBox, 5.0, selectAccent, damage);
 
-        renderLabel(workspace.name, workspace.rect.x + 14.0, workspace.rect.y + 12.0, std::max(1.0, workspace.rect.width - 28.0), 14, alpha, damage);
+        renderLabel(workspace.name, workspace.rect.x + 16.0, workspace.rect.y + 14.0, std::max(1.0, workspace.rect.width - 32.0), 15, alpha, damage);
 
         for (const auto& window : workspace.windows) {
             const auto windowBox = boxFor(window.rect);
@@ -326,9 +326,9 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             drawBorder(windowBox, 1.0, windowBorder, damage);
 
             if (frame.monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId}))
-                drawBorder(windowBox, 3.0, selectAccent, damage);
+                drawBorder(windowBox, 3.5, selectAccent, damage);
 
-            renderLabel(window.label, window.rect.x + 8.0, window.rect.y + 7.0, std::max(1.0, window.rect.width - 16.0), 11, alpha, damage);
+            renderLabel(window.label, window.rect.x + 10.0, window.rect.y + 9.0, std::max(1.0, window.rect.width - 20.0), 11, alpha, damage);
         }
     }
 }
