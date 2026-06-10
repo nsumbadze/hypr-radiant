@@ -179,6 +179,25 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
     damageAllMonitors();
 }
 
+void OverlayRenderer::selectTargetAt(double x, double y) {
+    double localX = x;
+    double localY = y;
+    const auto* frame = frameForPoint(x, y, localX, localY);
+    if (!frame)
+        return;
+
+    const auto target = m_hitTester.hitTest(*frame, localX, localY);
+    if (target.type == OverviewTargetType::None)
+        return;
+
+    if (frame->monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, target))
+        return;
+
+    m_selectedTarget = target;
+    m_selectedFrameMonitorId = frame->monitorId;
+    damageAllMonitors();
+}
+
 void OverlayRenderer::hideImmediate() {
     const auto wasRenderable = m_animation.renderable();
     m_animation.hideImmediate();
@@ -297,38 +316,54 @@ void OverlayRenderer::rebuildFrames() {
 }
 
 void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
-    const auto cardFill      = CHyprColor{0.04F, 0.19F, 0.16F, static_cast<float>(0.90 * alpha)};
-    const auto emptyFill     = CHyprColor{0.02F, 0.08F, 0.07F, static_cast<float>(0.52 * alpha)};
-    const auto windowFill    = CHyprColor{0.10F, 0.30F, 0.25F, static_cast<float>(0.88 * alpha)};
-    const auto border        = CHyprColor{0.26F, 0.88F, 0.70F, static_cast<float>(0.72 * alpha)};
-    const auto activeAccent  = CHyprColor{0.20F, 0.95F, 0.78F, static_cast<float>(0.95 * alpha)};
-    const auto selectAccent  = CHyprColor{0.95F, 0.79F, 0.25F, static_cast<float>(1.0 * alpha)};
-    const auto windowBorder  = CHyprColor{0.42F, 0.95F, 0.78F, static_cast<float>(0.38 * alpha)};
+    const auto cardFill            = CHyprColor{0.035F, 0.16F, 0.13F, static_cast<float>(0.88 * alpha)};
+    const auto cardSelectedFill    = CHyprColor{0.08F, 0.28F, 0.22F, static_cast<float>(0.96 * alpha)};
+    const auto emptyFill           = CHyprColor{0.012F, 0.055F, 0.045F, static_cast<float>(0.48 * alpha)};
+    const auto windowFill          = CHyprColor{0.075F, 0.24F, 0.19F, static_cast<float>(0.86 * alpha)};
+    const auto windowSelectedFill  = CHyprColor{0.13F, 0.37F, 0.29F, static_cast<float>(0.98 * alpha)};
+    const auto windowTitleFill     = CHyprColor{0.02F, 0.09F, 0.075F, static_cast<float>(0.78 * alpha)};
+    const auto border              = CHyprColor{0.16F, 0.70F, 0.58F, static_cast<float>(0.58 * alpha)};
+    const auto activeAccent        = CHyprColor{0.20F, 0.95F, 0.78F, static_cast<float>(0.95 * alpha)};
+    const auto selectAccent        = CHyprColor{0.98F, 0.84F, 0.25F, static_cast<float>(1.0 * alpha)};
+    const auto selectedInnerAccent = CHyprColor{0.45F, 1.0F, 0.78F, static_cast<float>(0.75 * alpha)};
+    const auto windowBorder        = CHyprColor{0.32F, 0.86F, 0.70F, static_cast<float>(0.36 * alpha)};
+
+    renderLabel("Workspace Overview", frame.bounds.x + 46.0, frame.bounds.y + 42.0, std::max(1.0, frame.bounds.width - 92.0), 22, alpha, damage);
 
     for (const auto& workspace : frame.workspaces) {
+        const auto workspaceSelected = frame.monitorId == m_selectedFrameMonitorId &&
+            sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
         const auto workspaceBox = boxFor(workspace.rect);
-        drawRect(workspaceBox, workspace.empty ? emptyFill : cardFill, damage, 14);
+        drawRect(workspaceBox, workspaceSelected ? cardSelectedFill : (workspace.empty ? emptyFill : cardFill), damage, 18);
         drawBorder(workspaceBox, 1.5, border, damage);
 
         if (workspace.active) {
-            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 5.0}, activeAccent, damage);
-            drawBorder(workspaceBox, 2.5, activeAccent, damage);
+            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 6.0}, activeAccent, damage);
+            drawBorder(workspaceBox, 3.0, activeAccent, damage);
         }
 
-        if (frame.monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId}))
-            drawBorder(workspaceBox, 5.0, selectAccent, damage);
+        if (workspaceSelected) {
+            drawRect(CBox{workspaceBox.x + 8.0, workspaceBox.y + 8.0, workspaceBox.w - 16.0, 3.0}, selectedInnerAccent, damage);
+            drawBorder(workspaceBox, 6.0, selectAccent, damage);
+        }
 
-        renderLabel(workspace.name, workspace.rect.x + 16.0, workspace.rect.y + 14.0, std::max(1.0, workspace.rect.width - 32.0), 15, alpha, damage);
+        renderLabel(workspace.name, workspace.rect.x + 20.0, workspace.rect.y + 16.0, std::max(1.0, workspace.rect.width - 40.0), 16, alpha, damage);
 
         for (const auto& window : workspace.windows) {
+            const auto windowSelected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
+                m_selectedTarget,
+                {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
             const auto windowBox = boxFor(window.rect);
-            drawRect(windowBox, windowFill, damage, 8);
+            drawRect(windowBox, windowSelected ? windowSelectedFill : windowFill, damage, 10);
             drawBorder(windowBox, 1.0, windowBorder, damage);
 
-            if (frame.monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId}))
-                drawBorder(windowBox, 3.5, selectAccent, damage);
+            if (windowSelected) {
+                drawRect(CBox{windowBox.x, windowBox.y, windowBox.w, std::min(30.0, windowBox.h)}, windowTitleFill, damage, 10);
+                drawRect(CBox{windowBox.x, windowBox.y, windowBox.w, 4.0}, selectAccent, damage);
+                drawBorder(windowBox, 5.0, selectAccent, damage);
+            }
 
-            renderLabel(window.label, window.rect.x + 10.0, window.rect.y + 9.0, std::max(1.0, window.rect.width - 20.0), 11, alpha, damage);
+            renderLabel(window.label, window.rect.x + 12.0, window.rect.y + 10.0, std::max(1.0, window.rect.width - 24.0), 11, alpha, damage);
         }
     }
 }

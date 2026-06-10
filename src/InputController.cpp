@@ -24,12 +24,23 @@ uint32_t evdevKeycode(uint32_t hyprlandKeycode) {
 
 } // namespace
 
-void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, MoveFn move, CloseFn close) {
+void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, MoveFn move, CloseFn close) {
     m_active   = std::move(active);
     m_hitTest  = std::move(hitTest);
     m_activate = std::move(activate);
+    m_selectAt = std::move(selectAt);
     m_move     = std::move(move);
     m_close    = std::move(close);
+
+    m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](Vector2D position, Event::SCallbackInfo& info) {
+        if (!m_active || !m_active())
+            return;
+
+        if (m_selectAt)
+            m_selectAt(position.x, position.y);
+
+        info.cancelled = true;
+    });
 
     m_mouseButtonListener = Event::bus()->m_events.input.mouse.button.listen([this](IPointer::SButtonEvent event, Event::SCallbackInfo& info) {
         if (!m_active || !m_active() || !pointerPressed(event.state))
@@ -86,11 +97,13 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
 }
 
 void InputController::uninstall() {
+    m_mouseMoveListener.reset();
     m_mouseButtonListener.reset();
     m_keyListener.reset();
     m_active = {};
     m_hitTest = {};
     m_activate = {};
+    m_selectAt = {};
     m_move = {};
     m_close = {};
 }

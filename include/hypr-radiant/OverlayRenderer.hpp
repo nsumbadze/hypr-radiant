@@ -29,6 +29,7 @@ class OverlayRenderer {
     void toggle(RadiantState state);
     void hideImmediate();
     void moveSelection(NavigationDirection direction);
+    void selectTargetAt(double x, double y);
 
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] OverviewTarget selectedTarget() const noexcept;

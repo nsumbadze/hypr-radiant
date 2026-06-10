@@ -75,6 +75,7 @@ workspace cards and labeled window cards from the current compositor state.
 ## Controls
 
 - `hyprctl dispatch radiant:toggle`: open or close overview
+- Hover workspace or window card: move selection
 - Click workspace card: switch workspace
 - Click window card: switch workspace and focus window
 - Arrow keys: move selection

@@ -23,10 +23,22 @@ void windowHitWinsOverWorkspaceHit() {
     assert(target.windowId == 11);
 }
 
+void hoverInsideWindowReturnsWindowTarget() {
+    const auto target = HitTester{}.hitTest(frame(), 109, 79);
+    assert(target.type == OverviewTargetType::Window);
+    assert(target.workspaceId == 1);
+    assert(target.windowId == 11);
+}
+
 void workspaceBackgroundHitWorks() {
     const auto target = HitTester{}.hitTest(frame(), 220, 40);
     assert(target.type == OverviewTargetType::Workspace);
     assert(target.workspaceId == 2);
+}
+
+void hoverOutsideAllCardsReturnsNoTarget() {
+    const auto target = HitTester{}.hitTest(frame(), 200, 140);
+    assert(target.type == OverviewTargetType::None);
 }
 
 void navigationMovesThroughWorkspaceGrid() {
@@ -73,7 +85,9 @@ void missingCurrentFallsBackToInitialSelection() {
 
 int main() {
     windowHitWinsOverWorkspaceHit();
+    hoverInsideWindowReturnsWindowTarget();
     workspaceBackgroundHitWorks();
+    hoverOutsideAllCardsReturnsNoTarget();
     navigationMovesThroughWorkspaceGrid();
     windowCurrentNavigationMovesFromContainingWorkspace();
     rightAndBottomEdgesAreOutsideHitBounds();

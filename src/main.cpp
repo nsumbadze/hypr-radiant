@@ -63,6 +63,7 @@ bool RadiantPlugin::initialize() {
         [this] { return m_overlay.active(); },
         [this](double x, double y) { return m_overlay.hitTest(x, y); },
         [this](OverviewTarget target) { activate(target); },
+        [this](double x, double y) { m_overlay.selectTargetAt(x, y); },
         [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
         [this] { m_overlay.hideImmediate(); });
     return true;
