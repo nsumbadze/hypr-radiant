@@ -7,6 +7,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -69,7 +70,7 @@ SDispatchResult RadiantPlugin::toggle(const std::string& args) {
     if (!args.empty())
         log::warn("radiant:toggle ignores dispatcher arguments: {}", args);
 
-    const auto state = m_stateCollector.collect();
+    auto state = m_stateCollector.collect();
 
     log::info(
         "state snapshot: {} monitors, {} workspaces, {} windows ({} mapped)",
@@ -78,7 +79,7 @@ SDispatchResult RadiantPlugin::toggle(const std::string& args) {
         state.windows.size(),
         state.mappedWindowCount());
 
-    m_overlay.toggle();
+    m_overlay.toggle(std::move(state));
 
     log::info("radiant overlay {}", m_overlay.active() ? "opened" : "closed");
 
