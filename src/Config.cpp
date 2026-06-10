@@ -17,7 +17,12 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         180,
         Config::Values::SIntValueOptions{.min = 0, .max = 2000});
 
-    return HyprlandAPI::addConfigValueV2(handle, m_opacity) && HyprlandAPI::addConfigValueV2(handle, m_animationDurationMs);
+    m_layout = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:layout",
+        "Overview layout mode.",
+        "workspace_wall");
+
+    return HyprlandAPI::addConfigValueV2(handle, m_opacity) && HyprlandAPI::addConfigValueV2(handle, m_animationDurationMs) && HyprlandAPI::addConfigValueV2(handle, m_layout);
 }
 
 float RadiantConfig::opacity() const {
@@ -32,6 +37,10 @@ int RadiantConfig::animationDurationMs() const {
         return 180;
 
     return static_cast<int>(std::clamp(m_animationDurationMs->value(), static_cast<Config::INTEGER>(0), static_cast<Config::INTEGER>(2000)));
+}
+
+LayoutMode RadiantConfig::layoutMode() const {
+    return LayoutMode::WorkspaceWall;
 }
 
 } // namespace hypr_radiant
