@@ -39,8 +39,8 @@ class OverlayRenderer {
     void renderCurrentMonitor(double alpha);
     void damageAllMonitors() const;
     void rebuildFrames();
-    void renderFrame(const WorkspaceWallFrame& frame, double alpha);
-    void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha);
+    void renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
+    void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
 
     [[nodiscard]] const WorkspaceWallFrame* frameForMonitor(std::int64_t monitorId) const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* frameForPoint(double x, double y, double& localX, double& localY) const noexcept;

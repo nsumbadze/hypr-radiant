@@ -27,27 +27,29 @@ CBox boxFor(const LayoutRect& rect) {
     return CBox{std::round(rect.x), std::round(rect.y), std::round(rect.width), std::round(rect.height)};
 }
 
-void drawRect(const CBox& box, CHyprColor color, int round = 0) {
+void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int round = 0) {
     if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
         return;
+
+    (void)damage;
 
     CRectPassElement::SRectData data;
     data.box   = box;
     data.color = color;
     data.round = round;
 
-    g_pHyprRenderer->draw(data);
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(data));
 }
 
-void drawBorder(const CBox& box, double size, CHyprColor color) {
+void drawBorder(const CBox& box, double size, CHyprColor color, const CRegion& damage) {
     if (box.w <= 0.0 || box.h <= 0.0 || size <= 0.0)
         return;
 
     const auto border = std::min({size, box.w / 2.0, box.h / 2.0});
-    drawRect(CBox{box.x, box.y, box.w, border}, color);
-    drawRect(CBox{box.x, box.y + box.h - border, box.w, border}, color);
-    drawRect(CBox{box.x, box.y, border, box.h}, color);
-    drawRect(CBox{box.x + box.w - border, box.y, border, box.h}, color);
+    drawRect(CBox{box.x, box.y, box.w, border}, color, damage);
+    drawRect(CBox{box.x, box.y + box.h - border, box.w, border}, color, damage);
+    drawRect(CBox{box.x, box.y, border, box.h}, color, damage);
+    drawRect(CBox{box.x + box.w - border, box.y, border, box.h}, color, damage);
 }
 
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
@@ -237,8 +239,9 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
         return;
 
     auto box = CBox{0, 0, width, height};
+    const auto& damage = g_pHyprRenderer->renderData().damage;
 
-    drawRect(box, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(alpha)});
+    drawRect(box, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(alpha)}, damage);
 
     const auto* frame = frameForMonitor(monitor->m_id);
     if (!frame)
@@ -248,7 +251,7 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
     if (sizeChanged)
         return;
 
-    renderFrame(*frame, alpha);
+    renderFrame(*frame, alpha, damage);
 }
 
 void OverlayRenderer::rebuildFrames() {
@@ -293,44 +296,44 @@ void OverlayRenderer::rebuildFrames() {
         m_selectedFrameMonitorId = -1;
 }
 
-void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha) {
-    const auto cardFill      = CHyprColor{0.10F, 0.12F, 0.16F, static_cast<float>(0.82 * alpha)};
-    const auto emptyFill     = CHyprColor{0.07F, 0.08F, 0.11F, static_cast<float>(0.58 * alpha)};
-    const auto windowFill    = CHyprColor{0.18F, 0.22F, 0.29F, static_cast<float>(0.88 * alpha)};
-    const auto border        = CHyprColor{0.55F, 0.62F, 0.72F, static_cast<float>(0.50 * alpha)};
+void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
+    const auto cardFill      = CHyprColor{0.08F, 0.20F, 0.18F, static_cast<float>(0.94 * alpha)};
+    const auto emptyFill     = CHyprColor{0.05F, 0.12F, 0.11F, static_cast<float>(0.72 * alpha)};
+    const auto windowFill    = CHyprColor{0.13F, 0.32F, 0.28F, static_cast<float>(0.94 * alpha)};
+    const auto border        = CHyprColor{0.50F, 1.0F, 0.80F, static_cast<float>(0.78 * alpha)};
     const auto activeAccent  = CHyprColor{0.37F, 0.78F, 1.0F, static_cast<float>(0.95 * alpha)};
     const auto selectAccent  = CHyprColor{0.95F, 0.80F, 0.32F, static_cast<float>(1.0 * alpha)};
     const auto windowBorder  = CHyprColor{0.70F, 0.78F, 0.90F, static_cast<float>(0.42 * alpha)};
 
     for (const auto& workspace : frame.workspaces) {
         const auto workspaceBox = boxFor(workspace.rect);
-        drawRect(workspaceBox, workspace.empty ? emptyFill : cardFill, 14);
-        drawBorder(workspaceBox, 1.0, border);
+        drawRect(workspaceBox, workspace.empty ? emptyFill : cardFill, damage, 14);
+        drawBorder(workspaceBox, 1.0, border, damage);
 
         if (workspace.active) {
-            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 4.0}, activeAccent);
-            drawBorder(workspaceBox, 2.0, activeAccent);
+            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 4.0}, activeAccent, damage);
+            drawBorder(workspaceBox, 2.0, activeAccent, damage);
         }
 
         if (frame.monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId}))
-            drawBorder(workspaceBox, 4.0, selectAccent);
+            drawBorder(workspaceBox, 4.0, selectAccent, damage);
 
-        renderLabel(workspace.name, workspace.rect.x + 14.0, workspace.rect.y + 12.0, std::max(1.0, workspace.rect.width - 28.0), 14, alpha);
+        renderLabel(workspace.name, workspace.rect.x + 14.0, workspace.rect.y + 12.0, std::max(1.0, workspace.rect.width - 28.0), 14, alpha, damage);
 
         for (const auto& window : workspace.windows) {
             const auto windowBox = boxFor(window.rect);
-            drawRect(windowBox, windowFill, 8);
-            drawBorder(windowBox, 1.0, windowBorder);
+            drawRect(windowBox, windowFill, damage, 8);
+            drawBorder(windowBox, 1.0, windowBorder, damage);
 
             if (frame.monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId}))
-                drawBorder(windowBox, 3.0, selectAccent);
+                drawBorder(windowBox, 3.0, selectAccent, damage);
 
-            renderLabel(window.label, window.rect.x + 8.0, window.rect.y + 7.0, std::max(1.0, window.rect.width - 16.0), 11, alpha);
+            renderLabel(window.label, window.rect.x + 8.0, window.rect.y + 7.0, std::max(1.0, window.rect.width - 16.0), 11, alpha, damage);
         }
     }
 }
 
-void OverlayRenderer::renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha) {
+void OverlayRenderer::renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage) {
     if (!g_pHyprRenderer || text.empty() || maxWidth <= 0.0 || alpha <= 0.001)
         return;
 
@@ -348,8 +351,9 @@ void OverlayRenderer::renderLabel(const std::string& text, double x, double y, d
     data.tex      = texture;
     data.box      = CBox{std::round(x), std::round(y), std::min(texture->m_size.x, maxWidth), texture->m_size.y};
     data.overallA = static_cast<float>(std::clamp(alpha, 0.0, 1.0));
+    data.damage   = damage;
 
-    g_pHyprRenderer->draw(data);
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
 }
 
 const WorkspaceWallFrame* OverlayRenderer::frameForMonitor(std::int64_t monitorId) const noexcept {
