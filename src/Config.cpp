@@ -1,6 +1,7 @@
 #include <hypr-radiant/Config.hpp>
 
 #include <algorithm>
+#include <string_view>
 
 namespace hypr_radiant {
 
@@ -20,7 +21,7 @@ bool RadiantConfig::registerValues(HANDLE handle) {
     m_layout = makeShared<Config::Values::CStringValue>(
         "plugin:radiant:layout",
         "Overview layout mode.",
-        "workspace_wall");
+        "stage");
 
     return HyprlandAPI::addConfigValueV2(handle, m_opacity) && HyprlandAPI::addConfigValueV2(handle, m_animationDurationMs) && HyprlandAPI::addConfigValueV2(handle, m_layout);
 }
@@ -40,7 +41,17 @@ int RadiantConfig::animationDurationMs() const {
 }
 
 LayoutMode RadiantConfig::layoutMode() const {
-    return LayoutMode::WorkspaceWall;
+    if (!m_layout)
+        return LayoutMode::Stage;
+
+    return parseLayoutMode(m_layout->value());
+}
+
+LayoutMode parseLayoutMode(std::string_view value) {
+    if (value == "workspace_wall")
+        return LayoutMode::WorkspaceWall;
+
+    return LayoutMode::Stage;
 }
 
 } // namespace hypr_radiant

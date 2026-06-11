@@ -5,11 +5,16 @@
 #include <hyprland/src/config/values/types/StringValue.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
+#include <string_view>
+
 namespace hypr_radiant {
 
 enum class LayoutMode {
+    Stage,
     WorkspaceWall,
 };
+
+[[nodiscard]] LayoutMode parseLayoutMode(std::string_view value);
 
 class RadiantConfig {
   public:

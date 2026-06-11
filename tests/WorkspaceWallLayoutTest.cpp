@@ -39,6 +39,19 @@ void polishedDefaultsLeaveBreathingRoom() {
     assert(frame.workspaces.at(1).windows.front().rect.y > frame.workspaces.at(1).rect.y + 20.0);
 }
 
+void stageOptionsCreateFocusedStageSpacing() {
+    const auto state = sampleState();
+    const auto frame = WorkspaceWallLayout{}.compute(
+        state,
+        state.monitors.front(),
+        {.width = 1920, .height = 1080},
+        WorkspaceWallOptions{.outerPadding = 150.0, .cardGap = 34.0, .windowGap = 14.0, .windowInset = 30.0});
+
+    assert(frame.workspaces.front().rect.x >= 150.0);
+    assert(frame.workspaces.front().rect.y >= 150.0);
+    assert(frame.workspaces.at(1).windows.front().rect.x > frame.workspaces.at(1).rect.x + 28.0);
+}
+
 void fillsEmptySlotsAndFallsBackToClassName() {
     RadiantState state;
     state.monitors.push_back({.id = 7, .name = "HDMI-A-1", .geometry = {.size = {.width = 1280, .height = 720}}, .activeWorkspaceId = 4, .activeWorkspaceName = "4"});
@@ -93,6 +106,7 @@ void sortsWindowsByStableId() {
 int main() {
     computesMinimumWorkspaceSlots();
     polishedDefaultsLeaveBreathingRoom();
+    stageOptionsCreateFocusedStageSpacing();
     fillsEmptySlotsAndFallsBackToClassName();
     tinyRenderSizeDoesNotProduceNegativeRects();
     sortsWindowsByStableId();

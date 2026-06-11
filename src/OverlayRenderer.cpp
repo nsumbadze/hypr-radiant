@@ -116,6 +116,19 @@ MonitorSnapshot snapshotForCurrentMonitor(const PHLMONITOR& monitor) {
     return snapshot;
 }
 
+WorkspaceWallOptions layoutOptionsFor(LayoutMode mode) {
+    if (mode == LayoutMode::WorkspaceWall)
+        return {};
+
+    return WorkspaceWallOptions{
+        .minimumWorkspaceSlots = 6,
+        .outerPadding          = 150.0,
+        .cardGap               = 34.0,
+        .windowGap             = 14.0,
+        .windowInset           = 30.0,
+    };
+}
+
 } // namespace
 
 OverlayRenderer::OverlayRenderer(const RadiantConfig& config) : m_config(config) {}
@@ -324,7 +337,7 @@ void OverlayRenderer::rebuildFrames() {
 
             const auto renderSize = renderSizeForMonitor(monitor);
             m_frameBoundsByMonitor[snapshot.id] = globalBoundsForMonitor(monitor, renderSize);
-            m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize));
+            m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize, layoutOptionsFor(m_config.layoutMode())));
         }
     }
 
@@ -340,7 +353,7 @@ void OverlayRenderer::rebuildFrames() {
                 .width  = renderSize.width,
                 .height = renderSize.height,
             };
-            m_frames.push_back(m_layout.compute(m_state, monitor, renderSize));
+            m_frames.push_back(m_layout.compute(m_state, monitor, renderSize, layoutOptionsFor(m_config.layoutMode())));
         }
     }
 
@@ -390,6 +403,7 @@ void OverlayRenderer::clearSearch() {
 }
 
 void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
+    const auto mode                = m_config.layoutMode();
     const auto cardFill            = CHyprColor{0.035F, 0.16F, 0.13F, static_cast<float>(0.88 * alpha)};
     const auto cardSelectedFill    = CHyprColor{0.08F, 0.28F, 0.22F, static_cast<float>(0.96 * alpha)};
     const auto emptyFill           = CHyprColor{0.012F, 0.055F, 0.045F, static_cast<float>(0.48 * alpha)};
@@ -403,17 +417,31 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     const auto windowBorder        = CHyprColor{0.32F, 0.86F, 0.70F, static_cast<float>(0.36 * alpha)};
     const auto windowDimFill       = CHyprColor{0.018F, 0.07F, 0.06F, static_cast<float>(0.50 * alpha)};
     const auto windowDimBorder     = CHyprColor{0.10F, 0.34F, 0.28F, static_cast<float>(0.24 * alpha)};
+    const auto stageFill           = CHyprColor{0.015F, 0.045F, 0.038F, static_cast<float>(0.82 * alpha)};
+    const auto stageBorder         = CHyprColor{0.20F, 0.76F, 0.60F, static_cast<float>(0.48 * alpha)};
+    const auto headerFill          = CHyprColor{0.03F, 0.12F, 0.10F, static_cast<float>(0.88 * alpha)};
 
     const auto searchActive = !m_searchQuery.empty();
     const auto header       = searchActive ? std::format("Workspace Overview  Search: {}", m_searchQuery) : std::string{"Workspace Overview"};
-    renderLabel(header, frame.bounds.x + 46.0, frame.bounds.y + 42.0, std::max(1.0, frame.bounds.width - 92.0), 22, alpha, damage);
+
+    if (mode == LayoutMode::Stage) {
+        const auto stageBox  = CBox{28.0, 54.0, std::max(1.0, frame.bounds.width - 56.0), std::max(1.0, frame.bounds.height - 82.0)};
+        const auto headerBox = CBox{46.0, 36.0, std::min(760.0, frame.bounds.width - 92.0), 44.0};
+        drawRect(stageBox, stageFill, damage, 24);
+        drawBorder(stageBox, 2.0, stageBorder, damage);
+        drawRect(headerBox, headerFill, damage, 16);
+        drawBorder(headerBox, 1.5, stageBorder, damage);
+        renderLabel(header, headerBox.x + 18.0, headerBox.y + 10.0, std::max(1.0, headerBox.w - 36.0), 19, alpha, damage);
+    } else {
+        renderLabel(header, frame.bounds.x + 46.0, frame.bounds.y + 42.0, std::max(1.0, frame.bounds.width - 92.0), 22, alpha, damage);
+    }
 
     for (const auto& workspace : frame.workspaces) {
         const auto workspaceSelected = frame.monitorId == m_selectedFrameMonitorId &&
             sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
         const auto workspaceBox = boxFor(workspace.rect);
-        drawRect(workspaceBox, workspaceSelected ? cardSelectedFill : (workspace.empty ? emptyFill : cardFill), damage, 18);
-        drawBorder(workspaceBox, 1.5, border, damage);
+        drawRect(workspaceBox, workspaceSelected ? cardSelectedFill : (workspace.empty ? emptyFill : cardFill), damage, mode == LayoutMode::Stage ? 22 : 18);
+        drawBorder(workspaceBox, mode == LayoutMode::Stage ? 2.0 : 1.5, border, damage);
 
         if (workspace.active) {
             drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 6.0}, activeAccent, damage);
@@ -422,7 +450,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
         if (workspaceSelected) {
             drawRect(CBox{workspaceBox.x + 8.0, workspaceBox.y + 8.0, workspaceBox.w - 16.0, 3.0}, selectedInnerAccent, damage);
-            drawBorder(workspaceBox, 6.0, selectAccent, damage);
+            drawBorder(workspaceBox, mode == LayoutMode::Stage ? 7.0 : 6.0, selectAccent, damage);
         }
 
         renderLabel(workspace.name, workspace.rect.x + 20.0, workspace.rect.y + 16.0, std::max(1.0, workspace.rect.width - 40.0), 16, alpha, damage);

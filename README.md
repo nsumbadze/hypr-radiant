@@ -93,14 +93,14 @@ plugin {
     radiant {
         opacity = 0.55
         animation_duration = 180
-        layout = workspace_wall
+        layout = stage
     }
 }
 ```
 
 - `opacity`: overlay opacity from `0.0` to `1.0`
 - `animation_duration`: fade duration in milliseconds from `0` to `2000`
-- `layout`: overview layout mode. Only `workspace_wall` is supported for now.
+- `layout`: overview layout mode. Supported values are `stage` and `workspace_wall`.
 
 For development without installing through `hyprpm`, build the plugin and load
 the generated shared object directly:
