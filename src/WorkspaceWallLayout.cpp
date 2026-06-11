@@ -68,12 +68,11 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto activeId     = monitor.activeWorkspaceId > 0 ? monitor.activeWorkspaceId : 1;
         const auto edge         = std::clamp(renderSize.width * 0.045, 18.0, 72.0);
         const auto mainGap      = std::clamp(renderSize.width * 0.015, 16.0, 28.0);
-        const auto top          = std::min(renderSize.height, std::clamp(renderSize.height * 0.12, 56.0, 126.0));
-        const auto dockBottom   = std::min(renderSize.height, std::clamp(renderSize.height * 0.05, 20.0, 54.0));
         const auto dockHeight   = std::min(renderSize.height, std::clamp(renderSize.height * 0.10, 64.0, 104.0));
+        const auto dockGap      = std::clamp(renderSize.height * 0.025, 20.0, 30.0);
         const auto primaryWidth = std::min(780.0, std::max(0.0, renderSize.width * 0.44));
         const auto maxPrimaryHeight =
-            std::min(320.0, std::max(0.0, renderSize.height - top - dockHeight - dockBottom - 42.0));
+            std::min(320.0, std::max(0.0, renderSize.height - dockHeight - dockGap - 160.0));
         const auto primaryHeight = std::min(
             maxPrimaryHeight,
             std::clamp(130.0 + static_cast<double>(windowCountFor(activeId)) * 78.0, 190.0, 320.0));
@@ -101,9 +100,13 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto stripTotalWidth =
             static_cast<double>(stripCount) * stripWidth + static_cast<double>(stripCount > 0 ? stripCount - 1 : 0) * stripGap;
         const auto primaryX = centered(renderSize.width, primaryWidth);
-        const auto dockY    = std::min(
-            std::max(0.0, renderSize.height - dockBottom - dockHeight),
-            top + primaryHeight + 42.0);
+        const auto stackHeight = primaryHeight + (stripCount > 0 ? dockGap + dockHeight : 0.0);
+        const auto maxTop      = std::max(0.0, renderSize.height - stackHeight - 48.0);
+        const auto top         = std::clamp(
+            centered(renderSize.height, stackHeight) - 8.0,
+            std::min(72.0, maxTop),
+            maxTop);
+        const auto dockY = top + primaryHeight + dockGap;
 
         for (int id = 1; id <= maxWorkspaceId; ++id) {
             const auto found = workspaceById.find(id);

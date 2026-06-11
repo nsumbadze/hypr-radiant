@@ -1,6 +1,7 @@
 #include <hypr-radiant/WorkspaceWallLayout.hpp>
 
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 using namespace hypr_radiant;
@@ -54,6 +55,11 @@ void stageOptionsCreateFocusedStageSpacing() {
     assert(frame.workspaces.at(1).rect.x + frame.workspaces.at(1).rect.width / 2.0 == 960.0);
     assert(frame.workspaces.at(3).rect.height <= 104.0);
     assert(frame.workspaces.at(3).rect.y > frame.workspaces.at(1).rect.y + frame.workspaces.at(1).rect.height);
+
+    const auto topMargin = frame.workspaces.at(1).rect.y;
+    const auto dockBottom = frame.workspaces.at(3).rect.y + frame.workspaces.at(3).rect.height;
+    const auto bottomMargin = 1080.0 - dockBottom;
+    assert(std::abs(topMargin - bottomMargin) < 40.0);
 }
 
 void focusedStageHeightTracksWindowCount() {
