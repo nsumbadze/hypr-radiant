@@ -44,6 +44,7 @@ struct WorkspaceWallOptions {
     double cardGap               = 24.0;
     double windowGap             = 10.0;
     double windowInset           = 22.0;
+    bool   focusedStage          = false;
 };
 
 class WorkspaceWallLayout {

@@ -126,6 +126,7 @@ WorkspaceWallOptions layoutOptionsFor(LayoutMode mode) {
         .cardGap               = 34.0,
         .windowGap             = 14.0,
         .windowInset           = 30.0,
+        .focusedStage          = true,
     };
 }
 

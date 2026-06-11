@@ -45,10 +45,10 @@ void stageOptionsCreateFocusedStageSpacing() {
         state,
         state.monitors.front(),
         {.width = 1920, .height = 1080},
-        WorkspaceWallOptions{.outerPadding = 150.0, .cardGap = 34.0, .windowGap = 14.0, .windowInset = 30.0});
+        WorkspaceWallOptions{.outerPadding = 150.0, .cardGap = 34.0, .windowGap = 14.0, .windowInset = 30.0, .focusedStage = true});
 
-    assert(frame.workspaces.front().rect.x >= 150.0);
-    assert(frame.workspaces.front().rect.y >= 150.0);
+    assert(frame.workspaces.at(1).rect.width > frame.workspaces.front().rect.width);
+    assert(frame.workspaces.at(1).rect.height > frame.workspaces.front().rect.height);
     assert(frame.workspaces.at(1).windows.front().rect.x > frame.workspaces.at(1).rect.x + 28.0);
 }
 
