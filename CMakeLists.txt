@@ -31,6 +31,7 @@ add_library(hypr-radiant MODULE
     src/InputController.cpp
     src/main.cpp
     src/OverlayRenderer.cpp
+    src/SearchMatcher.cpp
     src/WorkspaceWallLayout.cpp
     src/StateCollector.cpp
 )
@@ -93,4 +94,20 @@ if(BUILD_TESTING)
     hypr_radiant_enable_warnings(hypr-radiant-hit-tests)
 
     add_test(NAME hypr-radiant-hit-tests COMMAND hypr-radiant-hit-tests)
+
+    add_executable(hypr-radiant-search-tests
+        tests/SearchMatcherTest.cpp
+        src/SearchMatcher.cpp
+    )
+
+    target_include_directories(hypr-radiant-search-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
+    target_compile_features(hypr-radiant-search-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-search-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-search-tests)
+
+    add_test(NAME hypr-radiant-search-tests COMMAND hypr-radiant-search-tests)
 endif()

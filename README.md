@@ -71,16 +71,20 @@ hyprctl dispatch radiant:toggle
 
 The command opens or closes the Workspace Wall overview. The overview shows
 workspace cards and labeled window cards from the current compositor state.
+Typing while the overview is open searches open window labels without changing
+the grid layout.
 
 ## Controls
 
 - `hyprctl dispatch radiant:toggle`: open or close overview
 - Hover workspace or window card: move selection
+- Type letters, digits, or space: search open window labels
+- `Backspace`: delete one search character
 - Click workspace card: switch workspace
 - Click window card: switch workspace and focus window
 - Arrow keys: move selection
 - `Enter`: activate selection
-- `Esc`: close overview
+- `Esc`: clear search, or close overview when search is empty
 
 ## Configuration
 

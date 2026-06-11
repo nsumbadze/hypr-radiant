@@ -5,6 +5,8 @@
 
 #include <linux/input-event-codes.h>
 
+#include <optional>
+
 namespace hypr_radiant {
 namespace {
 
@@ -22,13 +24,31 @@ uint32_t evdevKeycode(uint32_t hyprlandKeycode) {
     return hyprlandKeycode >= XKB_KEYCODE_OFFSET ? hyprlandKeycode - XKB_KEYCODE_OFFSET : hyprlandKeycode;
 }
 
+std::optional<char> searchCharForKey(uint32_t key) {
+    if (key >= KEY_A && key <= KEY_Z)
+        return static_cast<char>('a' + (key - KEY_A));
+
+    if (key >= KEY_1 && key <= KEY_9)
+        return static_cast<char>('1' + (key - KEY_1));
+
+    if (key == KEY_0)
+        return '0';
+
+    if (key == KEY_SPACE)
+        return ' ';
+
+    return std::nullopt;
+}
+
 } // namespace
 
-void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, MoveFn move, CloseFn close) {
+void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace, MoveFn move, CloseFn close) {
     m_active   = std::move(active);
     m_hitTest  = std::move(hitTest);
     m_activate = std::move(activate);
     m_selectAt = std::move(selectAt);
+    m_textInput = std::move(textInput);
+    m_backspace = std::move(backspace);
     m_move     = std::move(move);
     m_close    = std::move(close);
 
@@ -76,6 +96,13 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
             return;
         }
 
+        if (key == KEY_BACKSPACE) {
+            if (m_backspace)
+                m_backspace();
+            info.cancelled = true;
+            return;
+        }
+
         if (key == KEY_LEFT) {
             if (m_move)
                 m_move(NavigationDirection::Left);
@@ -92,6 +119,10 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
             if (m_move)
                 m_move(NavigationDirection::Down);
             info.cancelled = true;
+        } else if (const auto searchChar = searchCharForKey(key)) {
+            if (m_textInput)
+                m_textInput(*searchChar);
+            info.cancelled = true;
         }
     });
 }
@@ -104,6 +135,8 @@ void InputController::uninstall() {
     m_hitTest = {};
     m_activate = {};
     m_selectAt = {};
+    m_textInput = {};
+    m_backspace = {};
     m_move = {};
     m_close = {};
 }

@@ -142,6 +142,7 @@ void OverlayRenderer::uninstall() {
 
 void OverlayRenderer::show(RadiantState state) {
     m_state = std::move(state);
+    clearSearch();
     rebuildFrames();
 
     if (const auto* frame = activeMonitorFrame()) {
@@ -161,6 +162,7 @@ void OverlayRenderer::toggle(RadiantState state) {
     if (m_animation.targetVisible()) {
         m_state = std::move(state);
         rebuildFrames();
+        clearSearch();
         m_animation.animateTo(false, m_config.animationDurationMs());
         damageAllMonitors();
         return;
@@ -198,6 +200,36 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     damageAllMonitors();
 }
 
+void OverlayRenderer::appendSearchChar(char value) {
+    if (m_searchQuery.size() >= 64)
+        return;
+
+    m_searchQuery.push_back(value);
+    rebuildSearchMatches();
+    selectFirstSearchMatch();
+    damageAllMonitors();
+}
+
+void OverlayRenderer::backspaceSearch() {
+    if (m_searchQuery.empty())
+        return;
+
+    m_searchQuery.pop_back();
+    rebuildSearchMatches();
+    selectFirstSearchMatch();
+    damageAllMonitors();
+}
+
+void OverlayRenderer::clearSearchOrHide() {
+    if (!m_searchQuery.empty()) {
+        clearSearch();
+        damageAllMonitors();
+        return;
+    }
+
+    hideImmediate();
+}
+
 void OverlayRenderer::hideImmediate() {
     const auto wasRenderable = m_animation.renderable();
     m_animation.hideImmediate();
@@ -206,6 +238,7 @@ void OverlayRenderer::hideImmediate() {
     m_textures.clear();
     m_selectedTarget = {};
     m_selectedFrameMonitorId = -1;
+    clearSearch();
 
     if (wasRenderable)
         damageAllMonitors();
@@ -313,6 +346,47 @@ void OverlayRenderer::rebuildFrames() {
 
     if (m_selectedFrameMonitorId != -1 && !frameForMonitor(m_selectedFrameMonitorId))
         m_selectedFrameMonitorId = -1;
+
+    rebuildSearchMatches();
+}
+
+void OverlayRenderer::rebuildSearchMatches() {
+    m_searchMatches.clear();
+    if (m_searchQuery.empty())
+        return;
+
+    for (const auto& frame : m_frames) {
+        const auto matches = m_searchMatcher.matchingWindowIds(frame, m_searchQuery);
+        m_searchMatches.insert(matches.begin(), matches.end());
+    }
+}
+
+void OverlayRenderer::selectFirstSearchMatch() {
+    if (m_searchQuery.empty())
+        return;
+
+    if (const auto* frame = frameForSelectedTarget()) {
+        if (const auto target = m_searchMatcher.firstMatch(*frame, m_searchQuery)) {
+            m_selectedTarget = *target;
+            m_selectedFrameMonitorId = frame->monitorId;
+            return;
+        }
+    }
+
+    for (const auto& frame : m_frames) {
+        if (const auto target = m_searchMatcher.firstMatch(frame, m_searchQuery)) {
+            m_selectedTarget = *target;
+            m_selectedFrameMonitorId = frame.monitorId;
+            return;
+        }
+    }
+
+    m_selectedTarget = {};
+}
+
+void OverlayRenderer::clearSearch() {
+    m_searchQuery.clear();
+    m_searchMatches.clear();
 }
 
 void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
@@ -327,8 +401,12 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     const auto selectAccent        = CHyprColor{0.98F, 0.84F, 0.25F, static_cast<float>(1.0 * alpha)};
     const auto selectedInnerAccent = CHyprColor{0.45F, 1.0F, 0.78F, static_cast<float>(0.75 * alpha)};
     const auto windowBorder        = CHyprColor{0.32F, 0.86F, 0.70F, static_cast<float>(0.36 * alpha)};
+    const auto windowDimFill       = CHyprColor{0.018F, 0.07F, 0.06F, static_cast<float>(0.50 * alpha)};
+    const auto windowDimBorder     = CHyprColor{0.10F, 0.34F, 0.28F, static_cast<float>(0.24 * alpha)};
 
-    renderLabel("Workspace Overview", frame.bounds.x + 46.0, frame.bounds.y + 42.0, std::max(1.0, frame.bounds.width - 92.0), 22, alpha, damage);
+    const auto searchActive = !m_searchQuery.empty();
+    const auto header       = searchActive ? std::format("Workspace Overview  Search: {}", m_searchQuery) : std::string{"Workspace Overview"};
+    renderLabel(header, frame.bounds.x + 46.0, frame.bounds.y + 42.0, std::max(1.0, frame.bounds.width - 92.0), 22, alpha, damage);
 
     for (const auto& workspace : frame.workspaces) {
         const auto workspaceSelected = frame.monitorId == m_selectedFrameMonitorId &&
@@ -353,9 +431,10 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             const auto windowSelected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
                 m_selectedTarget,
                 {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
+            const auto windowMatchesSearch = !searchActive || m_searchMatches.contains(window.stableId);
             const auto windowBox = boxFor(window.rect);
-            drawRect(windowBox, windowSelected ? windowSelectedFill : windowFill, damage, 10);
-            drawBorder(windowBox, 1.0, windowBorder, damage);
+            drawRect(windowBox, windowMatchesSearch ? (windowSelected ? windowSelectedFill : windowFill) : windowDimFill, damage, 10);
+            drawBorder(windowBox, 1.0, windowMatchesSearch ? windowBorder : windowDimBorder, damage);
 
             if (windowSelected) {
                 drawRect(CBox{windowBox.x, windowBox.y, windowBox.w, std::min(30.0, windowBox.h)}, windowTitleFill, damage, 10);
@@ -363,7 +442,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                 drawBorder(windowBox, 5.0, selectAccent, damage);
             }
 
-            renderLabel(window.label, window.rect.x + 12.0, window.rect.y + 10.0, std::max(1.0, window.rect.width - 24.0), 11, alpha, damage);
+            renderLabel(window.label, window.rect.x + 12.0, window.rect.y + 10.0, std::max(1.0, window.rect.width - 24.0), 11, windowMatchesSearch ? alpha : alpha * 0.38, damage);
         }
     }
 }
