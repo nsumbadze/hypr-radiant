@@ -4,8 +4,7 @@
 provides a `radiant:toggle` dispatcher that opens a native Workspace Wall
 overview for switching between workspaces and open windows.
 
-Window previews, search, and workspace/window rearrangement are not implemented
-yet.
+Live window previews and workspace/window rearrangement are not implemented yet.
 
 ## Requirements
 
@@ -69,20 +68,22 @@ After loading the plugin, run:
 hyprctl dispatch radiant:toggle
 ```
 
-The command opens or closes the Workspace Wall overview. The overview shows
-workspace cards and labeled window cards from the current compositor state.
-Typing while the overview is open searches open window labels without changing
-the grid layout.
+The command opens or closes the Workspace Wall overview. The default focused
+layout shows the active workspace as a center stage, adjacent workspaces at its
+sides, and remaining workspaces in a compact dock. Typing opens a modal search
+for open window labels and workspace names or numbers.
 
 ## Controls
 
 - `hyprctl dispatch radiant:toggle`: open or close overview
 - Hover workspace or window card: move selection
-- Type letters, digits, or space: search open window labels
+- Type letters, digits, or space: search open windows and workspaces
 - `Backspace`: delete one search character
 - Click workspace card: switch workspace
 - Click window card: switch workspace and focus window
-- Arrow keys: move selection
+- `Left`/`Right`: move between workspaces
+- `Down`: enter a workspace's window list or move to the next window
+- `Up`: move to the previous window or back to its workspace
 - `Enter`: activate selection
 - `Esc`: clear search, or close overview when search is empty
 

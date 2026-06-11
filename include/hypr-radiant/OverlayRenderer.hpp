@@ -54,6 +54,9 @@ class OverlayRenderer {
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
+    [[nodiscard]] OverviewTarget searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const;
+    [[nodiscard]] const WindowCard* findWindowCard(std::uint64_t windowId) const noexcept;
+    [[nodiscard]] const WorkspaceCard* findWorkspaceCard(std::int64_t workspaceId) const noexcept;
 
     [[nodiscard]] const WorkspaceWallFrame* frameForMonitor(std::int64_t monitorId) const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* frameForPoint(double x, double y, double& localX, double& localY) const noexcept;

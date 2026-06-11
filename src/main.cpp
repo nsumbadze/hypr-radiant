@@ -80,8 +80,13 @@ void RadiantPlugin::activate(OverviewTarget target) {
     if (target.type == OverviewTargetType::None)
         target = m_overlay.selectedTarget();
 
-    if (!m_activation.activate(target))
+    if (target.type == OverviewTargetType::None)
+        return;
+
+    if (!m_activation.activate(target)) {
         log::warn("overview activation target disappeared or was invalid");
+        return;
+    }
 
     m_overlay.hideImmediate();
 }

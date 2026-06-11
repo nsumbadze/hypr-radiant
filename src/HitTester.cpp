@@ -32,20 +32,6 @@ std::vector<OverviewTarget> workspaceTargets(const WorkspaceWallFrame& frame) {
     return targets;
 }
 
-OverviewTarget normalizeCurrent(const WorkspaceWallFrame& frame, OverviewTarget current) {
-    if (current.type != OverviewTargetType::Window)
-        return current;
-
-    for (const auto& workspace : frame.workspaces) {
-        for (const auto& window : workspace.windows) {
-            if (window.stableId == current.windowId)
-                return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
-        }
-    }
-
-    return current;
-}
-
 double centerX(const LayoutRect& rect) { return rect.x + rect.width / 2.0; }
 double centerY(const LayoutRect& rect) { return rect.y + rect.height / 2.0; }
 
@@ -84,19 +70,54 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
     if (targets.empty())
         return {};
 
-    const auto normalizedCurrent = normalizeCurrent(frame, current);
-    const auto currentRect       = rectFor(frame, normalizedCurrent);
-    if (normalizedCurrent.type == OverviewTargetType::None || currentRect.width <= 0.0 || currentRect.height <= 0.0)
+    if (current.type == OverviewTargetType::Workspace && direction == NavigationDirection::Down) {
+        const auto workspace = std::ranges::find_if(frame.workspaces, [current](const WorkspaceCard& card) {
+            return card.workspaceId == current.workspaceId;
+        });
+        if (workspace != frame.workspaces.end() && !workspace->windows.empty()) {
+            const auto& window = workspace->windows.front();
+            return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
+        }
+    }
+
+    if (current.type == OverviewTargetType::Window) {
+        for (const auto& workspace : frame.workspaces) {
+            const auto window = std::ranges::find_if(workspace.windows, [current](const WindowCard& card) {
+                return card.stableId == current.windowId;
+            });
+            if (window == workspace.windows.end())
+                continue;
+
+            const auto index = static_cast<std::size_t>(std::distance(workspace.windows.begin(), window));
+            if (direction == NavigationDirection::Down && index + 1 < workspace.windows.size()) {
+                const auto& next = workspace.windows[index + 1];
+                return {.type = OverviewTargetType::Window, .workspaceId = next.workspaceId, .windowId = next.stableId};
+            }
+            if (direction == NavigationDirection::Up) {
+                if (index > 0) {
+                    const auto& previous = workspace.windows[index - 1];
+                    return {.type = OverviewTargetType::Window, .workspaceId = previous.workspaceId, .windowId = previous.stableId};
+                }
+                return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
+            }
+
+            current = {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
+            break;
+        }
+    }
+
+    const auto currentRect = rectFor(frame, current);
+    if (current.type == OverviewTargetType::None || currentRect.width <= 0.0 || currentRect.height <= 0.0)
         return initialSelection(frame);
 
     const auto cx = centerX(currentRect);
     const auto cy = centerY(currentRect);
 
-    auto best      = normalizedCurrent;
+    auto best      = current;
     auto bestScore = 1.0e18;
 
     for (const auto& target : targets) {
-        if (target.type == normalizedCurrent.type && target.workspaceId == normalizedCurrent.workspaceId && target.windowId == normalizedCurrent.windowId)
+        if (target.type == current.type && target.workspaceId == current.workspaceId && target.windowId == current.windowId)
             continue;
 
         const auto rect = rectFor(frame, target);

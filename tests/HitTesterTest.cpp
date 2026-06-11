@@ -53,6 +53,28 @@ void windowCurrentNavigationMovesFromContainingWorkspace() {
     assert(target.workspaceId == 2);
 }
 
+void downEntersWorkspaceWindowsAndUpReturns() {
+    auto testFrame = frame();
+    testFrame.workspaces.front().windows.push_back(
+        {.stableId = 12, .workspaceId = 1, .rect = {.x = 30, .y = 85, .width = 80, .height = 35}, .label = "B"});
+
+    const auto firstWindow = HitTester{}.moveSelection(testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 1}, NavigationDirection::Down);
+    assert(firstWindow.type == OverviewTargetType::Window);
+    assert(firstWindow.windowId == 11);
+
+    const auto secondWindow = HitTester{}.moveSelection(testFrame, firstWindow, NavigationDirection::Down);
+    assert(secondWindow.type == OverviewTargetType::Window);
+    assert(secondWindow.windowId == 12);
+
+    const auto previousWindow = HitTester{}.moveSelection(testFrame, secondWindow, NavigationDirection::Up);
+    assert(previousWindow.type == OverviewTargetType::Window);
+    assert(previousWindow.windowId == 11);
+
+    const auto workspace = HitTester{}.moveSelection(testFrame, previousWindow, NavigationDirection::Up);
+    assert(workspace.type == OverviewTargetType::Workspace);
+    assert(workspace.workspaceId == 1);
+}
+
 void rightAndBottomEdgesAreOutsideHitBounds() {
     const auto rightEdge = HitTester{}.hitTest(frame(), 390, 40);
     assert(rightEdge.type == OverviewTargetType::None);
@@ -90,6 +112,7 @@ int main() {
     hoverOutsideAllCardsReturnsNoTarget();
     navigationMovesThroughWorkspaceGrid();
     windowCurrentNavigationMovesFromContainingWorkspace();
+    downEntersWorkspaceWindowsAndUpReturns();
     rightAndBottomEdgesAreOutsideHitBounds();
     zeroSizedRectsAreNotHittable();
     emptyFrameHasNoInitialSelection();

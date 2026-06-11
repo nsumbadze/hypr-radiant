@@ -49,7 +49,31 @@ void stageOptionsCreateFocusedStageSpacing() {
 
     assert(frame.workspaces.at(1).rect.width > frame.workspaces.front().rect.width);
     assert(frame.workspaces.at(1).rect.height > frame.workspaces.front().rect.height);
-    assert(frame.workspaces.at(1).windows.front().rect.x > frame.workspaces.at(1).rect.x + 28.0);
+    assert(frame.workspaces.at(1).windows.front().rect.x > frame.workspaces.at(1).rect.x + 20.0);
+    assert(frame.workspaces.at(1).windows.front().rect.y > frame.workspaces.at(1).rect.y + 50.0);
+    assert(frame.workspaces.at(1).rect.x + frame.workspaces.at(1).rect.width / 2.0 == 960.0);
+    assert(frame.workspaces.at(3).rect.height <= 104.0);
+    assert(frame.workspaces.at(3).rect.y > frame.workspaces.at(1).rect.y + frame.workspaces.at(1).rect.height);
+}
+
+void focusedStageHeightTracksWindowCount() {
+    auto state = sampleState();
+    const auto oneWindow = WorkspaceWallLayout{}.compute(
+        state,
+        state.monitors.front(),
+        {.width = 1920, .height = 1080},
+        WorkspaceWallOptions{.focusedStage = true});
+
+    state.windows.push_back({.stableId = 11, .title = "Browser", .workspaceId = 2, .monitorId = 1, .mapped = true});
+    state.windows.push_back({.stableId = 12, .title = "Terminal", .workspaceId = 2, .monitorId = 1, .mapped = true});
+    const auto threeWindows = WorkspaceWallLayout{}.compute(
+        state,
+        state.monitors.front(),
+        {.width = 1920, .height = 1080},
+        WorkspaceWallOptions{.focusedStage = true});
+
+    assert(oneWindow.workspaces.at(1).rect.height < threeWindows.workspaces.at(1).rect.height);
+    assert(threeWindows.workspaces.at(1).rect.height <= 320.0);
 }
 
 void fillsEmptySlotsAndFallsBackToClassName() {
@@ -107,6 +131,7 @@ int main() {
     computesMinimumWorkspaceSlots();
     polishedDefaultsLeaveBreathingRoom();
     stageOptionsCreateFocusedStageSpacing();
+    focusedStageHeightTracksWindowCount();
     fillsEmptySlotsAndFallsBackToClassName();
     tinyRenderSizeDoesNotProduceNegativeRects();
     sortsWindowsByStableId();

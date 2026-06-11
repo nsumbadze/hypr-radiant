@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <format>
 #include <stdexcept>
 #include <utility>
@@ -28,7 +29,7 @@ CBox boxFor(const LayoutRect& rect) {
     return CBox{std::round(rect.x), std::round(rect.y), std::round(rect.width), std::round(rect.height)};
 }
 
-void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int round = 0) {
+void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int round = 0, bool blur = false) {
     if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
         return;
 
@@ -38,19 +39,10 @@ void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int roun
     data.box   = box;
     data.color = color;
     data.round = round;
+    data.blur  = blur;
+    data.blurA = color.a;
 
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(data));
-}
-
-void drawBorder(const CBox& box, double size, CHyprColor color, const CRegion& damage) {
-    if (box.w <= 0.0 || box.h <= 0.0 || size <= 0.0)
-        return;
-
-    const auto border = std::min({size, box.w / 2.0, box.h / 2.0});
-    drawRect(CBox{box.x, box.y, box.w, border}, color, damage);
-    drawRect(CBox{box.x, box.y + box.h - border, box.w, border}, color, damage);
-    drawRect(CBox{box.x, box.y, border, box.h}, color, damage);
-    drawRect(CBox{box.x + box.w - border, box.y, border, box.h}, color, damage);
 }
 
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
@@ -64,6 +56,10 @@ const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64
 
 bool contains(const LayoutRect& rect, double x, double y) {
     return rect.width > 0.0 && rect.height > 0.0 && x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
+}
+
+double centered(double available, double size) {
+    return std::max(0.0, (available - size) / 2.0);
 }
 
 bool targetInFrame(const WorkspaceWallFrame& frame, OverviewTarget target) {
@@ -81,17 +77,6 @@ bool targetInFrame(const WorkspaceWallFrame& frame, OverviewTarget target) {
     }
 
     return false;
-}
-
-const WindowCard* findWindowCard(const WorkspaceWallFrame& frame, std::uint64_t windowId) {
-    for (const auto& workspace : frame.workspaces) {
-        for (const auto& window : workspace.windows) {
-            if (window.stableId == windowId)
-                return &window;
-        }
-    }
-
-    return nullptr;
 }
 
 RadiantSize renderSizeForMonitor(const PHLMONITOR& monitor) {
@@ -134,12 +119,60 @@ WorkspaceWallOptions layoutOptionsFor(LayoutMode mode) {
 
     return WorkspaceWallOptions{
         .minimumWorkspaceSlots = 6,
-        .outerPadding          = 150.0,
-        .cardGap               = 34.0,
-        .windowGap             = 14.0,
-        .windowInset           = 30.0,
+        .outerPadding          = 120.0,
+        .cardGap               = 24.0,
+        .windowGap             = 12.0,
+        .windowInset           = 22.0,
         .focusedStage          = true,
     };
+}
+
+struct SearchPanelGeometry {
+    CBox        panel;
+    CBox        input;
+    double      resultsY = 0.0;
+    double      rowHeight = 0.0;
+    double      rowGap = 0.0;
+    std::size_t capacity = 0;
+};
+
+SearchPanelGeometry searchPanelGeometry(const WorkspaceWallFrame& frame) {
+    const auto margin      = std::clamp(frame.bounds.width * 0.04, 24.0, 72.0);
+    const auto panelWidth  = std::min(760.0, std::max(1.0, frame.bounds.width - margin * 2.0));
+    const auto panelHeight = std::min(590.0, std::max(1.0, frame.bounds.height - margin * 2.0));
+    const auto panelX      = centered(frame.bounds.width, panelWidth);
+    const auto panelY      = centered(frame.bounds.height, panelHeight);
+    const auto inputInset  = std::min(28.0, panelWidth * 0.05);
+    const auto inputHeight = std::min(68.0, panelHeight * 0.20);
+    const auto resultsY    = panelY + inputInset + inputHeight + 28.0;
+    const auto rowHeight   = 58.0;
+    const auto rowGap      = 8.0;
+    const auto resultSpace = std::max(0.0, panelY + panelHeight - inputInset - resultsY);
+
+    return {
+        .panel = {panelX, panelY, panelWidth, panelHeight},
+        .input = {panelX + inputInset, panelY + inputInset, std::max(1.0, panelWidth - inputInset * 2.0), inputHeight},
+        .resultsY = resultsY,
+        .rowHeight = rowHeight,
+        .rowGap = rowGap,
+        .capacity = std::max<std::size_t>(1, static_cast<std::size_t>(resultSpace / (rowHeight + rowGap))),
+    };
+}
+
+std::size_t selectedSearchIndex(const std::vector<OverviewTarget>& targets, OverviewTarget selected) {
+    const auto found = std::ranges::find_if(targets, [selected](OverviewTarget target) { return sameTarget(target, selected); });
+    return found == targets.end() ? 0 : static_cast<std::size_t>(std::distance(targets.begin(), found));
+}
+
+std::size_t visibleSearchStart(const std::vector<OverviewTarget>& targets, OverviewTarget selected, std::size_t capacity) {
+    if (targets.size() <= capacity)
+        return 0;
+
+    const auto selectedIndex = selectedSearchIndex(targets, selected);
+    if (selectedIndex < capacity)
+        return 0;
+
+    return std::min(selectedIndex - capacity + 1, targets.size() - capacity);
 }
 
 } // namespace
@@ -219,7 +252,7 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     if (!frame)
         return;
 
-    const auto target = m_hitTester.hitTest(*frame, localX, localY);
+    const auto target = m_searchQuery.empty() ? m_hitTester.hitTest(*frame, localX, localY) : searchTargetAt(*frame, localX, localY);
     if (target.type == OverviewTargetType::None)
         return;
 
@@ -290,14 +323,14 @@ OverviewTarget OverlayRenderer::hitTest(double x, double y) const {
     if (!frame)
         return {};
 
-    return m_hitTester.hitTest(*frame, localX, localY);
+    return m_searchQuery.empty() ? m_hitTester.hitTest(*frame, localX, localY) : searchTargetAt(*frame, localX, localY);
 }
 
 void OverlayRenderer::onRenderStage(eRenderStage stage) {
     if (stage != RENDER_LAST_MOMENT || !m_animation.renderable())
         return;
 
-    const auto alpha = std::clamp(static_cast<float>(m_animation.value()) * m_config.opacity(), 0.0F, 1.0F);
+    const auto alpha = std::clamp(static_cast<float>(m_animation.value()), 0.0F, 1.0F);
 
     if (alpha > 0.001F)
         renderCurrentMonitor(alpha);
@@ -323,8 +356,10 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
 
     auto box = CBox{0, 0, width, height};
     const auto& damage = g_pHyprRenderer->renderData().damage;
+    const auto backdropAlpha = alpha * m_config.opacity();
 
-    drawRect(box, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(alpha)}, damage);
+    drawRect(box, CHyprColor{0.018F, 0.020F, 0.027F, static_cast<float>(0.82 * backdropAlpha)}, damage, 0, true);
+    drawRect(box, CHyprColor{0.006F, 0.007F, 0.010F, static_cast<float>(0.30 * backdropAlpha)}, damage);
 
     const auto* frame = frameForMonitor(monitor->m_id);
     if (!frame)
@@ -396,20 +431,12 @@ void OverlayRenderer::selectFirstSearchMatch() {
     if (m_searchQuery.empty())
         return;
 
-    if (const auto* frame = frameForSelectedTarget()) {
-        if (const auto target = m_searchMatcher.firstMatch(*frame, m_searchQuery)) {
-            m_selectedTarget = *target;
+    const auto targets = matchingSearchTargets();
+    if (!targets.empty()) {
+        m_selectedTarget = targets.front();
+        if (const auto* frame = frameForSelectedTarget())
             m_selectedFrameMonitorId = frame->monitorId;
-            return;
-        }
-    }
-
-    for (const auto& frame : m_frames) {
-        if (const auto target = m_searchMatcher.firstMatch(frame, m_searchQuery)) {
-            m_selectedTarget = *target;
-            m_selectedFrameMonitorId = frame.monitorId;
-            return;
-        }
+        return;
     }
 
     m_selectedTarget = {};
@@ -417,14 +444,25 @@ void OverlayRenderer::selectFirstSearchMatch() {
 
 std::vector<OverviewTarget> OverlayRenderer::matchingSearchTargets() const {
     std::vector<OverviewTarget> targets;
-    if (m_searchQuery.empty() || m_searchMatches.empty())
+    if (m_searchQuery.empty())
         return targets;
 
+    std::unordered_set<std::int64_t> workspaceIds;
+    std::unordered_set<std::uint64_t> windowIds;
     for (const auto& frame : m_frames) {
         for (const auto& workspace : frame.workspaces) {
+            const auto workspaceNumber = std::to_string(workspace.workspaceId);
+            if (!workspaceIds.contains(workspace.workspaceId) &&
+                (m_searchMatcher.matches(workspace.name, m_searchQuery) || m_searchMatcher.matches(workspaceNumber, m_searchQuery))) {
+                targets.push_back({.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
+                workspaceIds.insert(workspace.workspaceId);
+            }
+
             for (const auto& window : workspace.windows) {
-                if (m_searchMatches.contains(window.stableId))
+                if (m_searchMatches.contains(window.stableId) && !windowIds.contains(window.stableId)) {
                     targets.push_back({.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
+                    windowIds.insert(window.stableId);
+                }
             }
         }
     }
@@ -457,143 +495,182 @@ void OverlayRenderer::clearSearch() {
 }
 
 void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
-    const auto mode                = m_config.layoutMode();
-    const auto cardFill            = CHyprColor{0.025F, 0.105F, 0.090F, static_cast<float>(0.96 * alpha)};
-    const auto cardSelectedFill    = CHyprColor{0.080F, 0.245F, 0.195F, static_cast<float>(1.00 * alpha)};
-    const auto emptyFill           = CHyprColor{0.009F, 0.032F, 0.028F, static_cast<float>(0.76 * alpha)};
-    const auto windowFill          = CHyprColor{0.055F, 0.170F, 0.145F, static_cast<float>(0.96 * alpha)};
-    const auto windowSelectedFill  = CHyprColor{0.125F, 0.330F, 0.255F, static_cast<float>(1.00 * alpha)};
-    const auto windowTitleFill     = CHyprColor{0.012F, 0.045F, 0.040F, static_cast<float>(0.94 * alpha)};
-    const auto windowBodyFill      = CHyprColor{0.018F, 0.070F, 0.062F, static_cast<float>(0.74 * alpha)};
-    const auto border              = CHyprColor{0.070F, 0.420F, 0.340F, static_cast<float>(0.62 * alpha)};
-    const auto activeAccent        = CHyprColor{0.180F, 1.000F, 0.760F, static_cast<float>(0.95 * alpha)};
-    const auto selectAccent        = CHyprColor{0.98F, 0.84F, 0.25F, static_cast<float>(1.0 * alpha)};
-    const auto selectedInnerAccent = CHyprColor{0.45F, 1.0F, 0.78F, static_cast<float>(0.88 * alpha)};
-    const auto windowBorder        = CHyprColor{0.155F, 0.690F, 0.540F, static_cast<float>(0.42 * alpha)};
-    const auto windowDimFill       = CHyprColor{0.008F, 0.026F, 0.024F, static_cast<float>(0.58 * alpha)};
-    const auto windowDimBorder     = CHyprColor{0.045F, 0.180F, 0.150F, static_cast<float>(0.30 * alpha)};
-    const auto stageFill           = CHyprColor{0.004F, 0.014F, 0.013F, static_cast<float>(0.96 * alpha)};
-    const auto stageBorder         = CHyprColor{0.115F, 0.580F, 0.455F, static_cast<float>(0.72 * alpha)};
-    const auto headerFill          = CHyprColor{0.012F, 0.042F, 0.038F, static_cast<float>(0.98 * alpha)};
-    const auto shadow              = CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.34 * alpha)};
+    const auto mode          = m_config.layoutMode();
+    const auto searchActive  = !m_searchQuery.empty();
+    const auto contentAlpha  = searchActive ? alpha * 0.18 : alpha;
+    const auto cardFill      = CHyprColor{0.085F, 0.092F, 0.115F, static_cast<float>(0.92 * contentAlpha)};
+    const auto activeFill    = CHyprColor{0.115F, 0.125F, 0.160F, static_cast<float>(0.98 * contentAlpha)};
+    const auto selectedFill  = CHyprColor{0.135F, 0.130F, 0.125F, static_cast<float>(0.98 * contentAlpha)};
+    const auto emptyFill     = CHyprColor{0.050F, 0.054F, 0.068F, static_cast<float>(0.76 * contentAlpha)};
+    const auto windowFill    = CHyprColor{0.135F, 0.145F, 0.180F, static_cast<float>(0.94 * contentAlpha)};
+    const auto windowSelect  = CHyprColor{0.180F, 0.165F, 0.125F, static_cast<float>(0.98 * contentAlpha)};
+    const auto accent        = CHyprColor{0.39F, 0.82F, 0.78F, static_cast<float>(0.95 * contentAlpha)};
+    const auto selectAccent  = CHyprColor{0.98F, 0.76F, 0.25F, static_cast<float>(1.00 * contentAlpha)};
+    const auto shadow        = CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.28 * contentAlpha)};
+    const auto selectedGlow  = CHyprColor{0.98F, 0.68F, 0.16F, static_cast<float>(0.15 * contentAlpha)};
+    const auto titleX        = mode == LayoutMode::Stage ? std::clamp(frame.bounds.width * 0.04, 28.0, 68.0) : 46.0;
 
-    const auto searchActive = !m_searchQuery.empty();
-    const auto header       = searchActive ? std::format("Workspace Overview  Search: {}", m_searchQuery) : std::string{"Workspace Overview"};
-
-    if (mode == LayoutMode::Stage) {
-        drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.28 * alpha)}, damage);
-        const auto stageBox  = CBox{42.0, 72.0, std::max(1.0, frame.bounds.width - 84.0), std::max(1.0, frame.bounds.height - 108.0)};
-        const auto headerBox = CBox{64.0, 88.0, std::min(860.0, frame.bounds.width - 128.0), 54.0};
-        drawRect(CBox{stageBox.x + 10.0, stageBox.y + 12.0, stageBox.w, stageBox.h}, shadow, damage, 28);
-        drawRect(stageBox, stageFill, damage, 24);
-        drawBorder(stageBox, 2.5, stageBorder, damage);
-        drawRect(headerBox, headerFill, damage, 16);
-        drawRect(CBox{headerBox.x, headerBox.y, 8.0, headerBox.h}, selectAccent, damage, 16);
-        drawBorder(headerBox, 2.0, stageBorder, damage);
-        renderLabel(header, headerBox.x + 24.0, headerBox.y + 14.0, std::max(1.0, headerBox.w - 48.0), 21, alpha, damage);
-    } else {
-        renderLabel(header, frame.bounds.x + 46.0, frame.bounds.y + 42.0, std::max(1.0, frame.bounds.width - 92.0), 22, alpha, damage);
-    }
+    renderLabel("Workspaces", titleX, 30.0, std::max(1.0, frame.bounds.width * 0.45), 24, contentAlpha, damage);
+    if (!searchActive)
+        renderLabel("Type to search  |  Arrows navigate  |  Enter open", std::max(titleX + 220.0, frame.bounds.width - 510.0), 35.0, 470.0, 13, contentAlpha * 0.62, damage);
 
     for (const auto& workspace : frame.workspaces) {
         const auto workspaceSelected = frame.monitorId == m_selectedFrameMonitorId &&
             sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
         const auto workspaceBox = boxFor(workspace.rect);
-        if (mode == LayoutMode::Stage)
-            drawRect(CBox{workspaceBox.x + 8.0, workspaceBox.y + 10.0, workspaceBox.w, workspaceBox.h}, shadow, damage, 24);
-        drawRect(workspaceBox, workspaceSelected ? cardSelectedFill : (workspace.empty ? emptyFill : cardFill), damage, mode == LayoutMode::Stage ? 22 : 18);
-        drawBorder(workspaceBox, mode == LayoutMode::Stage ? 2.0 : 1.5, border, damage);
+        const auto compact = workspace.rect.height <= 120.0;
+        const auto round   = compact ? 14 : 20;
+
+        drawRect(CBox{workspaceBox.x + 5.0, workspaceBox.y + 7.0, workspaceBox.w, workspaceBox.h}, shadow, damage, round);
+        if (workspaceSelected)
+            drawRect(CBox{workspaceBox.x - 7.0, workspaceBox.y - 7.0, workspaceBox.w + 14.0, workspaceBox.h + 14.0}, selectedGlow, damage, round + 5);
+
+        const auto fill = workspaceSelected ? selectedFill : (workspace.active ? activeFill : (workspace.empty ? emptyFill : cardFill));
+        drawRect(workspaceBox, fill, damage, round);
 
         if (workspace.active) {
-            drawRect(CBox{workspaceBox.x, workspaceBox.y, workspaceBox.w, 6.0}, activeAccent, damage);
-            drawBorder(workspaceBox, 3.0, activeAccent, damage);
+            drawRect(CBox{workspaceBox.x + workspaceBox.w - 28.0, workspaceBox.y + 19.0, 8.0, 8.0}, accent, damage, 4);
         }
 
         if (workspaceSelected) {
-            drawRect(CBox{workspaceBox.x + 8.0, workspaceBox.y + 8.0, workspaceBox.w - 16.0, 3.0}, selectedInnerAccent, damage);
-            drawBorder(workspaceBox, mode == LayoutMode::Stage ? 7.0 : 6.0, selectAccent, damage);
+            drawRect(CBox{workspaceBox.x + 16.0, workspaceBox.y + workspaceBox.h - 5.0, std::max(1.0, workspaceBox.w - 32.0), 3.0}, selectAccent, damage, 2);
         }
 
-        renderLabel(workspace.name, workspace.rect.x + 22.0, workspace.rect.y + 18.0, std::max(1.0, workspace.rect.width - 44.0), mode == LayoutMode::Stage ? 18 : 16, alpha, damage);
+        renderLabel(workspace.name, workspace.rect.x + (compact ? 14.0 : 20.0), workspace.rect.y + (compact ? 10.0 : 16.0),
+            std::max(1.0, workspace.rect.width - (compact ? 28.0 : 48.0)), compact ? 13 : 17, contentAlpha, damage);
 
-        if (workspace.empty && mode == LayoutMode::Stage) {
-            const auto emptyBox = CBox{workspaceBox.x + 28.0, workspaceBox.y + workspaceBox.h - 54.0, std::max(1.0, workspaceBox.w - 56.0), 18.0};
-            drawRect(emptyBox, CHyprColor{0.055F, 0.145F, 0.125F, static_cast<float>(0.45 * alpha)}, damage, 9);
-        }
+        if (workspace.empty && !compact)
+            renderLabel("Empty", workspace.rect.x + 20.0, workspace.rect.y + 48.0, std::max(1.0, workspace.rect.width - 40.0), 12, contentAlpha * 0.42, damage);
 
         for (const auto& window : workspace.windows) {
             const auto windowSelected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
                 m_selectedTarget,
                 {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-            const auto windowMatchesSearch = !searchActive || m_searchMatches.contains(window.stableId);
             const auto windowBox = boxFor(window.rect);
-            if (mode == LayoutMode::Stage)
-                drawRect(CBox{windowBox.x + 5.0, windowBox.y + 6.0, windowBox.w, windowBox.h}, shadow, damage, 14);
-            drawRect(windowBox, windowMatchesSearch ? (windowSelected ? windowSelectedFill : windowFill) : windowDimFill, damage, mode == LayoutMode::Stage ? 14 : 10);
-            drawBorder(windowBox, mode == LayoutMode::Stage ? 1.5 : 1.0, windowMatchesSearch ? windowBorder : windowDimBorder, damage);
+            const auto windowRound = compact ? 8 : 12;
+            if (windowSelected)
+                drawRect(CBox{windowBox.x - 5.0, windowBox.y - 5.0, windowBox.w + 10.0, windowBox.h + 10.0}, selectedGlow, damage, windowRound + 4);
+            drawRect(windowBox, windowSelected ? windowSelect : windowFill, damage, windowRound);
+            if (windowSelected)
+                drawRect(CBox{windowBox.x + 10.0, windowBox.y + windowBox.h - 4.0, std::max(1.0, windowBox.w - 20.0), 3.0}, selectAccent, damage, 2);
 
-            if (mode == LayoutMode::Stage) {
-                const auto titleHeight = std::min(36.0, std::max(18.0, windowBox.h * 0.16));
-                drawRect(CBox{windowBox.x, windowBox.y, windowBox.w, titleHeight}, windowTitleFill, damage, 14);
-                drawRect(CBox{windowBox.x + 14.0, windowBox.y + titleHeight + 14.0, std::max(1.0, windowBox.w - 28.0), std::max(1.0, windowBox.h - titleHeight - 28.0)}, windowBodyFill, damage, 12);
-                drawRect(CBox{windowBox.x + 24.0, windowBox.y + titleHeight + 28.0, std::max(1.0, windowBox.w * 0.36), 10.0}, CHyprColor{0.23F, 0.82F, 0.62F, static_cast<float>(0.20 * alpha)}, damage, 5);
-                drawRect(CBox{windowBox.x + 24.0, windowBox.y + titleHeight + 48.0, std::max(1.0, windowBox.w * 0.55), 8.0}, CHyprColor{0.23F, 0.82F, 0.62F, static_cast<float>(0.14 * alpha)}, damage, 4);
-            }
-
-            if (windowSelected) {
-                drawRect(CBox{windowBox.x - 7.0, windowBox.y - 7.0, windowBox.w + 14.0, windowBox.h + 14.0}, CHyprColor{0.98F, 0.84F, 0.25F, static_cast<float>(0.16 * alpha)}, damage, 18);
-                drawRect(CBox{windowBox.x, windowBox.y, windowBox.w, std::min(30.0, windowBox.h)}, windowTitleFill, damage, 10);
-                drawRect(CBox{windowBox.x, windowBox.y, windowBox.w, 4.0}, selectAccent, damage);
-                drawBorder(windowBox, mode == LayoutMode::Stage ? 6.0 : 5.0, selectAccent, damage);
-            }
-
-            renderLabel(window.label, window.rect.x + 14.0, window.rect.y + 10.0, std::max(1.0, window.rect.width - 28.0), mode == LayoutMode::Stage ? 12 : 11, windowMatchesSearch ? alpha : alpha * 0.38, damage);
+            renderLabel(window.label, window.rect.x + (compact ? 8.0 : 14.0), window.rect.y + (compact ? 6.0 : 9.0),
+                std::max(1.0, window.rect.width - (compact ? 16.0 : 24.0)), compact ? 10 : 12, contentAlpha, damage);
+            if (!compact)
+                renderLabel("Open window", window.rect.x + 14.0, window.rect.y + 35.0,
+                    std::max(1.0, window.rect.width - 28.0), 9, contentAlpha * 0.46, damage);
         }
     }
 
-    if (mode == LayoutMode::Stage)
+    if (searchActive) {
+        drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.50 * alpha)}, damage);
         renderSearchPanel(frame, alpha, damage);
+    }
 }
 
 void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
     if (m_searchQuery.empty())
         return;
 
-    const auto panelFill      = CHyprColor{0.006F, 0.018F, 0.017F, static_cast<float>(0.96 * alpha)};
-    const auto panelBorder    = CHyprColor{0.20F, 0.74F, 0.56F, static_cast<float>(0.74 * alpha)};
-    const auto rowFill        = CHyprColor{0.030F, 0.100F, 0.085F, static_cast<float>(0.92 * alpha)};
-    const auto selectedFill   = CHyprColor{0.120F, 0.300F, 0.220F, static_cast<float>(0.98 * alpha)};
-    const auto selectedAccent = CHyprColor{0.98F, 0.84F, 0.25F, static_cast<float>(1.00 * alpha)};
+    const auto geometry       = searchPanelGeometry(frame);
+    const auto targets        = matchingSearchTargets();
+    const auto visibleStart   = visibleSearchStart(targets, m_selectedTarget, geometry.capacity);
+    const auto visibleEnd     = std::min(targets.size(), visibleStart + geometry.capacity);
+    const auto panelFill      = CHyprColor{0.055F, 0.060F, 0.078F, static_cast<float>(0.97 * alpha)};
+    const auto inputFill      = CHyprColor{0.105F, 0.112F, 0.140F, static_cast<float>(0.98 * alpha)};
+    const auto rowFill        = CHyprColor{0.090F, 0.097F, 0.122F, static_cast<float>(0.82 * alpha)};
+    const auto selectedFill   = CHyprColor{0.205F, 0.180F, 0.105F, static_cast<float>(0.98 * alpha)};
+    const auto selectedAccent = CHyprColor{0.98F, 0.76F, 0.25F, static_cast<float>(1.00 * alpha)};
 
-    const auto panel = CBox{64.0, 158.0, 430.0, 340.0};
-    drawRect(CBox{panel.x + 8.0, panel.y + 10.0, panel.w, panel.h}, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.35 * alpha)}, damage, 22);
-    drawRect(panel, panelFill, damage, 20);
-    drawBorder(panel, 2.0, panelBorder, damage);
-    renderLabel(std::format("Search '{}'", m_searchQuery), panel.x + 18.0, panel.y + 16.0, panel.w - 36.0, 18, alpha, damage);
+    drawRect(CBox{geometry.panel.x + 12.0, geometry.panel.y + 16.0, geometry.panel.w, geometry.panel.h},
+        CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.42 * alpha)}, damage, 28);
+    drawRect(geometry.panel, panelFill, damage, 26, true);
+    drawRect(geometry.input, inputFill, damage, 16);
+    renderLabel(std::format("Search  {}_", m_searchQuery), geometry.input.x + 20.0, geometry.input.y + 18.0,
+        std::max(1.0, geometry.input.w - 40.0), 20, alpha, damage);
 
-    double y = panel.y + 58.0;
-    int    count = 0;
-    for (const auto& target : matchingSearchTargets()) {
-        const auto* window = findWindowCard(frame, target.windowId);
-        if (!window)
-            continue;
+    for (std::size_t index = visibleStart; index < visibleEnd; ++index) {
+        const auto& target   = targets[index];
+        const auto selected  = sameTarget(target, m_selectedTarget);
+        const auto rowIndex  = index - visibleStart;
+        const auto row       = CBox{
+            geometry.input.x,
+            geometry.resultsY + static_cast<double>(rowIndex) * (geometry.rowHeight + geometry.rowGap),
+            geometry.input.w,
+            geometry.rowHeight,
+        };
 
-        const auto selected = sameTarget(target, m_selectedTarget);
-        const auto row      = CBox{panel.x + 16.0, y, panel.w - 32.0, 42.0};
-        drawRect(row, selected ? selectedFill : rowFill, damage, 12);
-        if (selected) {
-            drawRect(CBox{row.x, row.y, 5.0, row.h}, selectedAccent, damage, 12);
-            drawBorder(row, 2.0, selectedAccent, damage);
+        drawRect(row, selected ? selectedFill : rowFill, damage, 13);
+        if (selected)
+            drawRect(CBox{row.x, row.y + 10.0, 4.0, row.h - 20.0}, selectedAccent, damage, 2);
+
+        if (target.type == OverviewTargetType::Workspace) {
+            const auto* workspace = findWorkspaceCard(target.workspaceId);
+            const auto  name      = workspace && !workspace->name.empty() ? workspace->name : std::to_string(target.workspaceId);
+            renderLabel(std::format("Workspace {}", name), row.x + 18.0, row.y + 9.0, row.w - 36.0, 14, alpha, damage);
+            renderLabel("Switch workspace", row.x + 18.0, row.y + 32.0, row.w - 36.0, 10, alpha * 0.52, damage);
+        } else if (const auto* window = findWindowCard(target.windowId)) {
+            renderLabel(window->label, row.x + 18.0, row.y + 9.0, row.w - 36.0, 14, alpha, damage);
+            renderLabel(std::format("Workspace {}", window->workspaceId), row.x + 18.0, row.y + 32.0, row.w - 36.0, 10, alpha * 0.52, damage);
         }
-        renderLabel(window->label, row.x + 14.0, row.y + 11.0, row.w - 28.0, 13, alpha, damage);
-
-        y += 48.0;
-        if (++count >= 5)
-            break;
     }
 
-    if (count == 0)
-        renderLabel("No matching windows", panel.x + 20.0, panel.y + 74.0, panel.w - 40.0, 14, alpha * 0.72, damage);
+    if (targets.empty()) {
+        renderLabel("No results", geometry.input.x + 4.0, geometry.resultsY + 36.0, geometry.input.w - 8.0, 20, alpha * 0.80, damage);
+        renderLabel("Try another window title or workspace number", geometry.input.x + 4.0, geometry.resultsY + 72.0,
+            geometry.input.w - 8.0, 12, alpha * 0.48, damage);
+    }
+
+    renderLabel("Up/Down select   Enter open   Esc clear", geometry.panel.x + 28.0, geometry.panel.y + geometry.panel.h - 24.0,
+        geometry.panel.w - 56.0, 11, alpha * 0.48, damage);
+}
+
+OverviewTarget OverlayRenderer::searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const {
+    const auto targets = matchingSearchTargets();
+    if (targets.empty())
+        return {};
+
+    const auto geometry     = searchPanelGeometry(frame);
+    const auto visibleStart = visibleSearchStart(targets, m_selectedTarget, geometry.capacity);
+    const auto visibleEnd   = std::min(targets.size(), visibleStart + geometry.capacity);
+
+    for (std::size_t index = visibleStart; index < visibleEnd; ++index) {
+        const auto rowIndex = index - visibleStart;
+        const auto row      = LayoutRect{
+            .x      = geometry.input.x,
+            .y      = geometry.resultsY + static_cast<double>(rowIndex) * (geometry.rowHeight + geometry.rowGap),
+            .width  = geometry.input.w,
+            .height = geometry.rowHeight,
+        };
+        if (contains(row, x, y))
+            return targets[index];
+    }
+
+    return {};
+}
+
+const WindowCard* OverlayRenderer::findWindowCard(std::uint64_t windowId) const noexcept {
+    for (const auto& frame : m_frames) {
+        for (const auto& workspace : frame.workspaces) {
+            for (const auto& window : workspace.windows) {
+                if (window.stableId == windowId)
+                    return &window;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const WorkspaceCard* OverlayRenderer::findWorkspaceCard(std::int64_t workspaceId) const noexcept {
+    for (const auto& frame : m_frames) {
+        for (const auto& workspace : frame.workspaces) {
+            if (workspace.workspaceId == workspaceId)
+                return &workspace;
+        }
+    }
+
+    return nullptr;
 }
 
 void OverlayRenderer::renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage) {
