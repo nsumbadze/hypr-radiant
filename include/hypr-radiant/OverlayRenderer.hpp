@@ -47,9 +47,13 @@ class OverlayRenderer {
     void rebuildFrames();
     void rebuildSearchMatches();
     void selectFirstSearchMatch();
+    void moveSearchSelection(NavigationDirection direction);
     void clearSearch();
     void renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
+    void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
+
+    [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
 
     [[nodiscard]] const WorkspaceWallFrame* frameForMonitor(std::int64_t monitorId) const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* frameForPoint(double x, double y, double& localX, double& localY) const noexcept;
