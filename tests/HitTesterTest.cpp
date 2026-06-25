@@ -92,6 +92,36 @@ void zeroSizedRectsAreNotHittable() {
     assert(target.type == OverviewTargetType::None);
 }
 
+void navigationSkipsZeroSizedWorkspaceTargets() {
+    WorkspaceWallFrame testFrame{.monitorId = 1, .bounds = {.width = 400, .height = 120}};
+    testFrame.workspaces.push_back({.workspaceId = 1, .name = "1", .rect = {.x = 10, .y = 10, .width = 100, .height = 80}, .active = true});
+    testFrame.workspaces.push_back({.workspaceId = 2, .name = "2", .rect = {.x = 150, .y = 10, .width = 0, .height = 80}});
+    testFrame.workspaces.push_back({.workspaceId = 3, .name = "3", .rect = {.x = 250, .y = 10, .width = 100, .height = 80}});
+
+    const auto target = HitTester{}.moveSelection(
+        testFrame,
+        {.type = OverviewTargetType::Workspace, .workspaceId = 1},
+        NavigationDirection::Right);
+
+    assert(target.type == OverviewTargetType::Workspace);
+    assert(target.workspaceId == 3);
+}
+
+void navigationSkipsZeroSizedWindowTargets() {
+    WorkspaceWallFrame testFrame{.monitorId = 1, .bounds = {.width = 220, .height = 180}};
+    testFrame.workspaces.push_back({.workspaceId = 1, .name = "1", .rect = {.x = 10, .y = 10, .width = 180, .height = 140}, .active = true});
+    testFrame.workspaces.back().windows.push_back({.stableId = 11, .workspaceId = 1, .rect = {.x = 30, .y = 40, .width = 120, .height = 0}, .label = "Hidden"});
+    testFrame.workspaces.back().windows.push_back({.stableId = 12, .workspaceId = 1, .rect = {.x = 30, .y = 70, .width = 120, .height = 40}, .label = "Visible"});
+
+    const auto target = HitTester{}.moveSelection(
+        testFrame,
+        {.type = OverviewTargetType::Workspace, .workspaceId = 1},
+        NavigationDirection::Down);
+
+    assert(target.type == OverviewTargetType::Window);
+    assert(target.windowId == 12);
+}
+
 void emptyFrameHasNoInitialSelection() {
     const auto target = HitTester{}.initialSelection({});
     assert(target.type == OverviewTargetType::None);
@@ -115,6 +145,8 @@ int main() {
     downEntersWorkspaceWindowsAndUpReturns();
     rightAndBottomEdgesAreOutsideHitBounds();
     zeroSizedRectsAreNotHittable();
+    navigationSkipsZeroSizedWorkspaceTargets();
+    navigationSkipsZeroSizedWindowTargets();
     emptyFrameHasNoInitialSelection();
     missingCurrentFallsBackToInitialSelection();
     std::cout << "HitTesterTest passed\n";

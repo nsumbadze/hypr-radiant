@@ -7,8 +7,12 @@
 namespace hypr_radiant {
 namespace {
 
+bool selectable(const LayoutRect& rect) {
+    return rect.width > 0.0 && rect.height > 0.0;
+}
+
 bool contains(const LayoutRect& rect, double x, double y) {
-    return rect.width > 0.0 && rect.height > 0.0 && x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
+    return selectable(rect) && x >= rect.x && y >= rect.y && x < rect.x + rect.width && y < rect.y + rect.height;
 }
 
 LayoutRect rectFor(const WorkspaceWallFrame& frame, OverviewTarget target) {
@@ -27,8 +31,10 @@ LayoutRect rectFor(const WorkspaceWallFrame& frame, OverviewTarget target) {
 
 std::vector<OverviewTarget> workspaceTargets(const WorkspaceWallFrame& frame) {
     std::vector<OverviewTarget> targets;
-    for (const auto& workspace : frame.workspaces)
-        targets.push_back({.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
+    for (const auto& workspace : frame.workspaces) {
+        if (selectable(workspace.rect))
+            targets.push_back({.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
+    }
     return targets;
 }
 
@@ -55,12 +61,13 @@ OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, dou
 
 OverviewTarget HitTester::initialSelection(const WorkspaceWallFrame& frame) const {
     for (const auto& workspace : frame.workspaces) {
-        if (workspace.active)
+        if (workspace.active && selectable(workspace.rect))
             return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
     }
 
-    if (!frame.workspaces.empty())
-        return {.type = OverviewTargetType::Workspace, .workspaceId = frame.workspaces.front().workspaceId};
+    const auto targets = workspaceTargets(frame);
+    if (!targets.empty())
+        return targets.front();
 
     return {};
 }
@@ -74,9 +81,10 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
         const auto workspace = std::ranges::find_if(frame.workspaces, [current](const WorkspaceCard& card) {
             return card.workspaceId == current.workspaceId;
         });
-        if (workspace != frame.workspaces.end() && !workspace->windows.empty()) {
-            const auto& window = workspace->windows.front();
-            return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
+        if (workspace != frame.workspaces.end()) {
+            const auto window = std::ranges::find_if(workspace->windows, [](const WindowCard& card) { return selectable(card.rect); });
+            if (window != workspace->windows.end())
+                return {.type = OverviewTargetType::Window, .workspaceId = window->workspaceId, .windowId = window->stableId};
         }
     }
 
@@ -88,15 +96,17 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
             if (window == workspace.windows.end())
                 continue;
 
-            const auto index = static_cast<std::size_t>(std::distance(workspace.windows.begin(), window));
-            if (direction == NavigationDirection::Down && index + 1 < workspace.windows.size()) {
-                const auto& next = workspace.windows[index + 1];
-                return {.type = OverviewTargetType::Window, .workspaceId = next.workspaceId, .windowId = next.stableId};
+            if (direction == NavigationDirection::Down) {
+                const auto next = std::find_if(window + 1, workspace.windows.end(), [](const WindowCard& card) { return selectable(card.rect); });
+                if (next != workspace.windows.end())
+                    return {.type = OverviewTargetType::Window, .workspaceId = next->workspaceId, .windowId = next->stableId};
             }
             if (direction == NavigationDirection::Up) {
-                if (index > 0) {
-                    const auto& previous = workspace.windows[index - 1];
-                    return {.type = OverviewTargetType::Window, .workspaceId = previous.workspaceId, .windowId = previous.stableId};
+                auto previous = window;
+                while (previous != workspace.windows.begin()) {
+                    --previous;
+                    if (selectable(previous->rect))
+                        return {.type = OverviewTargetType::Window, .workspaceId = previous->workspaceId, .windowId = previous->stableId};
                 }
                 return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
             }
