@@ -68,8 +68,8 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto activeId     = monitor.activeWorkspaceId > 0 ? monitor.activeWorkspaceId : 1;
         const auto edge         = std::clamp(renderSize.width * 0.045, 18.0, 72.0);
         const auto mainGap      = std::clamp(renderSize.width * 0.015, 16.0, 28.0);
-        const auto dockHeight   = std::min(renderSize.height, std::clamp(renderSize.height * 0.10, 66.0, 108.0));
-        const auto dockGap      = std::clamp(renderSize.height * 0.026, 22.0, 34.0);
+        const auto dockHeight   = std::min(renderSize.height, std::clamp(renderSize.height * 0.075, 52.0, 82.0));
+        const auto dockGap      = std::clamp(renderSize.height * 0.024, 20.0, 30.0);
         const auto primaryWidth = std::min(1040.0, std::max(0.0, renderSize.width * 0.54));
         const auto maxPrimaryHeight =
             std::min(580.0, std::max(0.0, renderSize.height - dockHeight - dockGap - 150.0));
@@ -94,9 +94,9 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         }
 
         const auto stripCount = stripIds.size();
-        const auto stripGap   = std::clamp(renderSize.width * 0.012, 12.0, 22.0);
+        const auto stripGap   = std::clamp(renderSize.width * 0.010, 12.0, 20.0);
         const auto stripWidth = stripCount == 0 ? 0.0 :
-            std::min(190.0, std::max(0.0, (renderSize.width - edge * 2.0 - stripGap * static_cast<double>(stripCount - 1)) / static_cast<double>(stripCount)));
+            std::min(136.0, std::max(0.0, (renderSize.width - edge * 2.0 - stripGap * static_cast<double>(stripCount - 1)) / static_cast<double>(stripCount)));
         const auto stripTotalWidth =
             static_cast<double>(stripCount) * stripWidth + static_cast<double>(stripCount > 0 ? stripCount - 1 : 0) * stripGap;
         const auto primaryX = centered(renderSize.width, primaryWidth);

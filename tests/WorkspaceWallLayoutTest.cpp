@@ -53,7 +53,8 @@ void stageOptionsCreateFocusedStageSpacing() {
     assert(frame.workspaces.at(1).windows.front().rect.x > frame.workspaces.at(1).rect.x + 20.0);
     assert(frame.workspaces.at(1).windows.front().rect.y > frame.workspaces.at(1).rect.y + 50.0);
     assert(frame.workspaces.at(1).rect.x + frame.workspaces.at(1).rect.width / 2.0 == 960.0);
-    assert(frame.workspaces.at(3).rect.height <= 108.0);
+    assert(frame.workspaces.at(3).rect.width <= 136.0);
+    assert(frame.workspaces.at(3).rect.height <= 82.0);
     assert(frame.workspaces.at(3).rect.y > frame.workspaces.at(1).rect.y + frame.workspaces.at(1).rect.height);
 
     const auto topMargin = frame.workspaces.at(1).rect.y;

@@ -599,7 +599,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
     const auto titleX = hasContent ? contentLeft : (mode == LayoutMode::Stage ? 68.0 : 46.0);
     const auto titleY = hasContent ? std::max(34.0, contentTop - 58.0) : 34.0;
-    if (hasContent) {
+    if (hasContent && mode != LayoutMode::Stage) {
         const auto stageBox = CBox{
             std::max(18.0, contentLeft - 44.0),
             std::max(18.0, titleY - 24.0),
@@ -633,8 +633,8 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
     if (hasDock && mode == LayoutMode::Stage) {
         const auto dockBox = CBox{dockLeft - 12.0, dockTop - 10.0, dockRight - dockLeft + 24.0, dockBottom - dockTop + 20.0};
-        drawRect(CBox{dockBox.x + 4.0, dockBox.y + 6.0, dockBox.w, dockBox.h}, shadow, damage, 20);
-        drawRect(dockBox, CHyprColor{0.025F, 0.028F, 0.038F, static_cast<float>(0.92 * contentAlpha)}, damage, 18);
+        drawRect(CBox{dockBox.x + 4.0, dockBox.y + 6.0, dockBox.w, dockBox.h}, shadow, damage, 18);
+        drawRect(dockBox, CHyprColor{0.025F, 0.028F, 0.038F, static_cast<float>(0.78 * contentAlpha)}, damage, 16);
     }
 
     for (const auto& workspace : frame.workspaces) {
@@ -645,7 +645,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         const auto round   = compact ? 14 : 20;
 
         drawRect(CBox{workspaceBox.x + 5.0, workspaceBox.y + 7.0, workspaceBox.w, workspaceBox.h}, shadow, damage, round);
-        if (workspaceSelected)
+        if (workspaceSelected && compact)
             drawRect(CBox{workspaceBox.x - 4.0, workspaceBox.y - 4.0, workspaceBox.w + 8.0, workspaceBox.h + 8.0}, selectedGlow, damage, round + 4);
 
         const auto fill = workspaceSelected ? selectedFill : (workspace.active ? activeFill : (workspace.empty ? emptyFill : cardFill));
@@ -658,7 +658,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         }
 
         if (workspaceSelected) {
-            const auto accentWidth = std::min(compact ? 36.0 : 58.0, std::max(1.0, workspaceBox.w - 28.0));
+            const auto accentWidth = std::min(compact ? 28.0 : 58.0, std::max(1.0, workspaceBox.w - 28.0));
             drawRect(CBox{workspaceBox.x + centered(workspaceBox.w, accentWidth), workspaceBox.y + workspaceBox.h - 6.0, accentWidth, 4.0},
                 selectAccent, damage, 2);
         }
