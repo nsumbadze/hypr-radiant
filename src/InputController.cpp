@@ -10,18 +10,12 @@
 namespace hypr_radiant {
 namespace {
 
-constexpr auto XKB_KEYCODE_OFFSET = 8U;
-
 bool pressed(wl_keyboard_key_state state) {
     return state == WL_KEYBOARD_KEY_STATE_PRESSED;
 }
 
 bool pointerPressed(wl_pointer_button_state state) {
     return state == WL_POINTER_BUTTON_STATE_PRESSED;
-}
-
-uint32_t evdevKeycode(uint32_t hyprlandKeycode) {
-    return hyprlandKeycode >= XKB_KEYCODE_OFFSET ? hyprlandKeycode - XKB_KEYCODE_OFFSET : hyprlandKeycode;
 }
 
 std::optional<char> searchCharForKey(uint32_t key) {
@@ -96,7 +90,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!pressed(event.state))
             return;
 
-        const auto key = evdevKeycode(event.keycode);
+        const auto key = event.keycode;
         if (key == KEY_ESC) {
             if (m_close)
                 m_close();

@@ -9,7 +9,7 @@ bool RadiantConfig::registerValues(HANDLE handle) {
     m_opacity = makeShared<Config::Values::CFloatValue>(
         "plugin:radiant:opacity",
         "Fullscreen overlay opacity.",
-        0.55F,
+        0.94F,
         Config::Values::SFloatValueOptions{.min = 0.0F, .max = 1.0F});
 
     m_animationDurationMs = makeShared<Config::Values::CIntValue>(
@@ -28,7 +28,7 @@ bool RadiantConfig::registerValues(HANDLE handle) {
 
 float RadiantConfig::opacity() const {
     if (!m_opacity)
-        return 0.55F;
+        return 0.94F;
 
     return std::clamp(m_opacity->value(), 0.0F, 1.0F);
 }

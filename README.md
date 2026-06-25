@@ -93,7 +93,7 @@ modal search for open window labels and workspace names or numbers.
 ```ini
 plugin {
     radiant {
-        opacity = 0.55
+        opacity = 0.94
         animation_duration = 180
         layout = stage
     }

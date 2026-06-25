@@ -431,8 +431,8 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
     const auto& damage = g_pHyprRenderer->renderData().damage;
     const auto backdropAlpha = alpha * m_config.opacity();
 
-    drawRect(box, CHyprColor{0.012F, 0.014F, 0.020F, static_cast<float>(0.94 * backdropAlpha)}, damage, 0, true);
-    drawRect(box, CHyprColor{0.004F, 0.005F, 0.008F, static_cast<float>(0.58 * backdropAlpha)}, damage);
+    drawRect(box, CHyprColor{0.010F, 0.012F, 0.018F, static_cast<float>(1.00 * backdropAlpha)}, damage, 0, true);
+    drawRect(box, CHyprColor{0.002F, 0.003F, 0.006F, static_cast<float>(0.86 * backdropAlpha)}, damage);
 
     const auto* frame = frameForMonitor(monitor->m_id);
     if (!frame)
@@ -570,17 +570,17 @@ void OverlayRenderer::clearSearch() {
 void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
     const auto mode          = m_config.layoutMode();
     const auto searchActive  = !m_searchQuery.empty();
-    const auto contentAlpha  = searchActive ? alpha * 0.10 : alpha;
-    const auto cardFill      = CHyprColor{0.070F, 0.076F, 0.096F, static_cast<float>(0.96 * contentAlpha)};
+    const auto contentAlpha  = searchActive ? alpha * 0.055 : alpha;
+    const auto cardFill      = CHyprColor{0.075F, 0.081F, 0.102F, static_cast<float>(0.985 * contentAlpha)};
     const auto activeFill    = CHyprColor{0.092F, 0.101F, 0.128F, static_cast<float>(0.99 * contentAlpha)};
     const auto selectedFill  = CHyprColor{0.105F, 0.112F, 0.128F, static_cast<float>(0.99 * contentAlpha)};
-    const auto emptyFill     = CHyprColor{0.036F, 0.040F, 0.052F, static_cast<float>(0.72 * contentAlpha)};
-    const auto windowFill    = CHyprColor{0.100F, 0.108F, 0.135F, static_cast<float>(0.96 * contentAlpha)};
+    const auto emptyFill     = CHyprColor{0.035F, 0.039F, 0.052F, static_cast<float>(0.82 * contentAlpha)};
+    const auto windowFill    = CHyprColor{0.102F, 0.110F, 0.136F, static_cast<float>(0.985 * contentAlpha)};
     const auto windowSelect  = CHyprColor{0.118F, 0.125F, 0.142F, static_cast<float>(0.99 * contentAlpha)};
     const auto accent        = CHyprColor{0.42F, 0.88F, 0.82F, static_cast<float>(0.96 * contentAlpha)};
     const auto selectAccent  = CHyprColor{0.98F, 0.74F, 0.28F, static_cast<float>(0.96 * contentAlpha)};
-    const auto shadow        = CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.38 * contentAlpha)};
-    const auto selectedGlow  = CHyprColor{0.98F, 0.74F, 0.28F, static_cast<float>(0.14 * contentAlpha)};
+    const auto shadow        = CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.50 * contentAlpha)};
+    const auto selectedGlow  = CHyprColor{0.98F, 0.74F, 0.28F, static_cast<float>(0.11 * contentAlpha)};
 
     double contentLeft  = frame.bounds.width;
     double contentRight = 0.0;
@@ -607,7 +607,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             std::min(frame.bounds.height - 36.0, contentBottom - titleY + 62.0),
         };
         drawRect(CBox{stageBox.x + 8.0, stageBox.y + 12.0, stageBox.w, stageBox.h}, shadow, damage, 34);
-        drawRect(stageBox, CHyprColor{0.018F, 0.021F, 0.030F, static_cast<float>(0.78 * contentAlpha)}, damage, 32, true);
+        drawRect(stageBox, CHyprColor{0.018F, 0.021F, 0.030F, static_cast<float>(0.90 * contentAlpha)}, damage, 32, true);
     }
     renderLabel("Workspace overview", titleX, titleY, std::max(1.0, frame.bounds.width * 0.45), 22, contentAlpha, damage);
     if (!searchActive && hasContent) {
@@ -634,7 +634,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     if (hasDock && mode == LayoutMode::Stage) {
         const auto dockBox = CBox{dockLeft - 12.0, dockTop - 10.0, dockRight - dockLeft + 24.0, dockBottom - dockTop + 20.0};
         drawRect(CBox{dockBox.x + 4.0, dockBox.y + 6.0, dockBox.w, dockBox.h}, shadow, damage, 20);
-        drawRect(dockBox, CHyprColor{0.025F, 0.028F, 0.038F, static_cast<float>(0.84 * contentAlpha)}, damage, 18);
+        drawRect(dockBox, CHyprColor{0.025F, 0.028F, 0.038F, static_cast<float>(0.92 * contentAlpha)}, damage, 18);
     }
 
     for (const auto& workspace : frame.workspaces) {
@@ -646,7 +646,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
         drawRect(CBox{workspaceBox.x + 5.0, workspaceBox.y + 7.0, workspaceBox.w, workspaceBox.h}, shadow, damage, round);
         if (workspaceSelected)
-            drawRect(CBox{workspaceBox.x - 7.0, workspaceBox.y - 7.0, workspaceBox.w + 14.0, workspaceBox.h + 14.0}, selectedGlow, damage, round + 5);
+            drawRect(CBox{workspaceBox.x - 4.0, workspaceBox.y - 4.0, workspaceBox.w + 8.0, workspaceBox.h + 8.0}, selectedGlow, damage, round + 4);
 
         const auto fill = workspaceSelected ? selectedFill : (workspace.active ? activeFill : (workspace.empty ? emptyFill : cardFill));
         drawRect(workspaceBox, fill, damage, round);
@@ -659,7 +659,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
         if (workspaceSelected) {
             const auto accentWidth = std::min(compact ? 36.0 : 58.0, std::max(1.0, workspaceBox.w - 28.0));
-            drawRect(CBox{workspaceBox.x + centered(workspaceBox.w, accentWidth), workspaceBox.y + workspaceBox.h - 5.0, accentWidth, 3.0},
+            drawRect(CBox{workspaceBox.x + centered(workspaceBox.w, accentWidth), workspaceBox.y + workspaceBox.h - 6.0, accentWidth, 4.0},
                 selectAccent, damage, 2);
         }
 
@@ -677,7 +677,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             const auto windowRound = compact ? 8 : 12;
             const auto footerHeight = compact ? 0.0 : std::min(38.0, std::max(30.0, windowBox.h * 0.22));
             if (windowSelected)
-                drawRect(CBox{windowBox.x - 5.0, windowBox.y - 5.0, windowBox.w + 10.0, windowBox.h + 10.0}, selectedGlow, damage, windowRound + 4);
+                drawRect(CBox{windowBox.x - 3.0, windowBox.y - 3.0, windowBox.w + 6.0, windowBox.h + 6.0}, selectedGlow, damage, windowRound + 3);
             drawRect(windowBox, windowSelected ? windowSelect : windowFill, damage, windowRound);
             if (windowSelected) {
                 const auto accentHeight = std::min(30.0, std::max(1.0, windowBox.h - 18.0));
@@ -695,7 +695,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                 drawRect(previewShell, CHyprColor{0.030F, 0.034F, 0.046F, static_cast<float>(0.86 * contentAlpha)}, damage, 10);
                 renderWindowPreview(window, previewShell, contentAlpha, damage);
                 drawRect(CBox{windowBox.x, windowBox.y + windowBox.h - footerHeight, windowBox.w, footerHeight},
-                    CHyprColor{0.050F, 0.054F, 0.070F, static_cast<float>(0.76 * contentAlpha)}, damage, 10);
+                    CHyprColor{0.050F, 0.054F, 0.070F, static_cast<float>(0.88 * contentAlpha)}, damage, 10);
                 renderLabel(window.label, window.rect.x + 14.0, window.rect.y + window.rect.height - footerHeight + 8.0,
                     std::max(1.0, window.rect.width - 28.0), 11, contentAlpha, damage);
             } else {
@@ -706,7 +706,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     }
 
     if (searchActive) {
-        drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.58 * alpha)}, damage);
+        drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.72 * alpha)}, damage);
         renderSearchPanel(frame, alpha, damage);
     }
 }
