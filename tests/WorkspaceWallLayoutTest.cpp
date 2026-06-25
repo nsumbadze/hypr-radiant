@@ -53,7 +53,7 @@ void stageOptionsCreateFocusedStageSpacing() {
     assert(frame.workspaces.at(1).windows.front().rect.x > frame.workspaces.at(1).rect.x + 20.0);
     assert(frame.workspaces.at(1).windows.front().rect.y > frame.workspaces.at(1).rect.y + 50.0);
     assert(frame.workspaces.at(1).rect.x + frame.workspaces.at(1).rect.width / 2.0 == 960.0);
-    assert(frame.workspaces.at(3).rect.height <= 104.0);
+    assert(frame.workspaces.at(3).rect.height <= 108.0);
     assert(frame.workspaces.at(3).rect.y > frame.workspaces.at(1).rect.y + frame.workspaces.at(1).rect.height);
 
     const auto topMargin = frame.workspaces.at(1).rect.y;
@@ -79,9 +79,9 @@ void focusedStageHeightTracksWindowCount() {
         WorkspaceWallOptions{.focusedStage = true});
 
     assert(oneWindow.workspaces.at(1).rect.height < threeWindows.workspaces.at(1).rect.height);
-    assert(oneWindow.workspaces.at(1).rect.height >= 360.0);
-    assert(threeWindows.workspaces.at(1).rect.height <= 460.0);
-    assert(oneWindow.workspaces.at(1).windows.front().rect.height > 220.0);
+    assert(oneWindow.workspaces.at(1).rect.height >= 430.0);
+    assert(threeWindows.workspaces.at(1).rect.height <= 580.0);
+    assert(oneWindow.workspaces.at(1).windows.front().rect.height > 290.0);
 }
 
 void fillsEmptySlotsAndFallsBackToClassName() {

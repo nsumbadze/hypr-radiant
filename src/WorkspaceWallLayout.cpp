@@ -68,21 +68,21 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto activeId     = monitor.activeWorkspaceId > 0 ? monitor.activeWorkspaceId : 1;
         const auto edge         = std::clamp(renderSize.width * 0.045, 18.0, 72.0);
         const auto mainGap      = std::clamp(renderSize.width * 0.015, 16.0, 28.0);
-        const auto dockHeight   = std::min(renderSize.height, std::clamp(renderSize.height * 0.10, 64.0, 104.0));
-        const auto dockGap      = std::clamp(renderSize.height * 0.025, 20.0, 30.0);
-        const auto primaryWidth = std::min(780.0, std::max(0.0, renderSize.width * 0.44));
+        const auto dockHeight   = std::min(renderSize.height, std::clamp(renderSize.height * 0.10, 66.0, 108.0));
+        const auto dockGap      = std::clamp(renderSize.height * 0.026, 22.0, 34.0);
+        const auto primaryWidth = std::min(1040.0, std::max(0.0, renderSize.width * 0.54));
         const auto maxPrimaryHeight =
-            std::min(460.0, std::max(0.0, renderSize.height - dockHeight - dockGap - 160.0));
+            std::min(580.0, std::max(0.0, renderSize.height - dockHeight - dockGap - 150.0));
         const auto primaryHeight = std::min(
             maxPrimaryHeight,
-            std::clamp(260.0 + static_cast<double>(windowCountFor(activeId)) * 110.0, 360.0, 460.0));
+            std::clamp(330.0 + static_cast<double>(windowCountFor(activeId)) * 124.0, 430.0, 580.0));
         const auto sideWidth = std::min(
-            360.0,
+            430.0,
             std::max(0.0, (renderSize.width - primaryWidth) / 2.0 - edge - mainGap));
         const auto sideHeightFor = [&windowCountFor, primaryHeight](std::int64_t workspaceId) {
             return std::min(
                 primaryHeight,
-                std::min(primaryHeight * 0.82, std::max(174.0, 124.0 + static_cast<double>(windowCountFor(workspaceId)) * 80.0)));
+                std::min(primaryHeight * 0.86, std::max(220.0, 150.0 + static_cast<double>(windowCountFor(workspaceId)) * 92.0)));
         };
         const auto leftHeight  = sideHeightFor(activeId - 1);
         const auto rightHeight = sideHeightFor(activeId + 1);
@@ -169,7 +169,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 const auto winGap      = compact ? 6.0 : options.windowGap;
                 const auto availableHeight =
                     std::max(0.0, inner.height - winGap * static_cast<double>(windowCount - 1));
-                const auto winH = std::min(compact ? 46.0 : 320.0, availableHeight / static_cast<double>(windowCount));
+                const auto winH = std::min(compact ? 46.0 : 420.0, availableHeight / static_cast<double>(windowCount));
 
                 for (std::size_t i = 0; i < windows.size(); ++i) {
                     card.windows.push_back({

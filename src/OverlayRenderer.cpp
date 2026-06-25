@@ -431,8 +431,8 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
     const auto& damage = g_pHyprRenderer->renderData().damage;
     const auto backdropAlpha = alpha * m_config.opacity();
 
-    drawRect(box, CHyprColor{0.018F, 0.020F, 0.027F, static_cast<float>(0.82 * backdropAlpha)}, damage, 0, true);
-    drawRect(box, CHyprColor{0.006F, 0.007F, 0.010F, static_cast<float>(0.30 * backdropAlpha)}, damage);
+    drawRect(box, CHyprColor{0.012F, 0.014F, 0.020F, static_cast<float>(0.94 * backdropAlpha)}, damage, 0, true);
+    drawRect(box, CHyprColor{0.004F, 0.005F, 0.008F, static_cast<float>(0.58 * backdropAlpha)}, damage);
 
     const auto* frame = frameForMonitor(monitor->m_id);
     if (!frame)
@@ -571,20 +571,21 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     const auto mode          = m_config.layoutMode();
     const auto searchActive  = !m_searchQuery.empty();
     const auto contentAlpha  = searchActive ? alpha * 0.10 : alpha;
-    const auto cardFill      = CHyprColor{0.085F, 0.092F, 0.115F, static_cast<float>(0.92 * contentAlpha)};
-    const auto activeFill    = CHyprColor{0.115F, 0.125F, 0.160F, static_cast<float>(0.98 * contentAlpha)};
-    const auto selectedFill  = CHyprColor{0.132F, 0.128F, 0.122F, static_cast<float>(0.98 * contentAlpha)};
-    const auto emptyFill     = CHyprColor{0.050F, 0.054F, 0.068F, static_cast<float>(0.76 * contentAlpha)};
-    const auto windowFill    = CHyprColor{0.135F, 0.145F, 0.180F, static_cast<float>(0.94 * contentAlpha)};
-    const auto windowSelect  = CHyprColor{0.170F, 0.160F, 0.132F, static_cast<float>(0.98 * contentAlpha)};
-    const auto accent        = CHyprColor{0.39F, 0.82F, 0.78F, static_cast<float>(0.95 * contentAlpha)};
-    const auto selectAccent  = CHyprColor{0.98F, 0.76F, 0.25F, static_cast<float>(1.00 * contentAlpha)};
-    const auto shadow        = CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.28 * contentAlpha)};
-    const auto selectedGlow  = CHyprColor{0.98F, 0.68F, 0.16F, static_cast<float>(0.19 * contentAlpha)};
+    const auto cardFill      = CHyprColor{0.070F, 0.076F, 0.096F, static_cast<float>(0.96 * contentAlpha)};
+    const auto activeFill    = CHyprColor{0.092F, 0.101F, 0.128F, static_cast<float>(0.99 * contentAlpha)};
+    const auto selectedFill  = CHyprColor{0.105F, 0.112F, 0.128F, static_cast<float>(0.99 * contentAlpha)};
+    const auto emptyFill     = CHyprColor{0.036F, 0.040F, 0.052F, static_cast<float>(0.72 * contentAlpha)};
+    const auto windowFill    = CHyprColor{0.100F, 0.108F, 0.135F, static_cast<float>(0.96 * contentAlpha)};
+    const auto windowSelect  = CHyprColor{0.118F, 0.125F, 0.142F, static_cast<float>(0.99 * contentAlpha)};
+    const auto accent        = CHyprColor{0.42F, 0.88F, 0.82F, static_cast<float>(0.96 * contentAlpha)};
+    const auto selectAccent  = CHyprColor{0.98F, 0.74F, 0.28F, static_cast<float>(0.96 * contentAlpha)};
+    const auto shadow        = CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.38 * contentAlpha)};
+    const auto selectedGlow  = CHyprColor{0.98F, 0.74F, 0.28F, static_cast<float>(0.14 * contentAlpha)};
 
     double contentLeft  = frame.bounds.width;
     double contentRight = 0.0;
     double contentTop   = frame.bounds.height;
+    double contentBottom = 0.0;
     bool   hasContent   = false;
     for (const auto& workspace : frame.workspaces) {
         if (workspace.rect.width <= 0.0 || workspace.rect.height <= 0.0)
@@ -592,11 +593,22 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         contentLeft  = std::min(contentLeft, workspace.rect.x);
         contentRight = std::max(contentRight, workspace.rect.x + workspace.rect.width);
         contentTop   = std::min(contentTop, workspace.rect.y);
+        contentBottom = std::max(contentBottom, workspace.rect.y + workspace.rect.height);
         hasContent   = true;
     }
 
     const auto titleX = hasContent ? contentLeft : (mode == LayoutMode::Stage ? 68.0 : 46.0);
     const auto titleY = hasContent ? std::max(34.0, contentTop - 58.0) : 34.0;
+    if (hasContent) {
+        const auto stageBox = CBox{
+            std::max(18.0, contentLeft - 44.0),
+            std::max(18.0, titleY - 24.0),
+            std::min(frame.bounds.width - 36.0, contentRight - contentLeft + 88.0),
+            std::min(frame.bounds.height - 36.0, contentBottom - titleY + 62.0),
+        };
+        drawRect(CBox{stageBox.x + 8.0, stageBox.y + 12.0, stageBox.w, stageBox.h}, shadow, damage, 34);
+        drawRect(stageBox, CHyprColor{0.018F, 0.021F, 0.030F, static_cast<float>(0.78 * contentAlpha)}, damage, 32, true);
+    }
     renderLabel("Workspace overview", titleX, titleY, std::max(1.0, frame.bounds.width * 0.45), 22, contentAlpha, damage);
     if (!searchActive && hasContent) {
         const auto helpWidth = std::min(430.0, std::max(1.0, contentRight - contentLeft));
@@ -622,7 +634,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     if (hasDock && mode == LayoutMode::Stage) {
         const auto dockBox = CBox{dockLeft - 12.0, dockTop - 10.0, dockRight - dockLeft + 24.0, dockBottom - dockTop + 20.0};
         drawRect(CBox{dockBox.x + 4.0, dockBox.y + 6.0, dockBox.w, dockBox.h}, shadow, damage, 20);
-        drawRect(dockBox, CHyprColor{0.035F, 0.038F, 0.050F, static_cast<float>(0.76 * contentAlpha)}, damage, 18);
+        drawRect(dockBox, CHyprColor{0.025F, 0.028F, 0.038F, static_cast<float>(0.84 * contentAlpha)}, damage, 18);
     }
 
     for (const auto& workspace : frame.workspaces) {
