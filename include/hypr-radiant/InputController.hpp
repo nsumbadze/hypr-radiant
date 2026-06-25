@@ -33,6 +33,7 @@ class InputController {
     CloseFn             m_close;
     CHyprSignalListener m_mouseMoveListener;
     CHyprSignalListener m_mouseButtonListener;
+    CHyprSignalListener m_mouseAxisListener;
     CHyprSignalListener m_keyListener;
 };
 

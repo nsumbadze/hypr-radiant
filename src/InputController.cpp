@@ -63,7 +63,12 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
     });
 
     m_mouseButtonListener = Event::bus()->m_events.input.mouse.button.listen([this](IPointer::SButtonEvent event, Event::SCallbackInfo& info) {
-        if (!m_active || !m_active() || !pointerPressed(event.state))
+        if (!m_active || !m_active())
+            return;
+
+        info.cancelled = true;
+
+        if (!pointerPressed(event.state))
             return;
 
         if (!g_pInputManager)
@@ -73,56 +78,58 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         const auto target = m_hitTest ? m_hitTest(pos.x, pos.y) : OverviewTarget{};
         if (target.type != OverviewTargetType::None && m_activate)
             m_activate(target);
+    });
+
+    m_mouseAxisListener = Event::bus()->m_events.input.mouse.axis.listen([this](IPointer::SAxisEvent, Event::SCallbackInfo& info) {
+        if (!m_active || !m_active())
+            return;
 
         info.cancelled = true;
     });
 
     m_keyListener = Event::bus()->m_events.input.keyboard.key.listen([this](IKeyboard::SKeyEvent event, Event::SCallbackInfo& info) {
-        if (!m_active || !m_active() || !pressed(event.state))
+        if (!m_active || !m_active())
+            return;
+
+        info.cancelled = true;
+
+        if (!pressed(event.state))
             return;
 
         const auto key = evdevKeycode(event.keycode);
         if (key == KEY_ESC) {
             if (m_close)
                 m_close();
-            info.cancelled = true;
             return;
         }
 
         if (key == KEY_ENTER || key == KEY_KPENTER) {
             if (m_activate)
                 m_activate({});
-            info.cancelled = true;
             return;
         }
 
         if (key == KEY_BACKSPACE) {
             if (m_backspace)
                 m_backspace();
-            info.cancelled = true;
             return;
         }
 
         if (key == KEY_LEFT) {
             if (m_move)
                 m_move(NavigationDirection::Left);
-            info.cancelled = true;
         } else if (key == KEY_RIGHT) {
             if (m_move)
                 m_move(NavigationDirection::Right);
-            info.cancelled = true;
         } else if (key == KEY_UP) {
             if (m_move)
                 m_move(NavigationDirection::Up);
-            info.cancelled = true;
         } else if (key == KEY_DOWN) {
             if (m_move)
                 m_move(NavigationDirection::Down);
-            info.cancelled = true;
         } else if (const auto searchChar = searchCharForKey(key)) {
             if (m_textInput)
                 m_textInput(*searchChar);
-            info.cancelled = true;
         }
     });
 }
@@ -130,6 +137,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
 void InputController::uninstall() {
     m_mouseMoveListener.reset();
     m_mouseButtonListener.reset();
+    m_mouseAxisListener.reset();
     m_keyListener.reset();
     m_active = {};
     m_hitTest = {};

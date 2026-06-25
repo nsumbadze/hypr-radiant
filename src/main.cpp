@@ -13,7 +13,7 @@ namespace {
 
 constexpr auto PLUGIN_NAME        = "hypr-radiant";
 constexpr auto DISPATCHER_TOGGLE  = "radiant:toggle";
-constexpr auto PLUGIN_DESCRIPTION = "Minimal radiant plugin skeleton for Hyprland.";
+constexpr auto PLUGIN_DESCRIPTION = "Native workspace overview with live previews and search.";
 constexpr auto PLUGIN_AUTHOR      = "Nika Sumbadze (@nsumbadze)";
 constexpr auto PLUGIN_VERSION     = "0.1.0";
 
