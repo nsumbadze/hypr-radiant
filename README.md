@@ -4,7 +4,7 @@
 provides a `radiant:toggle` dispatcher that opens a native Workspace Wall
 overview for switching between workspaces and open windows.
 
-Live window previews and workspace/window rearrangement are not implemented yet.
+Workspace/window rearrangement is not implemented yet.
 
 ## Requirements
 
@@ -70,8 +70,9 @@ hyprctl dispatch radiant:toggle
 
 The command opens or closes the Workspace Wall overview. The default focused
 layout shows the active workspace as a center stage, adjacent workspaces at its
-sides, and remaining workspaces in a compact dock. Typing opens a modal search
-for open window labels and workspace names or numbers.
+sides, and remaining workspaces in a compact dock. Larger window cards render
+live window previews when Hyprland exposes a current surface. Typing opens a
+modal search for open window labels and workspace names or numbers.
 
 ## Controls
 

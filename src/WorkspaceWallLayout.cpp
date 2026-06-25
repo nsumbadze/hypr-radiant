@@ -72,17 +72,17 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto dockGap      = std::clamp(renderSize.height * 0.025, 20.0, 30.0);
         const auto primaryWidth = std::min(780.0, std::max(0.0, renderSize.width * 0.44));
         const auto maxPrimaryHeight =
-            std::min(320.0, std::max(0.0, renderSize.height - dockHeight - dockGap - 160.0));
+            std::min(460.0, std::max(0.0, renderSize.height - dockHeight - dockGap - 160.0));
         const auto primaryHeight = std::min(
             maxPrimaryHeight,
-            std::clamp(130.0 + static_cast<double>(windowCountFor(activeId)) * 78.0, 190.0, 320.0));
+            std::clamp(260.0 + static_cast<double>(windowCountFor(activeId)) * 110.0, 360.0, 460.0));
         const auto sideWidth = std::min(
             360.0,
             std::max(0.0, (renderSize.width - primaryWidth) / 2.0 - edge - mainGap));
         const auto sideHeightFor = [&windowCountFor, primaryHeight](std::int64_t workspaceId) {
             return std::min(
                 primaryHeight,
-                std::min(primaryHeight * 0.82, std::max(150.0, 110.0 + static_cast<double>(windowCountFor(workspaceId)) * 62.0)));
+                std::min(primaryHeight * 0.82, std::max(174.0, 124.0 + static_cast<double>(windowCountFor(workspaceId)) * 80.0)));
         };
         const auto leftHeight  = sideHeightFor(activeId - 1);
         const auto rightHeight = sideHeightFor(activeId + 1);
@@ -169,7 +169,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 const auto winGap      = compact ? 6.0 : options.windowGap;
                 const auto availableHeight =
                     std::max(0.0, inner.height - winGap * static_cast<double>(windowCount - 1));
-                const auto winH = std::min(compact ? 46.0 : 68.0, availableHeight / static_cast<double>(windowCount));
+                const auto winH = std::min(compact ? 46.0 : 320.0, availableHeight / static_cast<double>(windowCount));
 
                 for (std::size_t i = 0; i < windows.size(); ++i) {
                     card.windows.push_back({

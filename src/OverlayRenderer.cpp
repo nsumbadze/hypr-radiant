@@ -2,6 +2,7 @@
 #include <hypr-radiant/Log.hpp>
 
 #include <hyprland/src/Compositor.hpp>
+#include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
@@ -27,6 +28,15 @@ bool sameTarget(OverviewTarget lhs, OverviewTarget rhs) {
 
 CBox boxFor(const LayoutRect& rect) {
     return CBox{std::round(rect.x), std::round(rect.y), std::round(rect.width), std::round(rect.height)};
+}
+
+CBox insetBox(const CBox& box, double amount) {
+    return CBox{
+        box.x + amount,
+        box.y + amount,
+        std::max(0.0, box.w - amount * 2.0),
+        std::max(0.0, box.h - amount * 2.0),
+    };
 }
 
 void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int round = 0, bool blur = false) {
@@ -62,6 +72,22 @@ double centered(double available, double size) {
     return std::max(0.0, (available - size) / 2.0);
 }
 
+CBox fitBoxForAspect(const CBox& box, double sourceWidth, double sourceHeight) {
+    if (box.w <= 0.0 || box.h <= 0.0 || sourceWidth <= 0.0 || sourceHeight <= 0.0)
+        return box;
+
+    const auto sourceAspect = sourceWidth / sourceHeight;
+    const auto boxAspect    = box.w / box.h;
+
+    if (sourceAspect > boxAspect) {
+        const auto height = box.w / sourceAspect;
+        return CBox{box.x, box.y + centered(box.h, height), box.w, height};
+    }
+
+    const auto width = box.h * sourceAspect;
+    return CBox{box.x + centered(box.w, width), box.y, width, box.h};
+}
+
 bool targetInFrame(const WorkspaceWallFrame& frame, OverviewTarget target) {
     if (target.type == OverviewTargetType::None)
         return false;
@@ -77,6 +103,33 @@ bool targetInFrame(const WorkspaceWallFrame& frame, OverviewTarget target) {
     }
 
     return false;
+}
+
+PHLWINDOW findLiveWindow(std::uint64_t stableId) {
+    if (!g_pCompositor)
+        return nullptr;
+
+    for (const auto& window : g_pCompositor->m_windows) {
+        if (!window || window->m_stableID != stableId || !window->m_isMapped)
+            continue;
+
+        return window;
+    }
+
+    return nullptr;
+}
+
+SP<Render::ITexture> currentSurfaceTexture(const SP<CWLSurfaceResource>& surface) {
+    if (!surface)
+        return nullptr;
+
+    if (surface->m_current.texture && surface->m_current.texture->ok())
+        return surface->m_current.texture;
+
+    if (surface->m_current.buffer && surface->m_current.buffer->m_texture && surface->m_current.buffer->m_texture->ok())
+        return surface->m_current.buffer->m_texture;
+
+    return nullptr;
 }
 
 RadiantSize renderSizeForMonitor(const PHLMONITOR& monitor) {
@@ -610,6 +663,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                 {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
             const auto windowBox = boxFor(window.rect);
             const auto windowRound = compact ? 8 : 12;
+            const auto footerHeight = compact ? 0.0 : std::min(38.0, std::max(30.0, windowBox.h * 0.22));
             if (windowSelected)
                 drawRect(CBox{windowBox.x - 5.0, windowBox.y - 5.0, windowBox.w + 10.0, windowBox.h + 10.0}, selectedGlow, damage, windowRound + 4);
             drawRect(windowBox, windowSelected ? windowSelect : windowFill, damage, windowRound);
@@ -619,11 +673,23 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                     selectAccent, damage, 2);
             }
 
-            renderLabel(window.label, window.rect.x + (compact ? 8.0 : 14.0), window.rect.y + (compact ? 6.0 : 9.0),
-                std::max(1.0, window.rect.width - (compact ? 16.0 : 24.0)), compact ? 10 : 12, contentAlpha, damage);
-            if (!compact)
-                renderLabel("Open window", window.rect.x + 14.0, window.rect.y + 35.0,
-                    std::max(1.0, window.rect.width - 28.0), 9, contentAlpha * 0.46, damage);
+            if (!compact && windowBox.h > 88.0) {
+                const auto previewShell = CBox{
+                    windowBox.x + 10.0,
+                    windowBox.y + 10.0,
+                    std::max(1.0, windowBox.w - 20.0),
+                    std::max(1.0, windowBox.h - footerHeight - 16.0),
+                };
+                drawRect(previewShell, CHyprColor{0.030F, 0.034F, 0.046F, static_cast<float>(0.86 * contentAlpha)}, damage, 10);
+                renderWindowPreview(window, previewShell, contentAlpha, damage);
+                drawRect(CBox{windowBox.x, windowBox.y + windowBox.h - footerHeight, windowBox.w, footerHeight},
+                    CHyprColor{0.050F, 0.054F, 0.070F, static_cast<float>(0.76 * contentAlpha)}, damage, 10);
+                renderLabel(window.label, window.rect.x + 14.0, window.rect.y + window.rect.height - footerHeight + 8.0,
+                    std::max(1.0, window.rect.width - 28.0), 11, contentAlpha, damage);
+            } else {
+                renderLabel(window.label, window.rect.x + (compact ? 8.0 : 14.0), window.rect.y + (compact ? 6.0 : 9.0),
+                    std::max(1.0, window.rect.width - (compact ? 16.0 : 24.0)), compact ? 10 : 12, contentAlpha, damage);
+            }
         }
     }
 
@@ -631,6 +697,44 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, CHyprColor{0.0F, 0.0F, 0.0F, static_cast<float>(0.58 * alpha)}, damage);
         renderSearchPanel(frame, alpha, damage);
     }
+}
+
+void OverlayRenderer::renderWindowPreview(const WindowCard& windowCard, const CBox& clipBox, double alpha, const CRegion& damage) {
+    if (!g_pHyprRenderer || alpha <= 0.001 || clipBox.w <= 0.0 || clipBox.h <= 0.0)
+        return;
+
+    const auto window = findLiveWindow(windowCard.stableId);
+    if (!window)
+        return;
+
+    const auto wlSurface = window->wlSurface();
+    if (!wlSurface || !wlSurface->exists())
+        return;
+
+    const auto surface = wlSurface->resource();
+    if (!surface || !surface->good())
+        return;
+
+    const auto texture = currentSurfaceTexture(surface);
+    if (!texture)
+        return;
+
+    const auto sourceSize = texture->m_size == Vector2D{} ? window->m_realSize->value() : texture->m_size;
+    const auto targetBox  = fitBoxForAspect(insetBox(clipBox, 2.0), sourceSize.x, sourceSize.y);
+    if (targetBox.w <= 0.0 || targetBox.h <= 0.0)
+        return;
+
+    CTexPassElement::SRenderData data;
+    data.tex      = texture;
+    data.box      = targetBox;
+    data.a        = static_cast<float>(std::clamp(alpha, 0.0, 1.0));
+    data.overallA = data.a;
+    data.damage   = damage;
+    data.round    = 8;
+    data.clipBox  = clipBox;
+    data.surface  = surface;
+
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
 }
 
 void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {

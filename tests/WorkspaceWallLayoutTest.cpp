@@ -79,7 +79,9 @@ void focusedStageHeightTracksWindowCount() {
         WorkspaceWallOptions{.focusedStage = true});
 
     assert(oneWindow.workspaces.at(1).rect.height < threeWindows.workspaces.at(1).rect.height);
-    assert(threeWindows.workspaces.at(1).rect.height <= 320.0);
+    assert(oneWindow.workspaces.at(1).rect.height >= 360.0);
+    assert(threeWindows.workspaces.at(1).rect.height <= 460.0);
+    assert(oneWindow.workspaces.at(1).windows.front().rect.height > 220.0);
 }
 
 void fillsEmptySlotsAndFallsBackToClassName() {
