@@ -72,7 +72,7 @@ double centered(double available, double size) {
     return std::max(0.0, (available - size) / 2.0);
 }
 
-CBox fitBoxForAspect(const CBox& box, double sourceWidth, double sourceHeight) {
+CBox fillBoxForAspect(const CBox& box, double sourceWidth, double sourceHeight) {
     if (box.w <= 0.0 || box.h <= 0.0 || sourceWidth <= 0.0 || sourceHeight <= 0.0)
         return box;
 
@@ -80,12 +80,12 @@ CBox fitBoxForAspect(const CBox& box, double sourceWidth, double sourceHeight) {
     const auto boxAspect    = box.w / box.h;
 
     if (sourceAspect > boxAspect) {
-        const auto height = box.w / sourceAspect;
-        return CBox{box.x, box.y + centered(box.h, height), box.w, height};
+        const auto width = box.h * sourceAspect;
+        return CBox{box.x - centered(width, box.w), box.y, width, box.h};
     }
 
-    const auto width = box.h * sourceAspect;
-    return CBox{box.x + centered(box.w, width), box.y, width, box.h};
+    const auto height = box.w / sourceAspect;
+    return CBox{box.x, box.y - centered(height, box.h), box.w, height};
 }
 
 bool targetInFrame(const WorkspaceWallFrame& frame, OverviewTarget target) {
@@ -720,7 +720,7 @@ void OverlayRenderer::renderWindowPreview(const WindowCard& windowCard, const CB
         return;
 
     const auto sourceSize = texture->m_size == Vector2D{} ? window->m_realSize->value() : texture->m_size;
-    const auto targetBox  = fitBoxForAspect(insetBox(clipBox, 2.0), sourceSize.x, sourceSize.y);
+    const auto targetBox  = fillBoxForAspect(insetBox(clipBox, 2.0), sourceSize.x, sourceSize.y);
     if (targetBox.w <= 0.0 || targetBox.h <= 0.0)
         return;
 
@@ -784,11 +784,17 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
         if (target.type == OverviewTargetType::Workspace) {
             const auto* workspace = findWorkspaceCard(target.workspaceId);
             const auto  name      = workspace && !workspace->name.empty() ? workspace->name : std::to_string(target.workspaceId);
-            renderLabel(std::format("Workspace {}", name), row.x + 20.0, row.y + 10.0, row.w - 40.0, 14, alpha, damage);
-            renderLabel("Workspace  |  Switch to this workspace", row.x + 20.0, row.y + 35.0, row.w - 40.0, 10, alpha * 0.50, damage);
+            drawRect(CBox{row.x + 18.0, row.y + 17.0, 86.0, 28.0},
+                CHyprColor{0.105F, 0.158F, 0.154F, static_cast<float>(0.92 * alpha)}, damage, 10);
+            renderLabel("SPACE", row.x + 35.0, row.y + 24.0, 52.0, 9, alpha * 0.72, damage);
+            renderLabel(std::format("Workspace {}", name), row.x + 120.0, row.y + 9.0, row.w - 140.0, 14, alpha, damage);
+            renderLabel("Switch to this workspace", row.x + 120.0, row.y + 35.0, row.w - 140.0, 10, alpha * 0.50, damage);
         } else if (const auto* window = findWindowCard(target.windowId)) {
-            renderLabel(window->label, row.x + 20.0, row.y + 10.0, row.w - 40.0, 14, alpha, damage);
-            renderLabel(std::format("Window  |  Workspace {}", window->workspaceId), row.x + 20.0, row.y + 35.0, row.w - 40.0, 10, alpha * 0.50, damage);
+            drawRect(CBox{row.x + 18.0, row.y + 17.0, 86.0, 28.0},
+                CHyprColor{0.160F, 0.136F, 0.090F, static_cast<float>(0.92 * alpha)}, damage, 10);
+            renderLabel("WINDOW", row.x + 30.0, row.y + 24.0, 64.0, 9, alpha * 0.72, damage);
+            renderLabel(window->label, row.x + 120.0, row.y + 9.0, row.w - 140.0, 14, alpha, damage);
+            renderLabel(std::format("Workspace {}", window->workspaceId), row.x + 120.0, row.y + 35.0, row.w - 140.0, 10, alpha * 0.50, damage);
         }
     }
 
