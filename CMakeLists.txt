@@ -7,6 +7,8 @@ project(
     LANGUAGES CXX
 )
 
+option(HYPR_RADIANT_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer for tests" OFF)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -21,6 +23,23 @@ function(hypr_radiant_enable_warnings target)
             -Wextra
             -Wpedantic
     )
+endfunction()
+
+set(HYPR_RADIANT_SANITIZER_FLAGS
+    -fsanitize=address,undefined
+)
+
+function(hypr_radiant_enable_sanitizers target)
+    if(HYPR_RADIANT_ENABLE_SANITIZERS)
+        target_compile_options(${target}
+            PRIVATE
+                ${HYPR_RADIANT_SANITIZER_FLAGS}
+        )
+        target_link_options(${target}
+            PRIVATE
+                ${HYPR_RADIANT_SANITIZER_FLAGS}
+        )
+    endif()
 endfunction()
 
 add_library(hypr-radiant MODULE
@@ -76,6 +95,7 @@ if(BUILD_TESTING)
     target_compile_features(hypr-radiant-layout-tests PRIVATE cxx_std_23)
     target_compile_options(hypr-radiant-layout-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
     hypr_radiant_enable_warnings(hypr-radiant-layout-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-layout-tests)
 
     add_test(NAME hypr-radiant-layout-tests COMMAND hypr-radiant-layout-tests)
 
@@ -92,6 +112,7 @@ if(BUILD_TESTING)
     target_compile_features(hypr-radiant-hit-tests PRIVATE cxx_std_23)
     target_compile_options(hypr-radiant-hit-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
     hypr_radiant_enable_warnings(hypr-radiant-hit-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-hit-tests)
 
     add_test(NAME hypr-radiant-hit-tests COMMAND hypr-radiant-hit-tests)
 
@@ -108,6 +129,7 @@ if(BUILD_TESTING)
     target_compile_features(hypr-radiant-search-tests PRIVATE cxx_std_23)
     target_compile_options(hypr-radiant-search-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
     hypr_radiant_enable_warnings(hypr-radiant-search-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-search-tests)
 
     add_test(NAME hypr-radiant-search-tests COMMAND hypr-radiant-search-tests)
 
@@ -124,6 +146,7 @@ if(BUILD_TESTING)
     target_compile_features(hypr-radiant-config-tests PRIVATE cxx_std_23)
     target_compile_options(hypr-radiant-config-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
     hypr_radiant_enable_warnings(hypr-radiant-config-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-config-tests)
     target_link_libraries(hypr-radiant-config-tests
         PRIVATE
             PkgConfig::HYPRLAND
@@ -144,6 +167,7 @@ if(BUILD_TESTING)
     target_compile_features(hypr-radiant-fade-tests PRIVATE cxx_std_23)
     target_compile_options(hypr-radiant-fade-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
     hypr_radiant_enable_warnings(hypr-radiant-fade-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-fade-tests)
 
     add_test(NAME hypr-radiant-fade-tests COMMAND hypr-radiant-fade-tests)
 endif()
