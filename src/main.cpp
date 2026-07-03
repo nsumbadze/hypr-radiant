@@ -129,6 +129,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     g_plugin = std::make_unique<hypr_radiant::RadiantPlugin>(g_pluginHandle);
 
+    // On partial-init failure, resetPluginState()/shutdown() removes hypr-radiant's
+    // listeners before throwing; Hyprland 0.55.2 catches the exception and ejects
+    // the plugin, removing any API registrations made before the failure.
     if (!g_plugin->initialize()) {
         resetPluginState();
         throw std::runtime_error{"hypr-radiant: failed to initialize"};
