@@ -1,0 +1,70 @@
+# Scoped safety pass for pure-logic files only; do not wire this into CMake.
+# Run from the repository root:
+# clang-tidy --config-file=.clang-tidy src/WorkspaceWallLayout.cpp src/HitTester.cpp src/SearchMatcher.cpp src/FadeAnimation.cpp src/Config.cpp -- -std=c++23 -Iinclude $(pkg-config --cflags pixman-1)
+---
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  cppcoreguidelines-*,
+  performance-*,
+  portability-*,
+  readability-container-size-empty,
+  readability-duplicate-include,
+  readability-else-after-return,
+  readability-identifier-naming,
+  readability-implicit-bool-conversion,
+  readability-inconsistent-declaration-parameter-name,
+  readability-misleading-indentation,
+  readability-qualified-auto,
+  readability-redundant-control-flow,
+  readability-redundant-declaration,
+  readability-redundant-function-ptr-dereference,
+  readability-redundant-member-init,
+  readability-redundant-preprocessor,
+  readability-redundant-smartptr-get,
+  readability-redundant-string-cstr,
+  readability-redundant-string-init,
+  readability-simplify-boolean-expr,
+  readability-simplify-subscript-expr,
+  readability-static-accessed-through-instance,
+  readability-static-definition-in-anonymous-namespace,
+  readability-string-compare,
+  readability-uniqueptr-delete-release,
+  readability-use-anyofallof,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-implicit-widening-of-multiplication-result,
+  -cert-err58-cpp,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-owning-memory,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-const-cast,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-special-member-functions,
+  -readability-braces-around-statements,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-named-parameter
+WarningsAsErrors: ''
+HeaderFilterRegex: '^(src|include/hypr-radiant)/(WorkspaceWallLayout|HitTester|SearchMatcher|FadeAnimation|Config|RadiantState)\\.(cpp|hpp)$'
+FormatStyle: file
+CheckOptions:
+  readability-identifier-naming.NamespaceCase: lower_case
+  readability-identifier-naming.ClassCase: CamelCase
+  readability-identifier-naming.StructCase: CamelCase
+  readability-identifier-naming.EnumCase: CamelCase
+  readability-identifier-naming.FunctionCase: camelBack
+  readability-identifier-naming.VariableCase: camelBack
+  readability-identifier-naming.PrivateMemberPrefix: m_
+  readability-identifier-naming.PrivateMemberCase: camelBack
+...
