@@ -130,4 +130,20 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME hypr-radiant-config-tests COMMAND hypr-radiant-config-tests)
+
+    add_executable(hypr-radiant-fade-tests
+        tests/FadeAnimationTest.cpp
+        src/FadeAnimation.cpp
+    )
+
+    target_include_directories(hypr-radiant-fade-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
+    target_compile_features(hypr-radiant-fade-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-fade-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-fade-tests)
+
+    add_test(NAME hypr-radiant-fade-tests COMMAND hypr-radiant-fade-tests)
 endif()
