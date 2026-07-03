@@ -110,4 +110,24 @@ if(BUILD_TESTING)
     hypr_radiant_enable_warnings(hypr-radiant-search-tests)
 
     add_test(NAME hypr-radiant-search-tests COMMAND hypr-radiant-search-tests)
+
+    add_executable(hypr-radiant-config-tests
+        tests/ConfigParserTest.cpp
+        src/Config.cpp
+    )
+
+    target_include_directories(hypr-radiant-config-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
+
+    target_compile_features(hypr-radiant-config-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-config-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-config-tests)
+    target_link_libraries(hypr-radiant-config-tests
+        PRIVATE
+            PkgConfig::HYPRLAND
+    )
+
+    add_test(NAME hypr-radiant-config-tests COMMAND hypr-radiant-config-tests)
 endif()
