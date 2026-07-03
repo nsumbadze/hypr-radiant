@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  logic:
+    name: Pure logic validation
+    runs-on: ubuntu-latest
+    env:
+      PURE_TIDY_FILES: >-
+        src/WorkspaceWallLayout.cpp
+        src/HitTester.cpp
+        src/SearchMatcher.cpp
+        src/FadeAnimation.cpp
+        tests/WorkspaceWallLayoutTest.cpp
+        tests/HitTesterTest.cpp
+        tests/SearchMatcherTest.cpp
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            clang-format \
+            clang-tidy \
+            cmake \
+            g++ \
+            pkg-config
+
+      - name: Check formatting
+        run: clang-format --dry-run -Werror $(git ls-files '*.cpp' '*.hpp')
+
+      - name: Build and run pure logic tests
+        run: |
+          mkdir -p build/ci-logic
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
+            tests/WorkspaceWallLayoutTest.cpp src/WorkspaceWallLayout.cpp \
+            -o build/ci-logic/hypr-radiant-layout-tests
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
+            tests/HitTesterTest.cpp src/HitTester.cpp \
+            -o build/ci-logic/hypr-radiant-hit-tests
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
+            tests/SearchMatcherTest.cpp src/SearchMatcher.cpp \
+            -o build/ci-logic/hypr-radiant-search-tests
+          build/ci-logic/hypr-radiant-layout-tests
+          build/ci-logic/hypr-radiant-hit-tests
+          build/ci-logic/hypr-radiant-search-tests
+
+      - name: Run scoped clang-tidy
+        run: >-
+          clang-tidy --config-file=.clang-tidy $PURE_TIDY_FILES
+          -- -std=c++23 -Iinclude
+
+      - name: Check for matching Hyprland headers
+        id: hyprland-headers
+        run: |
+          if pkg-config --exists hyprland; then
+            version="$(pkg-config --modversion hyprland)"
+          else
+            version=""
+          fi
+
+          if [ "$version" = "0.55.2" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Hyprland $version headers are available; running full plugin build."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Full plugin build skipped::Hyprland 0.55.2 headers/pkg-config are not available on ubuntu-latest. Full plugin builds are validated locally against matching Hyprland headers."
+          fi
+
+      - name: Build full plugin when matching headers exist
+        if: steps.hyprland-headers.outputs.available == 'true'
+        run: |
+          cmake -S . -B build/ci-full -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/ci-full
+          ctest --test-dir build/ci-full --output-on-failure
