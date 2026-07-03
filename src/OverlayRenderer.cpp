@@ -872,6 +872,20 @@ void OverlayRenderer::renderLabel(const std::string& text, double x, double y, d
     if (!g_pHyprRenderer || text.empty() || maxWidth <= 0.0 || alpha <= 0.001)
         return;
 
+    // m_textures is an open-session text cache keyed by (pointSize, ceil(maxWidth), text).
+    // It is cleared in show() and hideImmediate(), so repeated frames reuse the same labels
+    // instead of accumulating across overview opens. Per session, growth is naturally bounded
+    // by rendered workspace names (one per workspace card), visible window labels (one per
+    // window card), fixed helpers (overview title, type/search hints, panel title, WINDOW,
+    // SPACE, no-results text, workspace secondary text, and footer), search result labels,
+    // and live search strings. The only per-keystroke key is std::format("{}_", m_searchQuery),
+    // and appendSearchChar() caps that at 64 query lengths; backspace reuses shorter keys.
+    // Result counts are bounded by the distinct match counts encountered. With W workspace cards,
+    // V visible window cards, E empty non-compact workspace cards, and T <= W + V searchable
+    // targets, a realistic session stays around 74 + E + 3W + 2V + T entries before duplicate
+    // strings/max widths collapse further. The cache therefore cannot realistically grow
+    // without bound during normal use; do not add eviction here unless future analysis changes
+    // those inputs.
     const auto key = std::format("{}:{}:{}", pointSize, static_cast<int>(std::ceil(maxWidth)), text);
     auto       it  = m_textures.find(key);
     if (it == m_textures.end()) {
