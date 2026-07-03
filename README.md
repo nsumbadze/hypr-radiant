@@ -1,18 +1,22 @@
 # hypr-radiant
 
-`hypr-radiant` is a small Hyprland C++ plugin targeting Hyprland 0.55.x. It
-provides a `radiant:toggle` dispatcher that opens a native Workspace Wall
-overview for switching between workspaces and open windows.
+`hypr-radiant` is a small Hyprland C++ plugin targeting Hyprland 0.55.2 (commit
+39d7e209c79d451efab1b21151d5938289da838d). It provides a `radiant:toggle`
+dispatcher that opens a native Workspace Wall overview for switching between
+workspaces and open windows.
 
 Workspace/window rearrangement is not implemented yet.
 
 ## Requirements
 
-- Hyprland 0.55.x development headers
+- Hyprland 0.55.2 (commit 39d7e209c79d451efab1b21151d5938289da838d) development headers
 - `hyprpm`
 - CMake 3.25 or newer
 - A C++23-capable compiler
 - `pkg-config`
+
+If the plugin headers do not match the running Hyprland, hypr-radiant refuses to
+load, shows a notification, logs the mismatch, and Hyprland ejects the plugin.
 
 ## Build
 
