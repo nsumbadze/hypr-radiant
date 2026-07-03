@@ -1,6 +1,9 @@
 [repository]
 name = "hypr-radiant"
 authors = ["Nika Sumbadze (@nsumbadze)"]
+commit_pins = [
+    ["39d7e209c79d451efab1b21151d5938289da838d", "f6780875b199e4a40bc1625e0a151b699a445748"]
+]
 
 [hypr-radiant]
 description = "Minimal Hyprland plugin skeleton for radiant overview experiments."
