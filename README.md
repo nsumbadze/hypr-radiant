@@ -33,6 +33,11 @@ build/hypr-radiant.so
 
 ## Install With hyprpm
 
+`hyprpm` needs superuser privileges to create its state/cache directory
+(`/var/cache/hyprpm/`) and install matching Hyprland headers. Make sure
+`sudo`, `doas`, or another supported superuser binary is available before
+running the commands below.
+
 From a clone of this repository:
 
 ```sh
@@ -63,6 +68,18 @@ hyprpm disable hypr-radiant
 hyprpm remove hypr-radiant
 hyprpm reload
 ```
+
+### Recovery and development unload
+
+If `hyprpm reload` loads the plugin and you need to unload it manually, or if
+you are testing a local build without `hyprpm`, use:
+
+```sh
+hyprctl plugin unload "$PWD/build/hypr-radiant.so"
+```
+
+This was verified to unload the plugin cleanly from a nested Hyprland 0.55.2
+session.
 
 ## Dispatcher
 
