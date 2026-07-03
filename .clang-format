@@ -1,7 +1,6 @@
 ---
 Language: Cpp
 BasedOnStyle: LLVM
-DisableFormat: true
 Standard: c++20
 
 IndentWidth: 4
@@ -10,10 +9,11 @@ UseTab: Never
 ContinuationIndentWidth: 4
 AccessModifierOffset: -2
 NamespaceIndentation: None
+IndentCaseLabels: false
 
 BreakBeforeBraces: Attach
 AllowShortIfStatementsOnASingleLine: WithoutElse
-AllowShortFunctionsOnASingleLine: Empty
+AllowShortFunctionsOnASingleLine: All
 AllowShortLoopsOnASingleLine: false
 AllowShortCaseLabelsOnASingleLine: false
 
@@ -25,11 +25,21 @@ DerivePointerAlignment: false
 SortIncludes: false
 IncludeBlocks: Preserve
 
-AlignAfterOpenBracket: Align
+AlignAfterOpenBracket: DontAlign
 AlignArrayOfStructures: Right
-AlignConsecutiveAssignments: false
-AlignConsecutiveDeclarations: false
-AlignConsecutiveMacros: false
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignCompound: false
+  PadOperators: false
+AlignConsecutiveDeclarations:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false
+  AlignFunctionDeclarations: false
+  AlignFunctionPointers: false
+AlignConsecutiveMacros: Consecutive
 AlignOperands: Align
 
 Cpp11BracedListStyle: true
@@ -44,9 +54,9 @@ AllowAllArgumentsOnNextLine: true
 AllowAllParametersOfDeclarationOnNextLine: true
 AlwaysBreakTemplateDeclarations: Yes
 
-BreakConstructorInitializers: BeforeComma
+BreakConstructorInitializers: BeforeColon
 ConstructorInitializerIndentWidth: 4
-PackConstructorInitializers: Never
+PackConstructorInitializers: BinPack
 
 ReflowComments: false
-...
+OneLineFormatOffRegex: '^(const|auto|double|bool|int|std|data|m_.*|g_.*|has.*|frame|state|snapshot|card|rect|dock.*|content.*|PLUGIN.*|DISPATCHER.*|monitor.*|workspace.*|window.*|stableId|workspaceId|monitorId|active|empty|focused|name|className|geometry|position|size|width|height|x|y|panel|input|resultsY|rowHeight|rowGap|capacity|scale|transform|visible|special|title|mapped|floating|fullscreen|pinned|passEvent|success|error|Clock|void|HANDLE|RadiantConfig|InputController|StateCollector|OverlayRenderer|OverviewTargetType|FadeAnimation|CHyprSignalListener|RadiantState|WorkspaceWallLayout|HitTester|SearchMatcher|OverviewTarget|LayoutRect)$'
