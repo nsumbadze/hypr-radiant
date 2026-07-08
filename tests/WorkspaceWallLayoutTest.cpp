@@ -65,6 +65,28 @@ void focusedStageUsesRealWorkspacesPlusEmptyNext() {
     assert(frame.workspaces.at(1).active);
 }
 
+void focusedStageDoesNotGeneratePhantomWorkspacesForGaps() {
+    // Regression for B3: the old minimumWorkspaceSlots logic generated cards
+    // for every ID from 1..maxWorkspaceId, producing phantom workspaces when
+    // real IDs had gaps. The focused-stage branch must emit only real
+    // workspaces for the monitor plus one empty "next" workspace.
+    RadiantState state;
+    state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5, .activeWorkspaceName = "5"});
+    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1, .monitorName = "DP-1"});
+    state.workspaces.push_back({.id = 5, .name = "five", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
+
+    assert(frame.workspaces.size() == 3);
+    assert(frame.workspaces.at(0).workspaceId == 1);
+    assert(frame.workspaces.at(1).workspaceId == 5);
+    assert(frame.workspaces.at(2).workspaceId == 6);
+    assert(frame.workspaces.at(0).empty);
+    assert(frame.workspaces.at(1).empty);
+    assert(frame.workspaces.at(2).empty);
+    assert(frame.workspaces.at(1).active);
+}
+
 void focusedStageCardSpacingMatchesSpec() {
     const auto state = sampleState();
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
@@ -270,6 +292,7 @@ int main() {
     gridLayoutFillsMinimumSlots();
     polishedDefaultsLeaveBreathingRoom();
     focusedStageUsesRealWorkspacesPlusEmptyNext();
+    focusedStageDoesNotGeneratePhantomWorkspacesForGaps();
     focusedStageCardSpacingMatchesSpec();
     focusedStageEmptyNextWorkspaceGeometry();
     focusedStageWindowPaddingMatchesSpec();
