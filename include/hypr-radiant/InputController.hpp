@@ -3,6 +3,7 @@
 #include <hypr-radiant/HitTester.hpp>
 
 #include <hyprland/src/helpers/signal/Signal.hpp>
+#include <hyprland/src/managers/SeatManager.hpp>
 
 #include <functional>
 
@@ -22,6 +23,9 @@ class InputController {
     void install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace, MoveFn move, CloseFn close);
     void uninstall();
 
+    void grabKeyboard();
+    void releaseKeyboard();
+
   private:
     ActiveFn            m_active;
     HitTestFn           m_hitTest;
@@ -35,6 +39,7 @@ class InputController {
     CHyprSignalListener m_mouseButtonListener;
     CHyprSignalListener m_mouseAxisListener;
     CHyprSignalListener m_keyListener;
+    SP<CSeatGrab>       m_seatGrab;
 };
 
 } // namespace hypr_radiant

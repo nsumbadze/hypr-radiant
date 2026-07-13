@@ -67,7 +67,11 @@ bool RadiantPlugin::initialize() {
         [this](char value) { m_overlay.appendSearchChar(value); },
         [this] { m_overlay.backspaceSearch(); },
         [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
-        [this] { m_overlay.clearSearchOrHide(); });
+        [this] {
+            m_overlay.clearSearchOrHide();
+            if (!m_overlay.active())
+                m_input.releaseKeyboard();
+        });
     return true;
 }
 
@@ -88,6 +92,7 @@ void RadiantPlugin::activate(OverviewTarget target) {
         return;
     }
 
+    m_input.releaseKeyboard();
     m_overlay.hideImmediate();
 }
 
@@ -104,7 +109,13 @@ SDispatchResult RadiantPlugin::toggle(const std::string& args) {
         state.windows.size(),
         state.mappedWindowCount());
 
+    const bool wasActive = m_overlay.active();
     m_overlay.toggle(std::move(state));
+
+    if (!wasActive && m_overlay.active())
+        m_input.grabKeyboard();
+    else if (wasActive && !m_overlay.active())
+        m_input.releaseKeyboard();
 
     log::info("radiant overlay {}", m_overlay.active() ? "opened" : "closed");
 

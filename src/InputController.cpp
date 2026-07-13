@@ -126,9 +126,23 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
                 m_textInput(*searchChar);
         }
     });
+
+    m_seatGrab = makeShared<CSeatGrab>();
+    m_seatGrab->m_keyboard = true;
+}
+
+void InputController::grabKeyboard() {
+    if (m_seatGrab && g_pSeatManager)
+        g_pSeatManager->setGrab(m_seatGrab);
+}
+
+void InputController::releaseKeyboard() {
+    if (m_seatGrab && g_pSeatManager && g_pSeatManager->m_seatGrab == m_seatGrab)
+        g_pSeatManager->setGrab(nullptr);
 }
 
 void InputController::uninstall() {
+    releaseKeyboard();
     m_mouseMoveListener.reset();
     m_mouseButtonListener.reset();
     m_mouseAxisListener.reset();
