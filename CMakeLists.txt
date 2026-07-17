@@ -138,6 +138,7 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-config-tests
         tests/ConfigParserTest.cpp
+        tests/stubs/HyprlandConfigStub.cpp
         src/Config.cpp
     )
 
