@@ -607,14 +607,14 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
         drawRect(CBox{workspaceBox.x + Theme::shadowOffsetX(), workspaceBox.y + Theme::shadowOffsetY(), workspaceBox.w, workspaceBox.h}, shadowColor, damage, round);
 
-        if (workspaceSelected) {
+        if (workspace.active && !compact) {
             const auto glowBox = CBox{workspaceBox.x - 6.0, workspaceBox.y - 6.0, workspaceBox.w + 12.0, workspaceBox.h + 12.0};
             drawRect(glowBox, withAlpha(Theme::activeGlowColor(), contentAlpha), damage, round + 6);
         }
 
         drawRect(workspaceBox, Theme::cardFill(workspace.active, workspaceSelected, workspace.empty, static_cast<float>(contentAlpha)), damage, round);
 
-        if (workspaceSelected) {
+        if (workspaceSelected || workspace.active) {
             CBorderPassElement::SBorderData border;
             border.box        = workspaceBox;
             const auto borderColor = Theme::cardBorder(workspace.active, workspaceSelected, static_cast<float>(contentAlpha));
@@ -623,18 +623,13 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             border.round      = round;
             border.borderSize = 2;
             g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
-
-            const auto accentWidth = std::min(compact ? 28.0 : 56.0, std::max(1.0, workspaceBox.w - 32.0));
-            const auto accentBar   = Theme::cardBorder(workspace.active, true, static_cast<float>(contentAlpha));
-            drawRect(CBox{workspaceBox.x + centered(workspaceBox.w, accentWidth), workspaceBox.y + workspaceBox.h - 7.0, accentWidth, 3.0},
-                accentBar, damage, 2);
         }
 
         if (workspace.active) {
-            drawRect(CBox{workspaceBox.x + workspaceBox.w - 30.0, workspaceBox.y + 16.0, 14.0, 14.0},
-                withAlpha(Theme::accentColor(), contentAlpha * 0.14), damage, 7);
-            drawRect(CBox{workspaceBox.x + workspaceBox.w - 27.0, workspaceBox.y + 19.0, 8.0, 8.0},
-                withAlpha(Theme::accentColor(), contentAlpha * 0.96), damage, 4);
+            const auto accentWidth = std::min(compact ? 28.0 : 56.0, std::max(1.0, workspaceBox.w - 32.0));
+            const auto accentBar   = withAlpha(Theme::accentColor(), contentAlpha);
+            drawRect(CBox{workspaceBox.x + centered(workspaceBox.w, accentWidth), workspaceBox.y + workspaceBox.h - 7.0, accentWidth, 4.0},
+                accentBar, damage, 2);
         }
 
         renderLabel(workspace.name, workspace.rect.x + (compact ? 10.0 : 18.0), workspace.rect.y + (compact ? 8.0 : 14.0),
