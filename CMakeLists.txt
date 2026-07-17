@@ -54,6 +54,7 @@ add_library(hypr-radiant MODULE
     src/SearchPanelGeometry.cpp
     src/WorkspaceWallLayout.cpp
     src/StateCollector.cpp
+    src/Theme.cpp
 )
 
 target_include_directories(hypr-radiant
