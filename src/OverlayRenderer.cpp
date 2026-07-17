@@ -644,29 +644,12 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                 {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
             const auto windowBox   = boxFor(window.rect);
             const auto windowRound = Theme::windowRadius();
-            const auto footerHeight = compact ? 0.0 : std::min(38.0, std::max(30.0, windowBox.h * 0.22));
+            const auto footerHeight = compact ? 0.0 : 28.0;
 
-            if (windowSelected) {
-                drawRect(CBox{windowBox.x - 4.0, windowBox.y - 4.0, windowBox.w + 8.0, windowBox.h + 8.0},
-                    withAlpha(Theme::activeGlowColor(), contentAlpha), damage, windowRound + 4);
-            }
+            drawRect(CBox{windowBox.x + Theme::shadowOffsetX(), windowBox.y + Theme::shadowOffsetY(), windowBox.w, windowBox.h},
+                withAlpha(Theme::shadowColor(), contentAlpha), damage, windowRound + 4);
 
             drawRect(windowBox, Theme::windowFill(windowSelected, static_cast<float>(contentAlpha)), damage, windowRound);
-
-            if (windowSelected) {
-                CBorderPassElement::SBorderData border;
-                border.box        = windowBox;
-                const auto borderColor = Theme::windowBorder(windowSelected, static_cast<float>(contentAlpha));
-                border.grad1      = Config::CGradientValueData{borderColor};
-                border.a          = static_cast<float>(borderColor.a);
-                border.round      = windowRound;
-                border.borderSize = 2;
-                g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
-
-                const auto accentHeight = std::min(28.0, std::max(1.0, windowBox.h - 16.0));
-                drawRect(CBox{windowBox.x + 2.0, windowBox.y + centered(windowBox.h, accentHeight), 3.0, accentHeight},
-                    borderColor, damage, 2);
-            }
 
             if (!compact && windowBox.h > 88.0) {
                 const auto previewShell = CBox{
@@ -675,15 +658,27 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                     std::max(1.0, windowBox.w - 20.0),
                     std::max(1.0, windowBox.h - footerHeight - 16.0),
                 };
-                drawRect(previewShell, withAlpha(Theme::panelColor(), contentAlpha), damage, Theme::windowRadius());
+                drawRect(previewShell, Theme::windowFill(windowSelected, static_cast<float>(contentAlpha)), damage, windowRound);
                 renderWindowPreview(window, previewShell, contentAlpha, damage);
+
                 drawRect(CBox{windowBox.x, windowBox.y + windowBox.h - footerHeight, windowBox.w, footerHeight},
-                    withAlpha(Theme::cardFill(false, false, false, static_cast<float>(contentAlpha)), 0.92), damage, Theme::windowRadius());
+                    Theme::windowFill(windowSelected, static_cast<float>(contentAlpha)), damage, windowRound);
                 renderLabel(window.label, window.rect.x + 14.0, window.rect.y + window.rect.height - footerHeight + 8.0,
                     std::max(1.0, window.rect.width - 28.0), Theme::footerSize(), contentAlpha, damage);
             } else {
                 renderLabel(window.label, window.rect.x + (compact ? 8.0 : 12.0), window.rect.y + (compact ? 5.0 : 8.0),
                     std::max(1.0, window.rect.width - (compact ? 16.0 : 20.0)), compact ? Theme::badgeSize() : Theme::footerSize(), contentAlpha, damage);
+            }
+
+            if (windowSelected) {
+                CBorderPassElement::SBorderData border;
+                border.box        = CBox{windowBox.x - 5.0, windowBox.y - 5.0, windowBox.w + 10.0, windowBox.h + 10.0};
+                const auto borderColor = Theme::windowBorder(true, static_cast<float>(contentAlpha));
+                border.grad1      = Config::CGradientValueData{borderColor};
+                border.a          = static_cast<float>(borderColor.a);
+                border.round      = windowRound + 5;
+                border.borderSize = 3;
+                g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
             }
         }
     }
