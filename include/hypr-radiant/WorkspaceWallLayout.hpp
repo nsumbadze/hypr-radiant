@@ -50,8 +50,8 @@ struct WorkspaceWallFrame {
     std::int64_t               monitorId = -1;
     LayoutRect                 bounds;
     std::vector<WorkspaceCard> workspaces;
-    WorkspaceRail              rail;
-    WorkspaceStage             stage;
+    WorkspaceRail  rail;
+    WorkspaceStage stage;
     bool                       focusedStage = false;
 };
 

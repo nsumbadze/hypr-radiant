@@ -41,8 +41,8 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         .monitorId   = monitor.id,
         .bounds      = {.x = 0.0, .y = 0.0, .width = renderSize.width, .height = renderSize.height},
         .workspaces  = {},
-        .rail        = {},
-        .stage       = {},
+        .rail         = {},
+        .stage        = {},
         .focusedStage = options.focusedStage,
     };
 
@@ -194,7 +194,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         frame.stage = {
             .workspaceId = previewId,
             .name        = stageFound != workspaceById.end() && !stageFound->second.name.empty() ? stageFound->second.name : std::to_string(previewId),
-            .bounds      = stageBounds,
+            .bounds = stageBounds,
             .windows     = {},
             .empty       = true,
         };
