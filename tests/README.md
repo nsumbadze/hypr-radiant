@@ -10,6 +10,7 @@ These modules do not directly touch Hyprland globals and are suitable for unit t
 - `HitTester`: resolves selections and pointer hits inside computed frames.
 - `SearchMatcher`: matches window labels and workspace names/numbers.
 - `FadeAnimation`: advances visibility/alpha state from time deltas.
+- `SwipeTracker`: recognizes vertical gestures and resolves progress, velocity commits, and cancellation.
 - Config parsing: converts plugin config strings into typed options.
 
 ## Non-testable without mocking

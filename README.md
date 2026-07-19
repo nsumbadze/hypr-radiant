@@ -1,15 +1,13 @@
 # hypr-radiant
 
-`hypr-radiant` is a small Hyprland C++ plugin targeting Hyprland 0.55.2 (commit
-39d7e209c79d451efab1b21151d5938289da838d). It provides a `radiant:toggle`
-dispatcher that opens a native Workspace Wall overview for switching between
-workspaces and open windows.
-
-Workspace/window rearrangement is not implemented yet.
+`hypr-radiant` is a native workspace overview for Hyprland 0.55.x.
+Its default stage layout combines live spatial previews and translucent glass
+with Omarchy's theme-driven palette, monospace interface language, and
+keyboard-first workflow.
 
 ## Requirements
 
-- Hyprland 0.55.2 (commit 39d7e209c79d451efab1b21151d5938289da838d) development headers
+- Hyprland 0.55.x with development headers matching the running compositor
 - `hyprpm`
 - CMake 3.25 or newer
 - A C++23-capable compiler
@@ -89,6 +87,12 @@ After loading the plugin, run:
 hyprctl dispatch radiant:toggle
 ```
 
+To open App Exposé for the currently focused application:
+
+```sh
+hyprctl dispatch radiant:app
+```
+
 The command opens or closes the overview. The default `stage` layout shows an
 equal-size workspace rail at the top and reconstructs the highlighted
 workspace spatially below it from live window textures. Moving through the
@@ -99,6 +103,10 @@ layout retains the original grid.
 
 - `hyprctl dispatch radiant:toggle`: open or close overview
 - Hover a rail workspace or stage window: move selection
+- Drag a stage window onto a rail card: move it to that workspace
+- Drag a stage window onto `NEW [id]`: create a workspace and move it there
+- Click `NEW [id]`: create and enter a workspace
+- `Tab`: toggle spatial and application-grouped views
 - Mouse wheel or `Left`/`Right`: move through the workspace rail
 - `Down`: enter the highlighted workspace's stage windows or move forward
 - `Up`: move backward through stage windows or return to the rail
@@ -110,6 +118,7 @@ layout retains the original grid.
 - Click a stage window: switch workspace and focus window
 - `Enter`: activate selection
 - `Esc`: close search and restore its previous selection, or close the overview
+- Optional three/four-finger swipe up/down: interactively open or close
 
 ## Configuration
 
@@ -120,6 +129,12 @@ plugin {
         animation_duration = 180
         layout = stage
         accent_color = auto
+        background_color = 111c18
+        foreground_color = C1C497
+        font_family = JetBrainsMono Nerd Font
+        gesture_enabled = false
+        gesture_fingers = 3
+        gesture_distance = 300
     }
 }
 ```
@@ -129,6 +144,22 @@ plugin {
 - `layout`: overview layout mode. Supported values are `stage` and `workspace_wall`.
 - `accent_color`: `auto` inherits the focused Hyprland window border; explicit
   `#RRGGBB`, `#RRGGBBAA`, `rgb(RRGGBB)`, and `rgba(RRGGBBAA)` values override it.
+- `background_color` / `foreground_color`: portable RGB/RGBA palette values.
+- `font_family`: interface font; `JetBrainsMono Nerd Font` is the Omarchy default.
+- `gesture_enabled`: opt-in interactive vertical swipe capture.
+- `gesture_fingers`: `3` or `4` fingers.
+- `gesture_distance`: travel in logical pixels, clamped from `120` to `800`.
+
+Gesture capture is disabled by default so the plugin does not replace an
+existing Hyprland trackpad binding without permission.
+
+## Test
+
+```sh
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
 
 For development without installing through `hyprpm`, build the plugin and load
 the generated shared object directly:
