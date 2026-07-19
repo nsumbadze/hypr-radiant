@@ -28,6 +28,7 @@ class OverlayRenderer {
     void install();
     void uninstall();
     void show(RadiantState state);
+    void showAppExpose(RadiantState state, std::string applicationClass);
     void toggle(RadiantState state);
     void hideImmediate();
     void moveSelection(NavigationDirection direction);
@@ -36,9 +37,11 @@ class OverlayRenderer {
     void beginSearch();
     void backspaceSearch();
     void clearSearchOrHide();
+    void toggleGroupedMode();
 
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] bool           searchActive() const noexcept;
+    [[nodiscard]] OverviewMode   mode() const noexcept;
     [[nodiscard]] OverviewTarget selectedTarget() const noexcept;
     [[nodiscard]] OverviewTarget hitTest(double x, double y) const;
 
@@ -84,6 +87,8 @@ class OverlayRenderer {
     std::int64_t                                          m_selectedFrameMonitorId = -1;
     std::string                                           m_searchQuery;
     bool                                                  m_searchActive = false;
+    OverviewMode                                          m_mode = OverviewMode::Spatial;
+    std::string                                           m_applicationFilter;
     OverviewTarget                                        m_preSearchTarget;
     std::int64_t                                          m_preSearchMonitorId = -1;
     std::unordered_set<std::uint64_t>                     m_searchMatches;

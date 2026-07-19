@@ -34,7 +34,7 @@ std::optional<char> searchCharForKey(uint32_t key) {
 } // namespace
 
 void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace,
-    MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close) {
+    MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close, ToggleModeFn toggleMode) {
     m_active   = std::move(active);
     m_hitTest  = std::move(hitTest);
     m_activate = std::move(activate);
@@ -46,6 +46,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
     m_openSearch = std::move(openSearch);
     m_jump     = std::move(jump);
     m_close    = std::move(close);
+    m_toggleMode = std::move(toggleMode);
 
     m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](Vector2D position, Event::SCallbackInfo& info) {
         if (!m_active || !m_active())
@@ -141,6 +142,14 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
             return;
         }
 
+        if (key == KEY_TAB) {
+            if (!m_searchActive || !m_searchActive()) {
+                if (m_toggleMode)
+                    m_toggleMode();
+            }
+            return;
+        }
+
         if (key >= KEY_1 && key <= KEY_9) {
             const auto value = static_cast<char>('1' + (key - KEY_1));
             if (m_searchActive && m_searchActive()) {
@@ -208,6 +217,7 @@ void InputController::uninstall() {
     m_openSearch = {};
     m_jump = {};
     m_close = {};
+    m_toggleMode = {};
     m_scrollAccumulator = 0.0;
     m_acceptInputAfter = Clock::time_point::min();
 }

@@ -2,6 +2,8 @@
 #include <hypr-radiant/Log.hpp>
 
 #include <hyprland/src/helpers/Color.hpp>
+#include <hyprland/src/desktop/state/FocusState.hpp>
+#include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <memory>
@@ -13,6 +15,7 @@ namespace {
 
 constexpr auto PLUGIN_NAME        = "hypr-radiant";
 constexpr auto DISPATCHER_TOGGLE  = "radiant:toggle";
+constexpr auto DISPATCHER_APP     = "radiant:app";
 constexpr auto PLUGIN_DESCRIPTION = "Native workspace overview with live previews and search.";
 constexpr auto PLUGIN_AUTHOR      = "Nika Sumbadze (@nsumbadze)";
 constexpr auto PLUGIN_VERSION     = "0.1.0";
@@ -75,8 +78,25 @@ bool RadiantPlugin::initialize() {
             m_overlay.clearSearchOrHide();
             if (!m_overlay.active())
                 m_input.releaseKeyboard();
-        });
+        },
+        [this] { m_overlay.toggleGroupedMode(); });
     return true;
+}
+
+SDispatchResult RadiantPlugin::showApplication(const std::string& args) {
+    if (!args.empty())
+        log::warn("radiant:app ignores dispatcher arguments: {}", args);
+
+    const auto focused = Desktop::focusState() ? Desktop::focusState()->window() : nullptr;
+    if (!focused || focused->m_class.empty())
+        return {.passEvent = false, .success = false, .error = "no focused application"};
+
+    auto state = m_stateCollector.collect();
+    m_overlay.showAppExpose(std::move(state), focused->m_class);
+    m_lastOpenedAt = Clock::now();
+    m_input.grabKeyboard();
+    log::info("app expose opened for {}", focused->m_class);
+    return {.passEvent = false, .success = true, .error = ""};
 }
 
 void RadiantPlugin::shutdown() {
@@ -182,7 +202,26 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:toggle"};
     }
 
-    hypr_radiant::log::info("loaded; dispatcher radiant:toggle registered");
+    const auto appRegistered = HyprlandAPI::addDispatcherV2(
+        g_pluginHandle,
+        DISPATCHER_APP,
+        [](std::string args) -> SDispatchResult {
+            try {
+                if (!g_plugin)
+                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
+                return g_plugin->showApplication(args);
+            } catch (const std::exception& error) {
+                hypr_radiant::log::error("radiant:app failed: {}", error.what());
+                return {.passEvent = false, .success = false, .error = error.what()};
+            }
+        });
+
+    if (!appRegistered) {
+        resetPluginState();
+        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:app"};
+    }
+
+    hypr_radiant::log::info("loaded; dispatchers radiant:toggle and radiant:app registered");
 
     return {
         .name        = PLUGIN_NAME,

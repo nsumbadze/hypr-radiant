@@ -23,9 +23,10 @@ class InputController {
     using OpenSearchFn = std::function<void()>;
     using JumpFn     = std::function<void(std::int64_t)>;
     using CloseFn    = std::function<void()>;
+    using ToggleModeFn = std::function<void()>;
 
     void install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace,
-        MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close);
+        MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close, ToggleModeFn toggleMode);
     void uninstall();
 
     void grabKeyboard();
@@ -47,6 +48,7 @@ class InputController {
     OpenSearchFn        m_openSearch;
     JumpFn              m_jump;
     CloseFn             m_close;
+    ToggleModeFn        m_toggleMode;
     CHyprSignalListener m_mouseMoveListener;
     CHyprSignalListener m_mouseButtonListener;
     CHyprSignalListener m_mouseAxisListener;

@@ -175,7 +175,7 @@ MonitorSnapshot snapshotForCurrentMonitor(const PHLMONITOR& monitor) {
     return snapshot;
 }
 
-WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorkspaceId = -1) {
+WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorkspaceId, OverviewMode overviewMode, const std::string& applicationFilter) {
     if (mode == LayoutMode::WorkspaceWall)
         return {};
 
@@ -187,6 +187,8 @@ WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorks
         .windowInset           = 16.0,
         .focusedStage          = true,
         .previewWorkspaceId    = previewWorkspaceId,
+        .mode                  = overviewMode,
+        .applicationFilter     = applicationFilter,
     };
 }
 
@@ -236,6 +238,8 @@ void OverlayRenderer::uninstall() {
 }
 
 void OverlayRenderer::show(RadiantState state) {
+    m_mode = OverviewMode::Spatial;
+    m_applicationFilter.clear();
     m_state = std::move(state);
     m_previousFrames.clear();
     clearSearch();
@@ -253,6 +257,31 @@ void OverlayRenderer::show(RadiantState state) {
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
+    damageAllMonitors();
+}
+
+void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationClass) {
+    m_mode = OverviewMode::AppExpose;
+    m_applicationFilter = std::move(applicationClass);
+    m_state = std::move(state);
+    m_previousFrames.clear();
+    clearSearch();
+    rebuildFrames();
+
+    if (const auto* frame = activeMonitorFrame()) {
+        m_selectedFrameMonitorId = frame->monitorId;
+        if (!frame->stage.windows.empty()) {
+            const auto& window = frame->stage.windows.front();
+            m_selectedTarget = {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
+        } else {
+            m_selectedTarget = m_hitTester.initialSelection(*frame);
+        }
+    }
+
+    m_textures.clear();
+    m_animation.animateTo(true, m_config.animationDurationMs());
+    m_stageTransition.hideImmediate();
+    m_stageTransition.animateTo(true, m_config.animationDurationMs());
     damageAllMonitors();
 }
 
@@ -369,6 +398,24 @@ void OverlayRenderer::clearSearchOrHide() {
     hideImmediate();
 }
 
+void OverlayRenderer::toggleGroupedMode() {
+    if (m_config.layoutMode() != LayoutMode::Stage || m_searchActive)
+        return;
+
+    m_mode = m_mode == OverviewMode::Grouped ? OverviewMode::Spatial : OverviewMode::Grouped;
+    m_applicationFilter.clear();
+    m_previousFrames = m_frames;
+    rebuildFrames();
+    if (const auto* frame = frameForMonitor(m_selectedFrameMonitorId)) {
+        if (!targetInFrame(*frame, m_selectedTarget))
+            m_selectedTarget = m_hitTester.initialSelection(*frame);
+    }
+    m_stageTransition.hideImmediate();
+    m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    m_textures.clear();
+    damageAllMonitors();
+}
+
 void OverlayRenderer::hideImmediate() {
     const auto wasRenderable = m_animation.renderable();
     m_animation.hideImmediate();
@@ -391,6 +438,10 @@ bool OverlayRenderer::active() const noexcept {
 
 bool OverlayRenderer::searchActive() const noexcept {
     return m_searchActive;
+}
+
+OverviewMode OverlayRenderer::mode() const noexcept {
+    return m_mode;
 }
 
 OverviewTarget OverlayRenderer::selectedTarget() const noexcept {
@@ -474,7 +525,8 @@ void OverlayRenderer::rebuildFrames() {
             const auto previewWorkspaceId = snapshot.id == m_selectedFrameMonitorId && m_selectedTarget.workspaceId > 0 ?
                 m_selectedTarget.workspaceId : snapshot.activeWorkspaceId;
             m_frameBoundsByMonitor[snapshot.id] = globalBoundsForMonitor(monitor, renderSize);
-            m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize, layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId)));
+            m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize,
+                layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
         }
     }
 
@@ -492,7 +544,8 @@ void OverlayRenderer::rebuildFrames() {
             };
             const auto previewWorkspaceId = monitor.id == m_selectedFrameMonitorId && m_selectedTarget.workspaceId > 0 ?
                 m_selectedTarget.workspaceId : monitor.activeWorkspaceId;
-            m_frames.push_back(m_layout.compute(m_state, monitor, renderSize, layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId)));
+            m_frames.push_back(m_layout.compute(m_state, monitor, renderSize,
+                layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
         }
     }
 
@@ -878,6 +931,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         windowBox.y += stageOffset;
         const auto radius = Theme::windowRadius();
 
+        if (window.appGroupStart)
+            renderLabel(window.appClass, window.rect.x + 2.0, window.rect.y - 20.0 + stageOffset,
+                std::max(1.0, window.rect.width - 4.0), Theme::hintSize(), stageAlpha * 0.68, damage);
+
         drawRect(CBox{windowBox.x + 7.0, windowBox.y + 10.0, windowBox.w, windowBox.h},
             withAlpha(Theme::shadowColor(), stageAlpha * 0.86), damage, radius + 2);
         if (selected) {
@@ -905,7 +962,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
     if (!m_searchActive) {
         const auto helpWidth = std::min(720.0, std::max(1.0, frame.bounds.width - 48.0));
-        renderLabel("\xe2\x86\x90 \xe2\x86\x92 workspace  \xc2\xb7  \xe2\x86\x93 windows  \xc2\xb7  Enter open  \xc2\xb7  / search  \xc2\xb7  Esc close",
+        const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSE" : "SPATIAL";
+        renderLabel(modeLabel, frame.stage.bounds.x + frame.stage.bounds.width - 120.0, frame.stage.bounds.y - 28.0,
+            120.0, Theme::hintSize(), contentAlpha * 0.72, damage);
+        renderLabel("\xe2\x86\x90 \xe2\x86\x92 workspace  \xc2\xb7  \xe2\x86\x93 windows  \xc2\xb7  Tab view  \xc2\xb7  Enter open  \xc2\xb7  / search  \xc2\xb7  Esc close",
             centered(frame.bounds.width, helpWidth), frame.bounds.height - 32.0, helpWidth, Theme::hintSize(), contentAlpha * 0.62, damage);
     } else {
         auto dim = Theme::stageBackdropColor();
