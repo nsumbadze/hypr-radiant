@@ -12,6 +12,7 @@
 
 #include <chrono>
 #include <string>
+#include <string_view>
 
 namespace hypr_radiant {
 
@@ -23,12 +24,14 @@ class RadiantPlugin {
     void            shutdown();
     SDispatchResult toggle(const std::string& args);
     SDispatchResult showApplication(const std::string& args);
+    SDispatchResult status(const std::string& args);
     [[nodiscard]] bool active() const noexcept;
 
   private:
     using Clock = std::chrono::steady_clock;
 
-    void activate(OverviewTarget target);
+    void activate(OverviewTarget target, std::string_view source);
+    void recordTransition(std::string message, bool notify = false);
 
     HANDLE          m_handle = nullptr;
     ActivationController m_activation;
@@ -38,6 +41,7 @@ class RadiantPlugin {
     StateCollector  m_stateCollector;
     OverlayRenderer m_overlay;
     Clock::time_point m_lastOpenedAt = Clock::time_point::min();
+    std::string       m_lastTransition = "plugin loaded";
 };
 
 } // namespace hypr_radiant

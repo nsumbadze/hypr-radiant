@@ -1,6 +1,7 @@
 #pragma once
 
 #include <hypr-radiant/HitTester.hpp>
+#include <hypr-radiant/OpeningInputGuard.hpp>
 
 #include <hyprland/src/helpers/signal/Signal.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
@@ -30,11 +31,12 @@ class InputController {
         MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close, ToggleModeFn toggleMode);
     void uninstall();
 
-    void grabKeyboard();
+    void grabKeyboard(bool waitForOpeningRelease = true);
     void releaseKeyboard();
 
   private:
     [[nodiscard]] bool inputArmed() const noexcept;
+    [[nodiscard]] bool activationArmed() const noexcept;
 
     using Clock = std::chrono::steady_clock;
 
@@ -58,6 +60,8 @@ class InputController {
     SP<CSeatGrab>       m_seatGrab;
     double              m_scrollAccumulator = 0.0;
     Clock::time_point   m_acceptInputAfter = Clock::time_point::min();
+    Clock::time_point   m_acceptActivationAfter = Clock::time_point::min();
+    OpeningInputGuard   m_openingInputGuard;
 };
 
 } // namespace hypr_radiant
