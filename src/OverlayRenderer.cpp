@@ -414,6 +414,27 @@ void OverlayRenderer::refresh(RadiantState state) {
     damageAllMonitors();
 }
 
+void OverlayRenderer::beginGestureOpen(RadiantState state) {
+    show(std::move(state));
+    m_animation.setProgress(0.0, true);
+    m_stageTransition.setProgress(0.0, true);
+    damageAllMonitors();
+}
+
+void OverlayRenderer::setGestureProgress(bool opening, double progress) {
+    const auto visibleProgress = opening ? progress : 1.0 - progress;
+    m_animation.setProgress(visibleProgress, true);
+    m_stageTransition.setProgress(visibleProgress, true);
+    damageAllMonitors();
+}
+
+void OverlayRenderer::finishGesture(bool opening, bool commit) {
+    const auto visible = opening ? commit : !commit;
+    m_animation.animateTo(visible, m_config.animationDurationMs());
+    m_stageTransition.animateTo(visible, m_config.animationDurationMs());
+    damageAllMonitors();
+}
+
 void OverlayRenderer::appendSearchChar(char value) {
     if (m_searchQuery.size() >= 64)
         return;

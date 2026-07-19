@@ -34,12 +34,18 @@ class RadiantConfig {
     [[nodiscard]] int             animationDurationMs() const;
     [[nodiscard]] LayoutMode layoutMode() const;
     [[nodiscard]] std::optional<CHyprColor> accentColorOverride() const;
+    [[nodiscard]] bool            gestureEnabled() const;
+    [[nodiscard]] int             gestureFingers() const;
+    [[nodiscard]] double          gestureDistance() const;
 
   private:
     SP<Config::Values::CFloatValue>  m_opacity;
     SP<Config::Values::CIntValue>    m_animationDurationMs;
     SP<Config::Values::CStringValue> m_layout;
     SP<Config::Values::CStringValue> m_accentColor;
+    SP<Config::Values::CIntValue>    m_gestureEnabled;
+    SP<Config::Values::CIntValue>    m_gestureFingers;
+    SP<Config::Values::CFloatValue>  m_gestureDistance;
 };
 
 } // namespace hypr_radiant

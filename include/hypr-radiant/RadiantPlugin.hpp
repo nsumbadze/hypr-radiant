@@ -2,6 +2,7 @@
 
 #include <hypr-radiant/ActivationController.hpp>
 #include <hypr-radiant/Config.hpp>
+#include <hypr-radiant/GestureController.hpp>
 #include <hypr-radiant/InputController.hpp>
 #include <hypr-radiant/OverlayRenderer.hpp>
 #include <hypr-radiant/StateCollector.hpp>
@@ -33,6 +34,7 @@ class RadiantPlugin {
     ActivationController m_activation;
     RadiantConfig     m_config;
     InputController m_input;
+    GestureController m_gestures;
     StateCollector  m_stateCollector;
     OverlayRenderer m_overlay;
     Clock::time_point m_lastOpenedAt = Clock::time_point::min();

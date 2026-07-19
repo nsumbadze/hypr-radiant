@@ -53,6 +53,9 @@ class OverlayRenderer {
     void pointerMoved(double x, double y);
     [[nodiscard]] PointerAction pointerButton(bool pressed, double x, double y);
     void refresh(RadiantState state);
+    void beginGestureOpen(RadiantState state);
+    void setGestureProgress(bool opening, double progress);
+    void finishGesture(bool opening, bool commit);
 
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] bool           searchActive() const noexcept;

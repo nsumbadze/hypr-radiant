@@ -94,6 +94,27 @@ bool RadiantPlugin::initialize() {
                 m_input.releaseKeyboard();
         },
         [this] { m_overlay.toggleGroupedMode(); });
+    m_gestures.install(
+        [this] { return m_config.gestureEnabled(); },
+        [this] { return m_config.gestureFingers(); },
+        [this] { return m_config.gestureDistance(); },
+        [this] { return m_overlay.active(); },
+        [this](bool opening) {
+            if (!opening)
+                return;
+            m_overlay.beginGestureOpen(m_stateCollector.collect());
+            m_lastOpenedAt = Clock::now();
+            m_input.grabKeyboard();
+        },
+        [this](bool opening, double progress) { m_overlay.setGestureProgress(opening, progress); },
+        [this](bool opening, bool commit) {
+            m_overlay.finishGesture(opening, commit);
+            const auto remainsVisible = opening ? commit : !commit;
+            if (remainsVisible)
+                m_input.grabKeyboard();
+            else
+                m_input.releaseKeyboard();
+        });
     return true;
 }
 
@@ -114,6 +135,7 @@ SDispatchResult RadiantPlugin::showApplication(const std::string& args) {
 }
 
 void RadiantPlugin::shutdown() {
+    m_gestures.uninstall();
     m_input.uninstall();
     m_overlay.uninstall();
 }

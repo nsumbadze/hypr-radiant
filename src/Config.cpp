@@ -31,8 +31,36 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         "Overview accent color, or auto to inherit the focused Hyprland border.",
         "auto");
 
+    m_gestureEnabled = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:gesture_enabled", "Enable interactive overview trackpad gestures.", 0,
+        Config::Values::SIntValueOptions{.min = 0, .max = 1});
+    m_gestureFingers = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:gesture_fingers", "Trackpad finger count for overview gestures.", 3,
+        Config::Values::SIntValueOptions{.min = 3, .max = 4});
+    m_gestureDistance = makeShared<Config::Values::CFloatValue>(
+        "plugin:radiant:gesture_distance", "Trackpad travel required to fully open the overview.", 300.0F,
+        Config::Values::SFloatValueOptions{.min = 120.0F, .max = 800.0F});
+
     return HyprlandAPI::addConfigValueV2(handle, m_opacity) && HyprlandAPI::addConfigValueV2(handle, m_animationDurationMs) &&
-        HyprlandAPI::addConfigValueV2(handle, m_layout) && HyprlandAPI::addConfigValueV2(handle, m_accentColor);
+        HyprlandAPI::addConfigValueV2(handle, m_layout) && HyprlandAPI::addConfigValueV2(handle, m_accentColor) &&
+        HyprlandAPI::addConfigValueV2(handle, m_gestureEnabled) && HyprlandAPI::addConfigValueV2(handle, m_gestureFingers) &&
+        HyprlandAPI::addConfigValueV2(handle, m_gestureDistance);
+}
+
+bool RadiantConfig::gestureEnabled() const {
+    return m_gestureEnabled && m_gestureEnabled->value() != 0;
+}
+
+int RadiantConfig::gestureFingers() const {
+    if (!m_gestureFingers)
+        return 3;
+    return static_cast<int>(std::clamp(m_gestureFingers->value(), static_cast<Config::INTEGER>(3), static_cast<Config::INTEGER>(4)));
+}
+
+double RadiantConfig::gestureDistance() const {
+    if (!m_gestureDistance)
+        return 300.0;
+    return std::clamp(static_cast<double>(m_gestureDistance->value()), 120.0, 800.0);
 }
 
 float RadiantConfig::opacity() const {
