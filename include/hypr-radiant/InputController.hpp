@@ -18,9 +18,13 @@ class InputController {
     using TextInputFn = std::function<void(char)>;
     using BackspaceFn = std::function<void()>;
     using MoveFn     = std::function<void(NavigationDirection)>;
+    using SearchActiveFn = std::function<bool()>;
+    using OpenSearchFn = std::function<void()>;
+    using JumpFn     = std::function<void(std::int64_t)>;
     using CloseFn    = std::function<void()>;
 
-    void install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace, MoveFn move, CloseFn close);
+    void install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace,
+        MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close);
     void uninstall();
 
     void grabKeyboard();
@@ -34,12 +38,16 @@ class InputController {
     TextInputFn         m_textInput;
     BackspaceFn         m_backspace;
     MoveFn              m_move;
+    SearchActiveFn      m_searchActive;
+    OpenSearchFn        m_openSearch;
+    JumpFn              m_jump;
     CloseFn             m_close;
     CHyprSignalListener m_mouseMoveListener;
     CHyprSignalListener m_mouseButtonListener;
     CHyprSignalListener m_mouseAxisListener;
     CHyprSignalListener m_keyListener;
     SP<CSeatGrab>       m_seatGrab;
+    double              m_scrollAccumulator = 0.0;
 };
 
 } // namespace hypr_radiant

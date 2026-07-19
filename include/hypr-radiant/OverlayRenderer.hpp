@@ -33,10 +33,12 @@ class OverlayRenderer {
     void moveSelection(NavigationDirection direction);
     void selectTargetAt(double x, double y);
     void appendSearchChar(char value);
+    void beginSearch();
     void backspaceSearch();
     void clearSearchOrHide();
 
     [[nodiscard]] bool           active() const noexcept;
+    [[nodiscard]] bool           searchActive() const noexcept;
     [[nodiscard]] OverviewTarget selectedTarget() const noexcept;
     [[nodiscard]] OverviewTarget hitTest(double x, double y) const;
 
@@ -50,6 +52,7 @@ class OverlayRenderer {
     void moveSearchSelection(NavigationDirection direction);
     void clearSearch();
     void renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
+    void renderStageFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderWindowPreview(const WindowCard& window, const CBox& clipBox, double alpha, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
@@ -63,9 +66,11 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* frameForPoint(double x, double y, double& localX, double& localY) const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* frameForSelectedTarget() const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
+    [[nodiscard]] CHyprColor resolvedAccentColor() const;
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;
+    FadeAnimation                                      m_stageTransition;
     CHyprSignalListener                                m_renderStageListener;
     CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;
@@ -73,10 +78,14 @@ class OverlayRenderer {
     HitTester                                          m_hitTester;
     SearchMatcher                                      m_searchMatcher;
     std::vector<WorkspaceWallFrame>                       m_frames;
+    std::vector<WorkspaceWallFrame>                       m_previousFrames;
     std::unordered_map<std::int64_t, LayoutRect>          m_frameBoundsByMonitor;
     OverviewTarget                                        m_selectedTarget;
     std::int64_t                                          m_selectedFrameMonitorId = -1;
     std::string                                           m_searchQuery;
+    bool                                                  m_searchActive = false;
+    OverviewTarget                                        m_preSearchTarget;
+    std::int64_t                                          m_preSearchMonitorId = -1;
     std::unordered_set<std::uint64_t>                     m_searchMatches;
     std::unordered_map<std::string, SP<Render::ITexture>> m_textures;
 };

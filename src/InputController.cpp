@@ -5,6 +5,7 @@
 
 #include <linux/input-event-codes.h>
 
+#include <cmath>
 #include <optional>
 
 namespace hypr_radiant {
@@ -22,12 +23,6 @@ std::optional<char> searchCharForKey(uint32_t key) {
     if (key >= KEY_A && key <= KEY_Z)
         return static_cast<char>('a' + (key - KEY_A));
 
-    if (key >= KEY_1 && key <= KEY_9)
-        return static_cast<char>('1' + (key - KEY_1));
-
-    if (key == KEY_0)
-        return '0';
-
     if (key == KEY_SPACE)
         return ' ';
 
@@ -36,7 +31,8 @@ std::optional<char> searchCharForKey(uint32_t key) {
 
 } // namespace
 
-void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace, MoveFn move, CloseFn close) {
+void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace,
+    MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close) {
     m_active   = std::move(active);
     m_hitTest  = std::move(hitTest);
     m_activate = std::move(activate);
@@ -44,6 +40,9 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
     m_textInput = std::move(textInput);
     m_backspace = std::move(backspace);
     m_move     = std::move(move);
+    m_searchActive = std::move(searchActive);
+    m_openSearch = std::move(openSearch);
+    m_jump     = std::move(jump);
     m_close    = std::move(close);
 
     m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](Vector2D position, Event::SCallbackInfo& info) {
@@ -74,11 +73,25 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
             m_activate(target);
     });
 
-    m_mouseAxisListener = Event::bus()->m_events.input.mouse.axis.listen([this](IPointer::SAxisEvent, Event::SCallbackInfo& info) {
+    m_mouseAxisListener = Event::bus()->m_events.input.mouse.axis.listen([this](IPointer::SAxisEvent event, Event::SCallbackInfo& info) {
         if (!m_active || !m_active())
             return;
 
         info.cancelled = true;
+        if (event.axis != WL_POINTER_AXIS_VERTICAL_SCROLL || !m_move)
+            return;
+
+        const auto amount = event.deltaDiscrete != 0 ? static_cast<double>(event.deltaDiscrete) : event.delta;
+        if (std::abs(amount) < 0.01)
+            return;
+
+        m_scrollAccumulator += amount;
+        const auto threshold = event.deltaDiscrete != 0 ? 1.0 : 10.0;
+        if (std::abs(m_scrollAccumulator) < threshold)
+            return;
+
+        m_move(m_scrollAccumulator > 0.0 ? NavigationDirection::Right : NavigationDirection::Left);
+        m_scrollAccumulator = 0.0;
     });
 
     m_keyListener = Event::bus()->m_events.input.keyboard.key.listen([this](IKeyboard::SKeyEvent event, Event::SCallbackInfo& info) {
@@ -106,6 +119,29 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (key == KEY_BACKSPACE) {
             if (m_backspace)
                 m_backspace();
+            return;
+        }
+
+        if (key == KEY_SLASH) {
+            if (m_openSearch)
+                m_openSearch();
+            return;
+        }
+
+        if (key >= KEY_1 && key <= KEY_9) {
+            const auto value = static_cast<char>('1' + (key - KEY_1));
+            if (m_searchActive && m_searchActive()) {
+                if (m_textInput)
+                    m_textInput(value);
+            } else if (m_jump) {
+                m_jump(static_cast<std::int64_t>(value - '0'));
+            }
+            return;
+        }
+
+        if (key == KEY_0) {
+            if (m_searchActive && m_searchActive() && m_textInput)
+                m_textInput('0');
             return;
         }
 
@@ -154,7 +190,11 @@ void InputController::uninstall() {
     m_textInput = {};
     m_backspace = {};
     m_move = {};
+    m_searchActive = {};
+    m_openSearch = {};
+    m_jump = {};
     m_close = {};
+    m_scrollAccumulator = 0.0;
 }
 
 } // namespace hypr_radiant

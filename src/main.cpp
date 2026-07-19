@@ -67,6 +67,9 @@ bool RadiantPlugin::initialize() {
         [this](char value) { m_overlay.appendSearchChar(value); },
         [this] { m_overlay.backspaceSearch(); },
         [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
+        [this] { return m_overlay.searchActive(); },
+        [this] { m_overlay.beginSearch(); },
+        [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}); },
         [this] {
             m_overlay.clearSearchOrHide();
             if (!m_overlay.active())
