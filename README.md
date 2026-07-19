@@ -89,25 +89,27 @@ After loading the plugin, run:
 hyprctl dispatch radiant:toggle
 ```
 
-The command opens or closes the Workspace Wall overview. The default focused
-layout shows the active workspace as a center stage, adjacent workspaces at its
-sides, and remaining workspaces in a compact dock. Larger window cards render
-live window previews when Hyprland exposes a current surface. Typing opens a
-modal search for open window labels and workspace names or numbers.
+The command opens or closes the overview. The default `stage` layout shows an
+equal-size workspace rail at the top and reconstructs the highlighted
+workspace spatially below it from live window textures. Moving through the
+rail previews a workspace without switching to it. The `workspace_wall`
+layout retains the original grid.
 
 ## Controls
 
 - `hyprctl dispatch radiant:toggle`: open or close overview
-- Hover workspace or window card: move selection
-- Type letters, digits, or space: search open windows and workspaces
+- Hover a rail workspace or stage window: move selection
+- Mouse wheel or `Left`/`Right`: move through the workspace rail
+- `Down`: enter the highlighted workspace's stage windows or move forward
+- `Up`: move backward through stage windows or return to the rail
+- `/`: open the command palette, including all targets for an empty query
+- Type letters: open and filter search; digits filter once search is open
+- `1`–`9`: immediately activate that workspace when search is closed
 - `Backspace`: delete one search character
-- Click workspace card: switch workspace
-- Click window card: switch workspace and focus window
-- `Left`/`Right`: move between workspaces
-- `Down`: enter a workspace's window list or move to the next window
-- `Up`: move to the previous window or back to its workspace
+- Click a rail workspace: switch workspace
+- Click a stage window: switch workspace and focus window
 - `Enter`: activate selection
-- `Esc`: clear search, or close overview when search is empty
+- `Esc`: close search and restore its previous selection, or close the overview
 
 ## Configuration
 
@@ -117,6 +119,7 @@ plugin {
         opacity = 0.94
         animation_duration = 180
         layout = stage
+        accent_color = auto
     }
 }
 ```
@@ -124,6 +127,8 @@ plugin {
 - `opacity`: overlay opacity from `0.0` to `1.0`
 - `animation_duration`: fade duration in milliseconds from `0` to `2000`
 - `layout`: overview layout mode. Supported values are `stage` and `workspace_wall`.
+- `accent_color`: `auto` inherits the focused Hyprland window border; explicit
+  `#RRGGBB`, `#RRGGBBAA`, `rgb(RRGGBB)`, and `rgba(RRGGBBAA)` values override it.
 
 For development without installing through `hyprpm`, build the plugin and load
 the generated shared object directly:
