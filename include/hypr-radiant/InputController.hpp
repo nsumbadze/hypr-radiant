@@ -5,6 +5,7 @@
 #include <hyprland/src/helpers/signal/Signal.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 
+#include <chrono>
 #include <functional>
 
 namespace hypr_radiant {
@@ -31,6 +32,10 @@ class InputController {
     void releaseKeyboard();
 
   private:
+    [[nodiscard]] bool inputArmed() const noexcept;
+
+    using Clock = std::chrono::steady_clock;
+
     ActiveFn            m_active;
     HitTestFn           m_hitTest;
     ActivateFn          m_activate;
@@ -48,6 +53,7 @@ class InputController {
     CHyprSignalListener m_keyListener;
     SP<CSeatGrab>       m_seatGrab;
     double              m_scrollAccumulator = 0.0;
+    Clock::time_point   m_acceptInputAfter = Clock::time_point::min();
 };
 
 } // namespace hypr_radiant

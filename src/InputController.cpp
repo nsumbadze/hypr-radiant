@@ -11,6 +11,8 @@
 namespace hypr_radiant {
 namespace {
 
+constexpr auto INPUT_ARM_DELAY = std::chrono::milliseconds{220};
+
 bool pressed(wl_keyboard_key_state state) {
     return state == WL_KEYBOARD_KEY_STATE_PRESSED;
 }
@@ -49,10 +51,12 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!m_active || !m_active())
             return;
 
+        info.cancelled = true;
+        if (!inputArmed())
+            return;
+
         if (m_selectAt)
             m_selectAt(position.x, position.y);
-
-        info.cancelled = true;
     });
 
     m_mouseButtonListener = Event::bus()->m_events.input.mouse.button.listen([this](IPointer::SButtonEvent event, Event::SCallbackInfo& info) {
@@ -60,6 +64,9 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
             return;
 
         info.cancelled = true;
+
+        if (!inputArmed())
+            return;
 
         if (!pointerPressed(event.state))
             return;
@@ -78,6 +85,9 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
             return;
 
         info.cancelled = true;
+        if (!inputArmed())
+            return;
+
         if (event.axis != WL_POINTER_AXIS_VERTICAL_SCROLL || !m_move)
             return;
 
@@ -99,6 +109,9 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
             return;
 
         info.cancelled = true;
+
+        if (!inputArmed())
+            return;
 
         if (!pressed(event.state))
             return;
@@ -168,6 +181,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
 }
 
 void InputController::grabKeyboard() {
+    m_acceptInputAfter = Clock::now() + INPUT_ARM_DELAY;
     if (m_seatGrab && g_pSeatManager)
         g_pSeatManager->setGrab(m_seatGrab);
 }
@@ -195,6 +209,11 @@ void InputController::uninstall() {
     m_jump = {};
     m_close = {};
     m_scrollAccumulator = 0.0;
+    m_acceptInputAfter = Clock::time_point::min();
+}
+
+bool InputController::inputArmed() const noexcept {
+    return Clock::now() >= m_acceptInputAfter;
 }
 
 } // namespace hypr_radiant
