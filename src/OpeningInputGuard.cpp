@@ -2,6 +2,10 @@
 
 namespace hypr_radiant {
 
+bool shouldCancelInputEvent(bool pressed, bool inputArmed, bool suppressed) noexcept {
+    return pressed || (inputArmed && !suppressed);
+}
+
 bool OpeningInputGuard::keyEvent(std::uint32_t key, bool pressed) {
     return update(m_heldKeys, m_suppressedKeys, key, pressed);
 }
@@ -14,6 +18,10 @@ void OpeningInputGuard::arm(bool waitForRelease) {
     m_suppressedKeys = m_heldKeys;
     m_suppressedButtons = m_heldButtons;
     m_openingReleaseObserved = !waitForRelease;
+}
+
+void OpeningInputGuard::suppressKeyUntilRelease(std::uint32_t key) {
+    m_suppressedKeys.insert(key);
 }
 
 void OpeningInputGuard::reset() {

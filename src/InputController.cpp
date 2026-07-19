@@ -68,7 +68,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!m_active || !m_active())
             return;
 
-        info.cancelled = true;
+        info.cancelled = shouldCancelInputEvent(isPressed, inputArmed(), suppressed);
 
         if (!inputArmed() || !activationArmed() || suppressed || event.button != BTN_LEFT)
             return;
@@ -111,7 +111,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!m_active || !m_active())
             return;
 
-        info.cancelled = true;
+        info.cancelled = shouldCancelInputEvent(isPressed, inputArmed(), suppressed);
 
         if (!inputArmed() || suppressed)
             return;
@@ -198,6 +198,10 @@ void InputController::grabKeyboard(bool waitForOpeningRelease) {
     m_acceptInputAfter = now + INPUT_ARM_DELAY;
     m_acceptActivationAfter = now + ACTIVATION_ARM_DELAY;
     m_openingInputGuard.arm(waitForOpeningRelease);
+    if (waitForOpeningRelease) {
+        m_openingInputGuard.suppressKeyUntilRelease(KEY_ENTER);
+        m_openingInputGuard.suppressKeyUntilRelease(KEY_KPENTER);
+    }
     if (m_seatGrab && g_pSeatManager)
         g_pSeatManager->setGrab(m_seatGrab);
 }

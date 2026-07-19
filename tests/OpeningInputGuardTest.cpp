@@ -47,6 +47,25 @@ void gestureArmDoesNotWaitForKeyboardRelease() {
     assert(guard.openingReleaseObserved());
 }
 
+void explicitlySuppressedActivationKeyRequiresItsOwnRelease() {
+    OpeningInputGuard guard;
+    guard.arm();
+    guard.suppressKeyUntilRelease(28);
+
+    assert(guard.keyEvent(28, true));
+    assert(!guard.keyEvent(42, false));
+    assert(guard.keyEvent(28, true));
+    assert(guard.keyEvent(28, false));
+    assert(!guard.keyEvent(28, true));
+}
+
+void openingReleasesPassThroughToClearClientRepeatState() {
+    assert(shouldCancelInputEvent(true, false, false));
+    assert(!shouldCancelInputEvent(false, false, false));
+    assert(!shouldCancelInputEvent(false, true, true));
+    assert(shouldCancelInputEvent(false, true, false));
+}
+
 } // namespace
 
 int main() {
@@ -55,6 +74,8 @@ int main() {
     inputPressedAfterArmIsAccepted();
     dispatcherArmWaitsForARealRelease();
     gestureArmDoesNotWaitForKeyboardRelease();
+    explicitlySuppressedActivationKeyRequiresItsOwnRelease();
+    openingReleasesPassThroughToClearClientRepeatState();
     std::cout << "OpeningInputGuardTest passed\n";
     return 0;
 }

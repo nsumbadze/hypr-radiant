@@ -5,11 +5,14 @@
 
 namespace hypr_radiant {
 
+[[nodiscard]] bool shouldCancelInputEvent(bool pressed, bool inputArmed, bool suppressed) noexcept;
+
 class OpeningInputGuard {
   public:
     [[nodiscard]] bool keyEvent(std::uint32_t key, bool pressed);
     [[nodiscard]] bool buttonEvent(std::uint32_t button, bool pressed);
     void arm(bool waitForRelease = true);
+    void suppressKeyUntilRelease(std::uint32_t key);
     void reset();
     [[nodiscard]] bool openingReleaseObserved() const noexcept;
 
