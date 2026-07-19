@@ -10,6 +10,10 @@ namespace hypr_radiant::Theme {
     return compact ? 14 : 22;
 }
 
+[[nodiscard]] constexpr int railRadius() noexcept {
+    return 24;
+}
+
 [[nodiscard]] constexpr int windowRadius() noexcept {
     return 12;
 }
@@ -75,6 +79,27 @@ namespace hypr_radiant::Theme {
 /// Semi-transparent backdrop that dims the desktop behind the overview.
 [[nodiscard]] inline CHyprColor backdropColor() noexcept {
     return {0.067F, 0.110F, 0.094F, 0.78F};
+}
+
+/// Neutral backdrop used by the desktop/Omarchy rail-and-stage layout.
+[[nodiscard]] inline CHyprColor stageBackdropColor() noexcept {
+    return {0.018F, 0.020F, 0.024F, 0.76F};
+}
+
+[[nodiscard]] inline CHyprColor railColor() noexcept {
+    return {0.045F, 0.048F, 0.054F, 0.82F};
+}
+
+[[nodiscard]] inline CHyprColor railCardFill(bool selected, bool empty, float alpha) noexcept {
+    if (empty)
+        return {0.035F, 0.038F, 0.043F, 0.68F * alpha};
+    if (selected)
+        return {0.105F, 0.110F, 0.118F, 0.94F * alpha};
+    return {0.071F, 0.075F, 0.082F, 0.90F * alpha};
+}
+
+[[nodiscard]] inline CHyprColor stageWindowFill(float alpha) noexcept {
+    return {0.055F, 0.058F, 0.064F, 0.94F * alpha};
 }
 
 /// Background panel that frames the workspace grid.
