@@ -16,6 +16,14 @@ bool contains(const LayoutRect& rect, double x, double y) {
 }
 
 LayoutRect rectFor(const WorkspaceWallFrame& frame, OverviewTarget target) {
+    if (frame.focusedStage && target.type == OverviewTargetType::Window) {
+        const auto stageWindow = std::ranges::find_if(frame.stage.windows, [target](const WindowCard& card) {
+            return card.stableId == target.windowId;
+        });
+        if (stageWindow != frame.stage.windows.end())
+            return stageWindow->rect;
+    }
+
     for (const auto& workspace : frame.workspaces) {
         if (target.type == OverviewTargetType::Workspace && workspace.workspaceId == target.workspaceId)
             return workspace.rect;
@@ -44,6 +52,25 @@ double centerY(const LayoutRect& rect) { return rect.y + rect.height / 2.0; }
 } // namespace
 
 OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, double y) const {
+    if (frame.focusedStage) {
+        for (const auto& window : frame.stage.windows) {
+            if (contains(window.rect, x, y))
+                return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
+        }
+
+        if (contains(frame.rail.bounds, x, y)) {
+            for (const auto& workspace : frame.workspaces) {
+                if (contains(workspace.rect, x, y))
+                    return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
+            }
+        }
+
+        if (contains(frame.stage.bounds, x, y))
+            return {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId};
+
+        return {};
+    }
+
     for (const auto& workspace : frame.workspaces) {
         for (const auto& window : workspace.windows) {
             if (contains(window.rect, x, y))
@@ -78,6 +105,12 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
         return {};
 
     if (current.type == OverviewTargetType::Workspace && direction == NavigationDirection::Down) {
+        if (frame.focusedStage && current.workspaceId == frame.stage.workspaceId) {
+            const auto window = std::ranges::find_if(frame.stage.windows, [](const WindowCard& card) { return selectable(card.rect); });
+            if (window != frame.stage.windows.end())
+                return {.type = OverviewTargetType::Window, .workspaceId = window->workspaceId, .windowId = window->stableId};
+        }
+
         const auto workspace = std::ranges::find_if(frame.workspaces, [current](const WorkspaceCard& card) {
             return card.workspaceId == current.workspaceId;
         });
@@ -89,6 +122,30 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
     }
 
     if (current.type == OverviewTargetType::Window) {
+        if (frame.focusedStage) {
+            const auto window = std::ranges::find_if(frame.stage.windows, [current](const WindowCard& card) {
+                return card.stableId == current.windowId;
+            });
+            if (window != frame.stage.windows.end()) {
+                if (direction == NavigationDirection::Down) {
+                    const auto next = std::find_if(window + 1, frame.stage.windows.end(), [](const WindowCard& card) { return selectable(card.rect); });
+                    if (next != frame.stage.windows.end())
+                        return {.type = OverviewTargetType::Window, .workspaceId = next->workspaceId, .windowId = next->stableId};
+                }
+                if (direction == NavigationDirection::Up) {
+                    auto previous = window;
+                    while (previous != frame.stage.windows.begin()) {
+                        --previous;
+                        if (selectable(previous->rect))
+                            return {.type = OverviewTargetType::Window, .workspaceId = previous->workspaceId, .windowId = previous->stableId};
+                    }
+                    return {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId};
+                }
+
+                current = {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId};
+            }
+        }
+
         for (const auto& workspace : frame.workspaces) {
             const auto window = std::ranges::find_if(workspace.windows, [current](const WindowCard& card) {
                 return card.stableId == current.windowId;

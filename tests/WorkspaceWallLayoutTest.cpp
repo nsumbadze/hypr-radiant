@@ -14,7 +14,15 @@ RadiantState sampleState() {
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 2, .activeWorkspaceName = "2"});
     state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1"});
     state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1, .monitorName = "DP-1", .visible = true});
-    state.windows.push_back({.stableId = 10, .title = "Editor", .className = "Code", .workspaceId = 2, .monitorId = 1, .mapped = true});
+    state.windows.push_back({
+        .stableId = 10,
+        .title = "Editor",
+        .className = "Code",
+        .geometry = {.position = {.x = 120, .y = 90}, .size = {.width = 900, .height = 760}},
+        .workspaceId = 2,
+        .monitorId = 1,
+        .mapped = true,
+    });
     return state;
 }
 
@@ -97,35 +105,21 @@ void focusedStageCardSpacingMatchesSpec() {
     const auto& active = frame.workspaces.at(1);
     const auto& right  = frame.workspaces.at(2);
 
-    const auto leftPad   = std::clamp(1920.0 * 0.025, 32.0, 72.0);
-    const auto topPad    = std::clamp(1080.0 * 0.037, 32.0, 56.0);
-    const auto bottomPad = std::clamp(1080.0 * 0.052, 44.0, 72.0);
-    const auto mainGap   = std::clamp(1920.0 * 0.010, 14.0, 28.0);
-    const auto stageGap  = std::clamp(1080.0 * 0.022, 18.0, 32.0);
-    const auto activeW   = std::min(720.0, 1920.0 * 0.375);
-    const auto activeH   = std::max(320.0, std::min(500.0, 1080.0 - topPad - bottomPad - stageGap - 64.0 - 24.0));
-    const auto sideW     = std::min(400.0, std::max(0.0, (1920.0 - activeW) / 2.0 - leftPad * 2.0 - mainGap));
-    const auto sideH     = std::min(420.0, std::max(240.0, activeH * 0.84));
-    const auto activeX   = (1920.0 - activeW) / 2.0;
+    const auto cardH = std::clamp(1080.0 * 0.145, 96.0, 168.0);
+    const auto cardW = cardH * 1920.0 / 1080.0;
+    const auto gap   = std::clamp(1920.0 * 0.00625, 8.0, 14.0);
 
-    assert(active.rect.width == activeW);
-    assert(active.rect.height == activeH);
-    assert(std::abs(active.rect.x - activeX) < 0.5);
+    assert(frame.focusedStage);
+    assert(active.rect.width == cardW);
+    assert(active.rect.height == cardH);
     assert(std::abs(active.rect.x + active.rect.width / 2.0 - 960.0) < 0.5);
-
-    assert(left.rect.width == sideW);
-    assert(left.rect.height == sideH);
-    assert(std::abs(left.rect.x - (activeX - mainGap - sideW)) < 0.5);
-    assert(std::abs((active.rect.x - left.rect.x - left.rect.width) - mainGap) < 0.5);
-
-    assert(right.rect.width == sideW);
-    assert(right.rect.height == sideH);
-    assert(std::abs(right.rect.x - (activeX + activeW + mainGap)) < 0.5);
-    assert(std::abs((right.rect.x - active.rect.x - active.rect.width) - mainGap) < 0.5);
-
-    assert(left.rect.y > topPad);
-    assert(active.rect.y > topPad);
-    assert(active.rect.y + active.rect.height + stageGap + 64.0 <= 1080.0 - bottomPad);
+    assert(left.rect.width == cardW);
+    assert(right.rect.width == cardW);
+    assert(std::abs((active.rect.x - left.rect.x - left.rect.width) - gap) < 0.5);
+    assert(std::abs((right.rect.x - active.rect.x - active.rect.width) - gap) < 0.5);
+    assert(frame.rail.bounds.y < active.rect.y);
+    assert(frame.stage.bounds.y > frame.rail.bounds.y + frame.rail.bounds.height);
+    assert(frame.stage.workspaceId == 2);
 }
 
 void focusedStageEmptyNextWorkspaceGeometry() {
@@ -144,36 +138,53 @@ void focusedStageEmptyNextWorkspaceGeometry() {
     assert(frame.workspaces.at(3).workspaceId == 4);
     assert(frame.workspaces.at(3).empty);
 
-    const auto* dockCard = static_cast<const WorkspaceCard*>(nullptr);
-    for (const auto& ws : frame.workspaces) {
-        if (ws.rect.height == 64.0)
-            dockCard = &ws;
+    for (const auto& workspace : frame.workspaces) {
+        assert(workspace.rect.width == frame.workspaces.front().rect.width);
+        assert(workspace.rect.height == frame.workspaces.front().rect.height);
     }
-    assert(dockCard != nullptr);
-    assert(dockCard->workspaceId == 1);
-    assert(dockCard->rect.width == 120.0);
-
-    assert(frame.workspaces.at(3).rect.height > 200.0);
+    assert(frame.stage.workspaceId == 3);
 }
 
-void focusedStageWindowPaddingMatchesSpec() {
+void focusedStageMapsWindowGeometrySpatially() {
     auto state = sampleState();
-    state.windows.push_back({.stableId = 11, .title = "Browser", .workspaceId = 2, .monitorId = 1, .mapped = true});
+    state.windows.push_back({
+        .stableId = 11,
+        .title = "Browser",
+        .geometry = {.position = {.x = 1100, .y = 180}, .size = {.width = 700, .height = 620}},
+        .workspaceId = 2,
+        .monitorId = 1,
+        .mapped = true,
+    });
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
     const auto& active = frame.workspaces.at(1);
     assert(active.windows.size() == 2);
+    assert(frame.stage.windows.size() == 2);
+    assert(frame.stage.windows.at(0).stableId == 10);
+    assert(frame.stage.windows.at(1).stableId == 11);
+    assert(frame.stage.windows.at(0).rect.x < frame.stage.windows.at(1).rect.x);
 
-    const auto& first = active.windows.front();
-    assert(first.rect.x == active.rect.x + 16.0);
-    assert(first.rect.y == active.rect.y + 44.0);
-    assert(first.rect.width == active.rect.width - 32.0);
+    const auto scale = std::min(frame.stage.bounds.width / 1920.0, frame.stage.bounds.height / 1080.0);
+    assert(std::abs(frame.stage.windows.at(0).rect.width - 900.0 * scale) < 0.5);
+    assert(std::abs(frame.stage.windows.at(1).rect.height - 620.0 * scale) < 0.5);
+}
 
-    const auto totalWindowHeight = active.windows.at(0).rect.height + active.windows.at(1).rect.height;
-    const auto totalGap = 8.0;
-    const auto expectedHeight = active.rect.height - 44.0 - 16.0 - totalGap;
-    assert(std::abs(totalWindowHeight - expectedHeight) < 0.5);
+void focusedStageCentersOverflowAroundPreview() {
+    RadiantState state;
+    state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1280, .height = 720}}, .activeWorkspaceId = 1});
+    for (std::int64_t id = 1; id <= 9; ++id)
+        state.workspaces.push_back({.id = id, .name = std::to_string(id), .monitorId = 1});
+
+    auto options = stageOptions();
+    options.previewWorkspaceId = 6;
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1280, .height = 720}, options);
+
+    assert(frame.rail.overflowLeft);
+    assert(frame.rail.overflowRight);
+    assert(frame.stage.workspaceId == 6);
+    const auto& selected = frame.workspaces.at(5);
+    assert(std::abs(selected.rect.x + selected.rect.width / 2.0 - 640.0) < 0.5);
 }
 
 void multiMonitorPerFrameBounds() {
@@ -209,21 +220,20 @@ void searchPanelGeometryMatchesSpec() {
 
     const auto geom = computeSearchPanelGeometry(frame, 4);
 
-    assert(geom.panelW == 640.0);
-    assert(geom.panelH <= 540.0);
+    assert(geom.panelW == 680.0);
+    assert(geom.panelH == 370.0);
     assert(geom.inputH == 48.0);
-    assert(geom.inputW == 600.0);
+    assert(geom.inputW == 640.0);
     assert(geom.inputX == geom.panelX + 20.0);
     assert(geom.inputY == geom.panelY + 20.0);
     assert(geom.rowHeight == 56.0);
     assert(geom.rowGap == 6.0);
     assert(geom.resultsY == geom.inputY + geom.inputH + 20.0);
-    assert(geom.capacity >= 1);
+    assert(geom.capacity == 4);
 
     const auto centerX = 1920.0 / 2.0;
-    const auto centerY = 1080.0 / 2.0;
     assert(std::abs((geom.panelX + geom.panelW / 2.0) - centerX) < 0.5);
-    assert(std::abs((geom.panelY + geom.panelH / 2.0) - (centerY - 24.0)) < 0.5);
+    assert(std::abs((geom.panelY + geom.panelH / 2.0) - (1080.0 * 0.35)) < 0.5);
 }
 
 void searchPanelGeometryCapsAtScreenSize() {
@@ -232,9 +242,13 @@ void searchPanelGeometryCapsAtScreenSize() {
 
     const auto geom = computeSearchPanelGeometry(frame, 2);
 
-    assert(geom.panelW == 504.0);
+    assert(geom.panelW == 552.0);
     assert(geom.panelH <= 304.0);
-    assert(geom.inputW == 464.0);
+    assert(geom.inputW == 512.0);
+    assert(geom.panelX >= 24.0);
+    assert(geom.panelY >= 48.0);
+    assert(geom.panelX + geom.panelW <= 576.0);
+    assert(geom.panelY + geom.panelH <= 352.0);
 }
 
 void tinyRenderSizeDoesNotProduceNegativeRects() {
@@ -295,7 +309,8 @@ int main() {
     focusedStageDoesNotGeneratePhantomWorkspacesForGaps();
     focusedStageCardSpacingMatchesSpec();
     focusedStageEmptyNextWorkspaceGeometry();
-    focusedStageWindowPaddingMatchesSpec();
+    focusedStageMapsWindowGeometrySpatially();
+    focusedStageCentersOverflowAroundPreview();
     multiMonitorPerFrameBounds();
     searchPanelGeometryMatchesSpec();
     searchPanelGeometryCapsAtScreenSize();

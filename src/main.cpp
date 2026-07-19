@@ -16,6 +16,7 @@ constexpr auto DISPATCHER_TOGGLE  = "radiant:toggle";
 constexpr auto PLUGIN_DESCRIPTION = "Native workspace overview with live previews and search.";
 constexpr auto PLUGIN_AUTHOR      = "Nika Sumbadze (@nsumbadze)";
 constexpr auto PLUGIN_VERSION     = "0.1.0";
+constexpr auto TOGGLE_GUARD_DELAY = std::chrono::milliseconds{300};
 
 HANDLE g_pluginHandle = nullptr;
 std::unique_ptr<hypr_radiant::RadiantPlugin> g_plugin;
@@ -67,6 +68,9 @@ bool RadiantPlugin::initialize() {
         [this](char value) { m_overlay.appendSearchChar(value); },
         [this] { m_overlay.backspaceSearch(); },
         [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
+        [this] { return m_overlay.searchActive(); },
+        [this] { m_overlay.beginSearch(); },
+        [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}); },
         [this] {
             m_overlay.clearSearchOrHide();
             if (!m_overlay.active())
@@ -100,6 +104,13 @@ SDispatchResult RadiantPlugin::toggle(const std::string& args) {
     if (!args.empty())
         log::warn("radiant:toggle ignores dispatcher arguments: {}", args);
 
+    const auto now       = Clock::now();
+    const bool wasActive = m_overlay.active();
+    if (wasActive && now - m_lastOpenedAt < TOGGLE_GUARD_DELAY) {
+        log::info("ignored duplicate toggle while overview input is arming");
+        return {.passEvent = false, .success = true, .error = ""};
+    }
+
     auto state = m_stateCollector.collect();
 
     log::info(
@@ -109,12 +120,12 @@ SDispatchResult RadiantPlugin::toggle(const std::string& args) {
         state.windows.size(),
         state.mappedWindowCount());
 
-    const bool wasActive = m_overlay.active();
     m_overlay.toggle(std::move(state));
 
-    if (!wasActive && m_overlay.active())
+    if (!wasActive && m_overlay.active()) {
+        m_lastOpenedAt = now;
         m_input.grabKeyboard();
-    else if (wasActive && !m_overlay.active())
+    } else if (wasActive && !m_overlay.active())
         m_input.releaseKeyboard();
 
     log::info("radiant overlay {}", m_overlay.active() ? "opened" : "closed");

@@ -1,6 +1,7 @@
 #include <hypr-radiant/Config.hpp>
 
 #include <cassert>
+#include <cmath>
 #include <iostream>
 
 CHyprColor::CHyprColor(float, float, float, float) {}
@@ -86,6 +87,30 @@ void emptyLayoutModeFallsBackToStage() {
     assert(parseLayoutMode("") == LayoutMode::Stage);
 }
 
+void parsesAccentFormats() {
+    const auto hex = parseAccentColor("#509475");
+    assert(hex.has_value());
+    assert(std::abs(hex->red - 80.0F / 255.0F) < 0.001F);
+    assert(std::abs(hex->green - 148.0F / 255.0F) < 0.001F);
+    assert(std::abs(hex->blue - 117.0F / 255.0F) < 0.001F);
+    assert(hex->alpha == 1.0F);
+
+    const auto rgba = parseAccentColor("rgba(33ccff80)");
+    assert(rgba.has_value());
+    assert(std::abs(rgba->alpha - 128.0F / 255.0F) < 0.001F);
+
+    const auto rgb = parseAccentColor("rgb(fabd47)");
+    assert(rgb.has_value());
+    assert(rgb->alpha == 1.0F);
+}
+
+void rejectsAutomaticAndInvalidAccents() {
+    assert(!parseAccentColor("auto").has_value());
+    assert(!parseAccentColor("").has_value());
+    assert(!parseAccentColor("#12345").has_value());
+    assert(!parseAccentColor("not-a-color").has_value());
+}
+
 } // namespace
 
 int main() {
@@ -93,6 +118,8 @@ int main() {
     parsesWorkspaceWallLayoutMode();
     unknownLayoutModeFallsBackToStage();
     emptyLayoutModeFallsBackToStage();
+    parsesAccentFormats();
+    rejectsAutomaticAndInvalidAccents();
     std::cout << "ConfigParserTest passed\n";
     return 0;
 }

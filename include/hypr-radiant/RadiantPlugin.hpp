@@ -9,6 +9,7 @@
 #include <hyprland/src/SharedDefs.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
+#include <chrono>
 #include <string>
 
 namespace hypr_radiant {
@@ -23,6 +24,8 @@ class RadiantPlugin {
     [[nodiscard]] bool active() const noexcept;
 
   private:
+    using Clock = std::chrono::steady_clock;
+
     void activate(OverviewTarget target);
 
     HANDLE          m_handle = nullptr;
@@ -31,6 +34,7 @@ class RadiantPlugin {
     InputController m_input;
     StateCollector  m_stateCollector;
     OverlayRenderer m_overlay;
+    Clock::time_point m_lastOpenedAt = Clock::time_point::min();
 };
 
 } // namespace hypr_radiant

@@ -41,6 +41,9 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         .monitorId   = monitor.id,
         .bounds      = {.x = 0.0, .y = 0.0, .width = renderSize.width, .height = renderSize.height},
         .workspaces  = {},
+        .rail         = {},
+        .stage        = {},
+        .focusedStage = options.focusedStage,
     };
 
     int maxWorkspaceId = std::max(1, options.minimumWorkspaceSlots);
@@ -73,77 +76,92 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         if (!ids.contains(nextId))
             ids.insert(nextId);
 
-        const auto leftPad   = std::clamp(renderSize.width * 0.025, 32.0, 72.0);
-        const auto rightPad  = leftPad;
-        const auto topPad    = std::clamp(renderSize.height * 0.037, 32.0, 56.0);
-        const auto bottomPad = std::clamp(renderSize.height * 0.052, 44.0, 72.0);
-        const auto mainGap   = std::clamp(renderSize.width * 0.010, 14.0, 28.0);
-        const auto dockGap   = std::clamp(renderSize.width * 0.005, 8.0, 16.0);
-        const auto stageGap  = std::clamp(renderSize.height * 0.022, 18.0, 32.0);
+        const std::vector<std::int64_t> orderedIds(ids.begin(), ids.end());
+        const auto previewId = ids.contains(options.previewWorkspaceId) ? options.previewWorkspaceId : activeId;
+        const auto previewIt = std::ranges::find(orderedIds, previewId);
+        const auto previewIndex = previewIt == orderedIds.end() ? std::size_t{0} : static_cast<std::size_t>(std::distance(orderedIds.begin(), previewIt));
 
-        const auto contentWidth  = std::max(1.0, renderSize.width - leftPad - rightPad);
-        const auto contentHeight = std::max(1.0, renderSize.height - topPad - bottomPad);
-        const auto activeWidth   = std::min(720.0, renderSize.width * 0.375);
-        const auto activeHeight  = std::max(320.0, std::min(500.0, contentHeight - stageGap - 64.0 - 24.0));
-        const auto sideWidth     = std::min(400.0, std::max(0.0, (renderSize.width - activeWidth) / 2.0 - leftPad - rightPad - mainGap));
-        const auto sideHeight    = std::min(420.0, std::max(240.0, activeHeight * 0.84));
-        const auto dockHeight    = 64.0;
+        const auto edgePad      = std::clamp(renderSize.width * 0.0125, 16.0, 32.0);
+        const auto topPad       = std::clamp(renderSize.height * 0.022, 16.0, 32.0);
+        const auto cardGap      = std::clamp(renderSize.width * 0.00625, 8.0, 14.0);
+        const auto labelHeight  = std::clamp(renderSize.height * 0.030, 26.0, 34.0);
+        const auto cardHeight   = std::clamp(renderSize.height * 0.145, 96.0, 168.0);
+        const auto monitorWidth = std::max(1.0, monitor.geometry.size.width);
+        const auto monitorHeight = std::max(1.0, monitor.geometry.size.height);
+        const auto cardWidth    = cardHeight * monitorWidth / monitorHeight;
+        const auto railInset    = 16.0;
+        const auto railHeight   = cardHeight + labelHeight + railInset * 2.0;
+        const auto totalWidth   = static_cast<double>(orderedIds.size()) * cardWidth +
+            static_cast<double>(orderedIds.empty() ? 0 : orderedIds.size() - 1) * cardGap;
+        const auto railWidth    = std::min(std::max(1.0, renderSize.width - edgePad * 2.0), totalWidth + railInset * 2.0);
+        const auto railX        = centered(renderSize.width, railWidth);
+        const auto contentLeft  = railX + railInset;
+        const auto contentRight = railX + railWidth - railInset;
+        const auto unclampedX   = renderSize.width / 2.0 - cardWidth / 2.0 - static_cast<double>(previewIndex) * (cardWidth + cardGap);
+        const auto minimumX     = contentRight - totalWidth;
+        const auto maximumX     = contentLeft;
+        const auto cardsX       = totalWidth <= railWidth - railInset * 2.0 ? contentLeft + centered(railWidth - railInset * 2.0, totalWidth) :
+            std::clamp(unclampedX, minimumX, maximumX);
 
-        std::vector<std::int64_t> mainIds;
-        std::vector<std::int64_t> dockIds;
-        for (const auto id : ids) {
-            if (id == activeId || id == activeId - 1 || id == activeId + 1)
-                mainIds.push_back(id);
-            else
-                dockIds.push_back(id);
-        }
-        std::sort(mainIds.begin(), mainIds.end());
-        std::sort(dockIds.begin(), dockIds.end());
+        frame.rail = {
+            .bounds        = {.x = railX, .y = topPad, .width = railWidth, .height = railHeight},
+            .overflowLeft  = cardsX < contentLeft - 0.5,
+            .overflowRight = cardsX + totalWidth > contentRight + 0.5,
+        };
 
-        const auto dockCount = dockIds.size();
-        const auto dockWidth = dockCount == 0 ? 0.0 :
-            std::min(120.0, std::max(0.0, (contentWidth - static_cast<double>(dockCount - 1) * dockGap) / static_cast<double>(dockCount)));
-        const auto dockTotal = dockCount == 0 ? 0.0 :
-            static_cast<double>(dockCount) * dockWidth + static_cast<double>(dockCount - 1) * dockGap;
-        const auto activeX   = centered(renderSize.width, activeWidth);
-        const auto stackH    = activeHeight + (dockCount > 0 ? stageGap + dockHeight : 0.0);
-        const auto top       = topPad + centered(contentHeight, stackH);
-        const auto dockY     = top + activeHeight + stageGap;
-        const auto dockX     = centered(renderSize.width, dockTotal);
+        const auto stageSidePad = std::clamp(renderSize.width * 0.033, 24.0, 72.0);
+        const auto stageTop     = topPad + railHeight + std::clamp(renderSize.height * 0.042, 28.0, 48.0);
+        const auto stageBottom  = std::clamp(renderSize.height * 0.065, 48.0, 72.0);
+        const LayoutRect stageBounds{
+            .x      = stageSidePad,
+            .y      = std::min(stageTop, renderSize.height),
+            .width  = std::max(0.0, renderSize.width - stageSidePad * 2.0),
+            .height = std::max(0.0, renderSize.height - stageTop - stageBottom),
+        };
 
-        std::map<std::int64_t, LayoutRect> rects;
-        for (const auto id : mainIds) {
-            LayoutRect rect;
-            if (id == activeId) {
-                rect = {activeX, top, activeWidth, activeHeight};
-            } else if (id == activeId - 1) {
-                rect = {
-                    std::max(0.0, activeX - mainGap - sideWidth),
-                    top + centered(activeHeight, sideHeight),
-                    sideWidth,
-                    sideHeight,
-                };
-            } else {
-                rect = {
-                    std::min(renderSize.width - sideWidth, activeX + activeWidth + mainGap),
-                    top + centered(activeHeight, sideHeight),
-                    sideWidth,
-                    sideHeight,
-                };
+        const auto windowsForWorkspace = [&](std::int64_t id) {
+            std::vector<WindowSnapshot> windows;
+            for (const auto& window : state.windows) {
+                if (!window.mapped || window.workspaceId != id)
+                    continue;
+                if (window.monitorId != monitor.id && window.monitorId != -1)
+                    continue;
+                windows.push_back(window);
             }
-            rects[id] = rect;
-        }
-        for (std::size_t i = 0; i < dockCount; ++i) {
-            const auto id = dockIds[i];
-            rects[id] = {
-                dockX + static_cast<double>(i) * (dockWidth + dockGap),
-                dockY,
-                dockWidth,
-                dockHeight,
-            };
-        }
+            std::sort(windows.begin(), windows.end(), [](const auto& lhs, const auto& rhs) {
+                if (lhs.geometry.position.y != rhs.geometry.position.y)
+                    return lhs.geometry.position.y < rhs.geometry.position.y;
+                if (lhs.geometry.position.x != rhs.geometry.position.x)
+                    return lhs.geometry.position.x < rhs.geometry.position.x;
+                return lhs.stableId < rhs.stableId;
+            });
+            return windows;
+        };
 
-        for (const auto& [id, rect] : rects) {
+        const auto mapWindow = [&](const WindowSnapshot& window, const LayoutRect& target) {
+            const auto scale = std::min(target.width / monitorWidth, target.height / monitorHeight);
+            const auto desktopWidth = monitorWidth * scale;
+            const auto desktopHeight = monitorHeight * scale;
+            const auto originX = target.x + centered(target.width, desktopWidth);
+            const auto originY = target.y + centered(target.height, desktopHeight);
+            const auto localX = window.geometry.position.x - monitor.geometry.position.x;
+            const auto localY = window.geometry.position.y - monitor.geometry.position.y;
+            return LayoutRect{
+                .x      = originX + localX * scale,
+                .y      = originY + localY * scale,
+                .width  = std::max(1.0, window.geometry.size.width * scale),
+                .height = std::max(1.0, window.geometry.size.height * scale),
+            };
+        };
+
+        for (std::size_t index = 0; index < orderedIds.size(); ++index) {
+            const auto id = orderedIds[index];
+            const LayoutRect rect{
+                .x      = cardsX + static_cast<double>(index) * (cardWidth + cardGap),
+                .y      = topPad + railInset,
+                .width  = cardWidth,
+                .height = cardHeight,
+            };
             const auto found = workspaceById.find(id);
             const auto name  = found != workspaceById.end() && !found->second.name.empty() ? found->second.name : std::to_string(id);
             WorkspaceCard card{
@@ -155,49 +173,39 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 .empty       = true,
             };
 
-            const auto compact = rect.height <= 120.0;
-            const auto insetX  = compact ? 8.0 : 16.0;
-            const auto header  = compact ? 24.0 : 44.0;
-            const auto bottom  = compact ? 8.0 : 16.0;
-            const auto winGap  = compact ? 4.0 : 8.0;
-            const auto inner   = LayoutRect{
-                .x      = rect.x + insetX,
-                .y      = rect.y + std::min(header, rect.height),
-                .width  = std::max(0.0, rect.width - insetX * 2.0),
-                .height = std::max(0.0, rect.height - std::min(header, rect.height) - bottom),
-            };
-
-            std::vector<WindowSnapshot> windows;
-            for (const auto& window : state.windows) {
-                if (!window.mapped || window.workspaceId != id)
-                    continue;
-                if (window.monitorId != monitor.id && window.monitorId != -1)
-                    continue;
-                windows.push_back(window);
-            }
-            std::sort(windows.begin(), windows.end(), [](const auto& lhs, const auto& rhs) { return lhs.stableId < rhs.stableId; });
-
+            const auto windows = windowsForWorkspace(id);
             if (!windows.empty()) {
                 card.empty = false;
-                const auto winH = std::max(
-                    compact ? 4.0 : 24.0,
-                    (inner.height - winGap * static_cast<double>(windows.size() - 1)) / static_cast<double>(windows.size()));
-                for (std::size_t i = 0; i < windows.size(); ++i) {
+                const auto inner = inset(rect, 4.0);
+                for (const auto& window : windows) {
                     card.windows.push_back({
-                        .stableId    = windows[i].stableId,
+                        .stableId    = window.stableId,
                         .workspaceId = id,
-                        .rect        = {
-                            .x = inner.x,
-                            .y = inner.y + static_cast<double>(i) * (winH + winGap),
-                            .width = inner.width,
-                            .height = winH,
-                        },
-                        .label = labelFor(windows[i]),
+                        .rect        = mapWindow(window, inner),
+                        .label       = labelFor(window),
                     });
                 }
             }
 
             frame.workspaces.push_back(std::move(card));
+        }
+
+        const auto stageFound = workspaceById.find(previewId);
+        frame.stage = {
+            .workspaceId = previewId,
+            .name        = stageFound != workspaceById.end() && !stageFound->second.name.empty() ? stageFound->second.name : std::to_string(previewId),
+            .bounds = stageBounds,
+            .windows     = {},
+            .empty       = true,
+        };
+        for (const auto& window : windowsForWorkspace(previewId)) {
+            frame.stage.empty = false;
+            frame.stage.windows.push_back({
+                .stableId    = window.stableId,
+                .workspaceId = previewId,
+                .rect        = mapWindow(window, stageBounds),
+                .label       = labelFor(window),
+            });
         }
 
         return frame;
