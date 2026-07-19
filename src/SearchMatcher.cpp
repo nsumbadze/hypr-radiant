@@ -39,6 +39,15 @@ std::vector<std::uint64_t> SearchMatcher::matchingWindowIds(const WorkspaceWallF
     return matches;
 }
 
+std::vector<std::uint64_t> SearchMatcher::matchingStageWindowIds(const WorkspaceWallFrame& frame, std::string_view query) const {
+    std::vector<std::uint64_t> matches;
+    for (const auto& window : frame.stage.windows) {
+        if (query.empty() || this->matches(window.label, query) || this->matches(window.appClass, query))
+            matches.push_back(window.stableId);
+    }
+    return matches;
+}
+
 std::optional<OverviewTarget> SearchMatcher::firstMatch(const WorkspaceWallFrame& frame, std::string_view query) const {
     if (query.empty())
         return std::nullopt;

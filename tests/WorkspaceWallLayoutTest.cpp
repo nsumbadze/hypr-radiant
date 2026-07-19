@@ -67,6 +67,7 @@ void focusedStageUsesRealWorkspacesPlusEmptyNext() {
     assert(frame.workspaces.at(0).workspaceId == 1);
     assert(frame.workspaces.at(1).workspaceId == 2);
     assert(frame.workspaces.at(2).workspaceId == 3);
+    assert(frame.workspaces.at(2).createTarget);
     assert(frame.workspaces.at(0).empty);
     assert(frame.workspaces.at(2).empty);
     assert(!frame.workspaces.at(1).empty);
@@ -89,6 +90,7 @@ void focusedStageDoesNotGeneratePhantomWorkspacesForGaps() {
     assert(frame.workspaces.at(0).workspaceId == 1);
     assert(frame.workspaces.at(1).workspaceId == 5);
     assert(frame.workspaces.at(2).workspaceId == 6);
+    assert(frame.workspaces.at(2).createTarget);
     assert(frame.workspaces.at(0).empty);
     assert(frame.workspaces.at(1).empty);
     assert(frame.workspaces.at(2).empty);
@@ -204,13 +206,15 @@ void multiMonitorPerFrameBounds() {
     assert(frame1.workspaces.size() == 3);
     assert(frame1.workspaces.at(0).workspaceId == 1);
     assert(frame1.workspaces.at(1).workspaceId == 2);
-    assert(frame1.workspaces.at(2).workspaceId == 3);
+    assert(frame1.workspaces.at(2).workspaceId == 6);
+    assert(frame1.workspaces.at(2).createTarget);
 
     assert(frame2.monitorId == 2);
     assert(frame2.workspaces.size() == 3);
     assert(frame2.workspaces.at(0).workspaceId == 4);
     assert(frame2.workspaces.at(1).workspaceId == 5);
     assert(frame2.workspaces.at(2).workspaceId == 6);
+    assert(frame2.workspaces.at(2).createTarget);
     assert(frame2.workspaces.at(2).empty);
 }
 
@@ -300,6 +304,49 @@ void fillsEmptySlotsAndFallsBackToClassName() {
     assert(frame.workspaces.at(5).empty);
 }
 
+void groupedModeOrdersApplicationsAndMarksHeaders() {
+    auto state = sampleState();
+    state.windows.push_back({.stableId = 11, .title = "Browser", .className = "Firefox", .workspaceId = 2, .monitorId = 1, .mapped = true});
+    state.windows.push_back({.stableId = 12, .title = "Second editor", .className = "Code", .workspaceId = 2, .monitorId = 1, .mapped = true});
+    auto options = stageOptions();
+    options.mode = OverviewMode::Grouped;
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, options);
+
+    assert(frame.stage.windows.size() == 3);
+    assert(frame.stage.windows.at(0).appClass == "Code");
+    assert(frame.stage.windows.at(0).appGroupStart);
+    assert(!frame.stage.windows.at(1).appGroupStart);
+    assert(frame.stage.windows.at(2).appClass == "Firefox");
+    assert(frame.stage.windows.at(2).appGroupStart);
+}
+
+void appExposeFiltersAcrossLocalWorkspaces() {
+    auto state = sampleState();
+    state.windows.push_back({.stableId = 20, .title = "Other space", .className = "Code", .workspaceId = 1, .monitorId = 1, .mapped = true});
+    state.windows.push_back({.stableId = 21, .title = "Other app", .className = "Firefox", .workspaceId = 1, .monitorId = 1, .mapped = true});
+    state.windows.push_back({.stableId = 22, .title = "Other monitor", .className = "Code", .workspaceId = 3, .monitorId = 2, .mapped = true});
+    auto options = stageOptions();
+    options.mode = OverviewMode::AppExpose;
+    options.applicationFilter = "Code";
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, options);
+
+    assert(frame.stage.name == "Code");
+    assert(frame.stage.windows.size() == 2);
+    assert(frame.stage.windows.at(0).stableId == 20);
+    assert(frame.stage.windows.at(1).stableId == 10);
+}
+
+void newWorkspaceTargetAvoidsOtherMonitorIds() {
+    auto state = sampleState();
+    state.workspaces.push_back({.id = 7, .name = "remote", .monitorId = 2, .monitorName = "HDMI-A-1"});
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
+
+    assert(frame.workspaces.back().createTarget);
+    assert(frame.workspaces.back().workspaceId == 8);
+}
+
 } // namespace
 
 int main() {
@@ -317,6 +364,9 @@ int main() {
     tinyRenderSizeDoesNotProduceNegativeRects();
     sortsWindowsByStableId();
     fillsEmptySlotsAndFallsBackToClassName();
+    groupedModeOrdersApplicationsAndMarksHeaders();
+    appExposeFiltersAcrossLocalWorkspaces();
+    newWorkspaceTargetAvoidsOtherMonitorIds();
     std::cout << "WorkspaceWallLayoutTest passed\n";
     return 0;
 }

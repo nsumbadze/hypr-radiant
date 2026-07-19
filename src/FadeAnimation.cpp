@@ -29,6 +29,15 @@ void FadeAnimation::hideImmediate() {
     m_duration      = std::chrono::milliseconds{0};
 }
 
+void FadeAnimation::setProgress(double value, bool targetVisible) {
+    m_currentValue = std::clamp(value, 0.0, 1.0);
+    m_startValue = m_currentValue;
+    m_targetValue = m_currentValue;
+    m_targetVisible = targetVisible;
+    m_running = false;
+    m_duration = std::chrono::milliseconds{0};
+}
+
 double FadeAnimation::value() {
     update(Clock::now());
     return m_currentValue;

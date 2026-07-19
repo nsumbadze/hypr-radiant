@@ -14,6 +14,7 @@ class SearchMatcher {
   public:
     [[nodiscard]] bool matches(std::string_view label, std::string_view query) const;
     [[nodiscard]] std::vector<std::uint64_t> matchingWindowIds(const WorkspaceWallFrame& frame, std::string_view query) const;
+    [[nodiscard]] std::vector<std::uint64_t> matchingStageWindowIds(const WorkspaceWallFrame& frame, std::string_view query) const;
     [[nodiscard]] std::optional<OverviewTarget> firstMatch(const WorkspaceWallFrame& frame, std::string_view query) const;
 };
 

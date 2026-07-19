@@ -30,9 +30,45 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         "plugin:radiant:accent_color",
         "Overview accent color, or auto to inherit the focused Hyprland border.",
         "auto");
+    m_backgroundColor = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:background_color", "Overview glass background color.", "111c18");
+    m_foregroundColor = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:foreground_color", "Overview text color.", "C1C497");
+    m_fontFamily = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:font_family", "Overview interface font family.", "JetBrainsMono Nerd Font");
+
+    m_gestureEnabled = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:gesture_enabled", "Enable interactive overview trackpad gestures.", 0,
+        Config::Values::SIntValueOptions{.min = 0, .max = 1});
+    m_gestureFingers = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:gesture_fingers", "Trackpad finger count for overview gestures.", 3,
+        Config::Values::SIntValueOptions{.min = 3, .max = 4});
+    m_gestureDistance = makeShared<Config::Values::CFloatValue>(
+        "plugin:radiant:gesture_distance", "Trackpad travel required to fully open the overview.", 300.0F,
+        Config::Values::SFloatValueOptions{.min = 120.0F, .max = 800.0F});
 
     return HyprlandAPI::addConfigValueV2(handle, m_opacity) && HyprlandAPI::addConfigValueV2(handle, m_animationDurationMs) &&
-        HyprlandAPI::addConfigValueV2(handle, m_layout) && HyprlandAPI::addConfigValueV2(handle, m_accentColor);
+        HyprlandAPI::addConfigValueV2(handle, m_layout) && HyprlandAPI::addConfigValueV2(handle, m_accentColor) &&
+        HyprlandAPI::addConfigValueV2(handle, m_backgroundColor) && HyprlandAPI::addConfigValueV2(handle, m_foregroundColor) &&
+        HyprlandAPI::addConfigValueV2(handle, m_fontFamily) &&
+        HyprlandAPI::addConfigValueV2(handle, m_gestureEnabled) && HyprlandAPI::addConfigValueV2(handle, m_gestureFingers) &&
+        HyprlandAPI::addConfigValueV2(handle, m_gestureDistance);
+}
+
+bool RadiantConfig::gestureEnabled() const {
+    return m_gestureEnabled && m_gestureEnabled->value() != 0;
+}
+
+int RadiantConfig::gestureFingers() const {
+    if (!m_gestureFingers)
+        return 3;
+    return static_cast<int>(std::clamp(m_gestureFingers->value(), static_cast<Config::INTEGER>(3), static_cast<Config::INTEGER>(4)));
+}
+
+double RadiantConfig::gestureDistance() const {
+    if (!m_gestureDistance)
+        return 300.0;
+    return std::clamp(static_cast<double>(m_gestureDistance->value()), 120.0, 800.0);
 }
 
 float RadiantConfig::opacity() const {
@@ -65,6 +101,26 @@ std::optional<CHyprColor> RadiantConfig::accentColorOverride() const {
         return std::nullopt;
 
     return CHyprColor{parsed->red, parsed->green, parsed->blue, parsed->alpha};
+}
+
+CHyprColor RadiantConfig::backgroundColor() const {
+    const auto parsed = m_backgroundColor ? parseAccentColor(m_backgroundColor->value()) : std::nullopt;
+    if (!parsed)
+        return {0.067F, 0.110F, 0.094F, 1.0F};
+    return {parsed->red, parsed->green, parsed->blue, parsed->alpha};
+}
+
+CHyprColor RadiantConfig::foregroundColor() const {
+    const auto parsed = m_foregroundColor ? parseAccentColor(m_foregroundColor->value()) : std::nullopt;
+    if (!parsed)
+        return {0.757F, 0.769F, 0.592F, 1.0F};
+    return {parsed->red, parsed->green, parsed->blue, parsed->alpha};
+}
+
+std::string RadiantConfig::fontFamily() const {
+    if (!m_fontFamily || m_fontFamily->value().empty())
+        return "monospace";
+    return m_fontFamily->value();
 }
 
 LayoutMode parseLayoutMode(std::string_view value) {

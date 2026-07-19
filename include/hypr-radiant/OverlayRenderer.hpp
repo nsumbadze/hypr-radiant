@@ -21,6 +21,18 @@ class ITexture;
 
 namespace hypr_radiant {
 
+enum class PointerActionType {
+    None,
+    Activate,
+    MoveWindow,
+};
+
+struct PointerAction {
+    PointerActionType type = PointerActionType::None;
+    OverviewTarget target;
+    std::uint64_t windowId = 0;
+};
+
 class OverlayRenderer {
   public:
     explicit OverlayRenderer(const RadiantConfig& config);
@@ -28,6 +40,7 @@ class OverlayRenderer {
     void install();
     void uninstall();
     void show(RadiantState state);
+    void showAppExpose(RadiantState state, std::string applicationClass);
     void toggle(RadiantState state);
     void hideImmediate();
     void moveSelection(NavigationDirection direction);
@@ -36,9 +49,17 @@ class OverlayRenderer {
     void beginSearch();
     void backspaceSearch();
     void clearSearchOrHide();
+    void toggleGroupedMode();
+    void pointerMoved(double x, double y);
+    [[nodiscard]] PointerAction pointerButton(bool pressed, double x, double y);
+    void refresh(RadiantState state);
+    void beginGestureOpen(RadiantState state);
+    void setGestureProgress(bool opening, double progress);
+    void finishGesture(bool opening, bool commit);
 
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] bool           searchActive() const noexcept;
+    [[nodiscard]] OverviewMode   mode() const noexcept;
     [[nodiscard]] OverviewTarget selectedTarget() const noexcept;
     [[nodiscard]] OverviewTarget hitTest(double x, double y) const;
 
@@ -67,6 +88,7 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* frameForSelectedTarget() const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
+    void resetPointerInteraction();
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;
@@ -84,10 +106,18 @@ class OverlayRenderer {
     std::int64_t                                          m_selectedFrameMonitorId = -1;
     std::string                                           m_searchQuery;
     bool                                                  m_searchActive = false;
+    OverviewMode                                          m_mode = OverviewMode::Spatial;
+    std::string                                           m_applicationFilter;
     OverviewTarget                                        m_preSearchTarget;
     std::int64_t                                          m_preSearchMonitorId = -1;
     std::unordered_set<std::uint64_t>                     m_searchMatches;
     std::unordered_map<std::string, SP<Render::ITexture>> m_textures;
+    OverviewTarget                                        m_pointerDownTarget;
+    OverviewTarget                                        m_dragTarget;
+    RadiantPoint                                            m_pointerDownPosition;
+    RadiantPoint                                            m_pointerPosition;
+    bool                                                  m_pointerDown = false;
+    bool                                                  m_dragging = false;
 };
 
 } // namespace hypr_radiant

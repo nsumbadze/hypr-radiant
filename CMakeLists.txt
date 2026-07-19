@@ -46,10 +46,13 @@ add_library(hypr-radiant MODULE
     src/ActivationController.cpp
     src/Config.cpp
     src/FadeAnimation.cpp
+    src/GestureController.cpp
+    src/SwipeTracker.cpp
     src/HitTester.cpp
     src/InputController.cpp
     src/main.cpp
     src/OverlayRenderer.cpp
+    src/OpeningInputGuard.cpp
     src/SearchMatcher.cpp
     src/SearchPanelGeometry.cpp
     src/WorkspaceWallLayout.cpp
@@ -174,4 +177,26 @@ if(BUILD_TESTING)
     hypr_radiant_enable_sanitizers(hypr-radiant-fade-tests)
 
     add_test(NAME hypr-radiant-fade-tests COMMAND hypr-radiant-fade-tests)
+
+    add_executable(hypr-radiant-gesture-tests
+        tests/GestureControllerTest.cpp
+        src/SwipeTracker.cpp
+    )
+    target_include_directories(hypr-radiant-gesture-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-gesture-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-gesture-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-gesture-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-gesture-tests)
+    add_test(NAME hypr-radiant-gesture-tests COMMAND hypr-radiant-gesture-tests)
+
+    add_executable(hypr-radiant-input-guard-tests
+        tests/OpeningInputGuardTest.cpp
+        src/OpeningInputGuard.cpp
+    )
+    target_include_directories(hypr-radiant-input-guard-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-input-guard-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-input-guard-tests PRIVATE -UNDEBUG)
+    hypr_radiant_enable_warnings(hypr-radiant-input-guard-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-input-guard-tests)
+    add_test(NAME hypr-radiant-input-guard-tests COMMAND hypr-radiant-input-guard-tests)
 endif()

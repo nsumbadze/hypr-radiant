@@ -12,6 +12,7 @@ namespace hypr_radiant {
 namespace {
 
 constexpr auto INPUT_ARM_DELAY = std::chrono::milliseconds{220};
+constexpr auto ACTIVATION_ARM_DELAY = std::chrono::milliseconds{700};
 
 bool pressed(wl_keyboard_key_state state) {
     return state == WL_KEYBOARD_KEY_STATE_PRESSED;
@@ -33,12 +34,13 @@ std::optional<char> searchCharForKey(uint32_t key) {
 
 } // namespace
 
-void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace,
-    MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close) {
+void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
+    MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close, ToggleModeFn toggleMode) {
     m_active   = std::move(active);
     m_hitTest  = std::move(hitTest);
     m_activate = std::move(activate);
-    m_selectAt = std::move(selectAt);
+    m_pointerMove = std::move(pointerMove);
+    m_pointerButton = std::move(pointerButton);
     m_textInput = std::move(textInput);
     m_backspace = std::move(backspace);
     m_move     = std::move(move);
@@ -46,6 +48,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
     m_openSearch = std::move(openSearch);
     m_jump     = std::move(jump);
     m_close    = std::move(close);
+    m_toggleMode = std::move(toggleMode);
 
     m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](Vector2D position, Event::SCallbackInfo& info) {
         if (!m_active || !m_active())
@@ -55,29 +58,27 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!inputArmed())
             return;
 
-        if (m_selectAt)
-            m_selectAt(position.x, position.y);
+        if (m_pointerMove)
+            m_pointerMove(position.x, position.y);
     });
 
     m_mouseButtonListener = Event::bus()->m_events.input.mouse.button.listen([this](IPointer::SButtonEvent event, Event::SCallbackInfo& info) {
+        const auto isPressed = pointerPressed(event.state);
+        const auto suppressed = m_openingInputGuard.buttonEvent(event.button, isPressed);
         if (!m_active || !m_active())
             return;
 
-        info.cancelled = true;
+        info.cancelled = shouldCancelInputEvent(isPressed, inputArmed(), suppressed);
 
-        if (!inputArmed())
-            return;
-
-        if (!pointerPressed(event.state))
+        if (!inputArmed() || !activationArmed() || suppressed || event.button != BTN_LEFT)
             return;
 
         if (!g_pInputManager)
             return;
 
-        const auto pos    = g_pInputManager->getMouseCoordsInternal();
-        const auto target = m_hitTest ? m_hitTest(pos.x, pos.y) : OverviewTarget{};
-        if (target.type != OverviewTargetType::None && m_activate)
-            m_activate(target);
+        const auto pos = g_pInputManager->getMouseCoordsInternal();
+        if (m_pointerButton)
+            m_pointerButton(isPressed, pos.x, pos.y);
     });
 
     m_mouseAxisListener = Event::bus()->m_events.input.mouse.axis.listen([this](IPointer::SAxisEvent event, Event::SCallbackInfo& info) {
@@ -105,15 +106,17 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
     });
 
     m_keyListener = Event::bus()->m_events.input.keyboard.key.listen([this](IKeyboard::SKeyEvent event, Event::SCallbackInfo& info) {
+        const auto isPressed = pressed(event.state);
+        const auto suppressed = m_openingInputGuard.keyEvent(event.keycode, isPressed);
         if (!m_active || !m_active())
             return;
 
-        info.cancelled = true;
+        info.cancelled = shouldCancelInputEvent(isPressed, inputArmed(), suppressed);
 
-        if (!inputArmed())
+        if (!inputArmed() || suppressed)
             return;
 
-        if (!pressed(event.state))
+        if (!isPressed)
             return;
 
         const auto key = event.keycode;
@@ -124,6 +127,8 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         }
 
         if (key == KEY_ENTER || key == KEY_KPENTER) {
+            if (!activationArmed())
+                return;
             if (m_activate)
                 m_activate({});
             return;
@@ -138,6 +143,14 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (key == KEY_SLASH) {
             if (m_openSearch)
                 m_openSearch();
+            return;
+        }
+
+        if (key == KEY_TAB) {
+            if (!m_searchActive || !m_searchActive()) {
+                if (m_toggleMode)
+                    m_toggleMode();
+            }
             return;
         }
 
@@ -180,8 +193,15 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
     m_seatGrab->m_keyboard = true;
 }
 
-void InputController::grabKeyboard() {
-    m_acceptInputAfter = Clock::now() + INPUT_ARM_DELAY;
+void InputController::grabKeyboard(bool waitForOpeningRelease) {
+    const auto now = Clock::now();
+    m_acceptInputAfter = now + INPUT_ARM_DELAY;
+    m_acceptActivationAfter = now + ACTIVATION_ARM_DELAY;
+    m_openingInputGuard.arm(waitForOpeningRelease);
+    if (waitForOpeningRelease) {
+        m_openingInputGuard.suppressKeyUntilRelease(KEY_ENTER);
+        m_openingInputGuard.suppressKeyUntilRelease(KEY_KPENTER);
+    }
     if (m_seatGrab && g_pSeatManager)
         g_pSeatManager->setGrab(m_seatGrab);
 }
@@ -200,7 +220,8 @@ void InputController::uninstall() {
     m_active = {};
     m_hitTest = {};
     m_activate = {};
-    m_selectAt = {};
+    m_pointerMove = {};
+    m_pointerButton = {};
     m_textInput = {};
     m_backspace = {};
     m_move = {};
@@ -208,12 +229,19 @@ void InputController::uninstall() {
     m_openSearch = {};
     m_jump = {};
     m_close = {};
+    m_toggleMode = {};
     m_scrollAccumulator = 0.0;
     m_acceptInputAfter = Clock::time_point::min();
+    m_acceptActivationAfter = Clock::time_point::min();
+    m_openingInputGuard.reset();
 }
 
 bool InputController::inputArmed() const noexcept {
     return Clock::now() >= m_acceptInputAfter;
+}
+
+bool InputController::activationArmed() const noexcept {
+    return Clock::now() >= m_acceptActivationAfter && m_openingInputGuard.openingReleaseObserved();
 }
 
 } // namespace hypr_radiant

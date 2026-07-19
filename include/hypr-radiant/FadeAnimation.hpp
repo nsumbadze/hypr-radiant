@@ -8,6 +8,7 @@ class FadeAnimation {
   public:
     void animateTo(bool visible, int durationMs);
     void hideImmediate();
+    void setProgress(double value, bool targetVisible);
 
     [[nodiscard]] double value();
     [[nodiscard]] bool   targetVisible() const noexcept;

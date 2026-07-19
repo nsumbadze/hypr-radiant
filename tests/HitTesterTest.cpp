@@ -162,6 +162,17 @@ void focusedRailTreatsMiniaturesAsWorkspaceTargets() {
     assert(target.workspaceId == 1);
 }
 
+void createCardHasDedicatedTarget() {
+    auto testFrame = focusedFrame();
+    testFrame.workspaces.at(1).createTarget = true;
+
+    const auto target = HitTester{}.hitTest(testFrame, 300, 60);
+
+    assert(target.type == OverviewTargetType::NewWorkspace);
+    assert(target.workspaceId == 2);
+    assert(target.monitorId == testFrame.monitorId);
+}
+
 void focusedStageWindowsAreInteractive() {
     const auto target = HitTester{}.hitTest(focusedFrame(), 100, 280);
     assert(target.type == OverviewTargetType::Window);
@@ -200,6 +211,7 @@ int main() {
     emptyFrameHasNoInitialSelection();
     missingCurrentFallsBackToInitialSelection();
     focusedRailTreatsMiniaturesAsWorkspaceTargets();
+    createCardHasDedicatedTarget();
     focusedStageWindowsAreInteractive();
     focusedNavigationEntersStageAndReturnsToRail();
     std::cout << "HitTesterTest passed\n";

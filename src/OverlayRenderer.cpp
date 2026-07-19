@@ -59,6 +59,14 @@ void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int roun
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(data));
 }
 
+CHyprColor tintedSurface(CHyprColor surface, CHyprColor tint, double amount) {
+    const auto mix = static_cast<float>(std::clamp(amount, 0.0, 1.0));
+    surface.r = std::lerp(surface.r, tint.r, mix);
+    surface.g = std::lerp(surface.g, tint.g, mix);
+    surface.b = std::lerp(surface.b, tint.b, mix);
+    return surface;
+}
+
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
     for (const auto& monitor : state.monitors) {
         if (monitor.id == id)
@@ -175,7 +183,7 @@ MonitorSnapshot snapshotForCurrentMonitor(const PHLMONITOR& monitor) {
     return snapshot;
 }
 
-WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorkspaceId = -1) {
+WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorkspaceId, OverviewMode overviewMode, const std::string& applicationFilter) {
     if (mode == LayoutMode::WorkspaceWall)
         return {};
 
@@ -187,6 +195,8 @@ WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorks
         .windowInset           = 16.0,
         .focusedStage          = true,
         .previewWorkspaceId    = previewWorkspaceId,
+        .mode                  = overviewMode,
+        .applicationFilter     = applicationFilter,
     };
 }
 
@@ -236,7 +246,10 @@ void OverlayRenderer::uninstall() {
 }
 
 void OverlayRenderer::show(RadiantState state) {
+    m_mode = OverviewMode::Spatial;
+    m_applicationFilter.clear();
     m_state = std::move(state);
+    resetPointerInteraction();
     m_previousFrames.clear();
     clearSearch();
     rebuildFrames();
@@ -253,6 +266,32 @@ void OverlayRenderer::show(RadiantState state) {
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
+    damageAllMonitors();
+}
+
+void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationClass) {
+    m_mode = OverviewMode::AppExpose;
+    m_applicationFilter = std::move(applicationClass);
+    m_state = std::move(state);
+    resetPointerInteraction();
+    m_previousFrames.clear();
+    clearSearch();
+    rebuildFrames();
+
+    if (const auto* frame = activeMonitorFrame()) {
+        m_selectedFrameMonitorId = frame->monitorId;
+        if (!frame->stage.windows.empty()) {
+            const auto& window = frame->stage.windows.front();
+            m_selectedTarget = {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
+        } else {
+            m_selectedTarget = m_hitTester.initialSelection(*frame);
+        }
+    }
+
+    m_textures.clear();
+    m_animation.animateTo(true, m_config.animationDurationMs());
+    m_stageTransition.hideImmediate();
+    m_stageTransition.animateTo(true, m_config.animationDurationMs());
     damageAllMonitors();
 }
 
@@ -317,6 +356,93 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     damageAllMonitors();
 }
 
+void OverlayRenderer::pointerMoved(double x, double y) {
+    m_pointerPosition = {.x = x, .y = y};
+    if (!m_pointerDown) {
+        selectTargetAt(x, y);
+        return;
+    }
+
+    if (m_pointerDownTarget.type != OverviewTargetType::Window)
+        return;
+
+    const auto dx = x - m_pointerDownPosition.x;
+    const auto dy = y - m_pointerDownPosition.y;
+    if (!m_dragging && std::hypot(dx, dy) >= 8.0)
+        m_dragging = true;
+
+    if (!m_dragging)
+        return;
+
+    const auto target = hitTest(x, y);
+    m_dragTarget = target.type == OverviewTargetType::Workspace || target.type == OverviewTargetType::NewWorkspace ? target : OverviewTarget{};
+    if (m_dragTarget.type != OverviewTargetType::None) {
+        m_selectedTarget = m_dragTarget;
+        m_selectedFrameMonitorId = m_dragTarget.monitorId;
+    }
+    damageAllMonitors();
+}
+
+PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
+    if (pressed) {
+        m_pointerDown = true;
+        m_dragging = false;
+        m_pointerDownPosition = {.x = x, .y = y};
+        m_pointerPosition = m_pointerDownPosition;
+        m_pointerDownTarget = hitTest(x, y);
+        m_dragTarget = {};
+        return {};
+    }
+
+    if (!m_pointerDown)
+        return {};
+
+    pointerMoved(x, y);
+    PointerAction action;
+    if (m_dragging && m_dragTarget.type != OverviewTargetType::None) {
+        action = {.type = PointerActionType::MoveWindow, .target = m_dragTarget, .windowId = m_pointerDownTarget.windowId};
+    } else if (!m_dragging) {
+        const auto releasedTarget = hitTest(x, y);
+        if (sameTarget(releasedTarget, m_pointerDownTarget))
+            action = {.type = PointerActionType::Activate, .target = releasedTarget};
+    }
+
+    resetPointerInteraction();
+    damageAllMonitors();
+    return action;
+}
+
+void OverlayRenderer::refresh(RadiantState state) {
+    m_state = std::move(state);
+    m_previousFrames = m_frames;
+    rebuildFrames();
+    m_stageTransition.hideImmediate();
+    m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    m_textures.clear();
+    damageAllMonitors();
+}
+
+void OverlayRenderer::beginGestureOpen(RadiantState state) {
+    show(std::move(state));
+    m_animation.setProgress(0.0, true);
+    m_stageTransition.setProgress(0.0, true);
+    damageAllMonitors();
+}
+
+void OverlayRenderer::setGestureProgress(bool opening, double progress) {
+    const auto visibleProgress = opening ? progress : 1.0 - progress;
+    m_animation.setProgress(visibleProgress, true);
+    m_stageTransition.setProgress(visibleProgress, true);
+    damageAllMonitors();
+}
+
+void OverlayRenderer::finishGesture(bool opening, bool commit) {
+    const auto visible = opening ? commit : !commit;
+    m_animation.animateTo(visible, m_config.animationDurationMs());
+    m_stageTransition.animateTo(visible, m_config.animationDurationMs());
+    damageAllMonitors();
+}
+
 void OverlayRenderer::appendSearchChar(char value) {
     if (m_searchQuery.size() >= 64)
         return;
@@ -369,6 +495,24 @@ void OverlayRenderer::clearSearchOrHide() {
     hideImmediate();
 }
 
+void OverlayRenderer::toggleGroupedMode() {
+    if (m_config.layoutMode() != LayoutMode::Stage || m_searchActive)
+        return;
+
+    m_mode = m_mode == OverviewMode::Grouped ? OverviewMode::Spatial : OverviewMode::Grouped;
+    m_applicationFilter.clear();
+    m_previousFrames = m_frames;
+    rebuildFrames();
+    if (const auto* frame = frameForMonitor(m_selectedFrameMonitorId)) {
+        if (!targetInFrame(*frame, m_selectedTarget))
+            m_selectedTarget = m_hitTester.initialSelection(*frame);
+    }
+    m_stageTransition.hideImmediate();
+    m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    m_textures.clear();
+    damageAllMonitors();
+}
+
 void OverlayRenderer::hideImmediate() {
     const auto wasRenderable = m_animation.renderable();
     m_animation.hideImmediate();
@@ -380,9 +524,19 @@ void OverlayRenderer::hideImmediate() {
     m_selectedTarget = {};
     m_selectedFrameMonitorId = -1;
     clearSearch();
+    resetPointerInteraction();
 
     if (wasRenderable)
         damageAllMonitors();
+}
+
+void OverlayRenderer::resetPointerInteraction() {
+    m_pointerDownTarget = {};
+    m_dragTarget = {};
+    m_pointerDownPosition = {};
+    m_pointerPosition = {};
+    m_pointerDown = false;
+    m_dragging = false;
 }
 
 bool OverlayRenderer::active() const noexcept {
@@ -391,6 +545,10 @@ bool OverlayRenderer::active() const noexcept {
 
 bool OverlayRenderer::searchActive() const noexcept {
     return m_searchActive;
+}
+
+OverviewMode OverlayRenderer::mode() const noexcept {
+    return m_mode;
 }
 
 OverviewTarget OverlayRenderer::selectedTarget() const noexcept {
@@ -439,7 +597,9 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
     const auto& damage = g_pHyprRenderer->renderData().damage;
     const auto backdropAlpha = alpha * m_config.opacity();
 
-    auto backdrop = m_config.layoutMode() == LayoutMode::Stage ? Theme::stageBackdropColor() : Theme::backdropColor();
+    auto backdrop = m_config.layoutMode() == LayoutMode::Stage ? m_config.backgroundColor() : Theme::backdropColor();
+    if (m_config.layoutMode() == LayoutMode::Stage)
+        backdrop.a = Theme::stageBackdropColor().a;
     backdrop.a *= backdropAlpha;
     drawRect(box, backdrop, damage, 0, true);
 
@@ -474,7 +634,8 @@ void OverlayRenderer::rebuildFrames() {
             const auto previewWorkspaceId = snapshot.id == m_selectedFrameMonitorId && m_selectedTarget.workspaceId > 0 ?
                 m_selectedTarget.workspaceId : snapshot.activeWorkspaceId;
             m_frameBoundsByMonitor[snapshot.id] = globalBoundsForMonitor(monitor, renderSize);
-            m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize, layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId)));
+            m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize,
+                layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
         }
     }
 
@@ -492,7 +653,8 @@ void OverlayRenderer::rebuildFrames() {
             };
             const auto previewWorkspaceId = monitor.id == m_selectedFrameMonitorId && m_selectedTarget.workspaceId > 0 ?
                 m_selectedTarget.workspaceId : monitor.activeWorkspaceId;
-            m_frames.push_back(m_layout.compute(m_state, monitor, renderSize, layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId)));
+            m_frames.push_back(m_layout.compute(m_state, monitor, renderSize,
+                layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
         }
     }
 
@@ -508,6 +670,13 @@ void OverlayRenderer::rebuildSearchMatches() {
         return;
 
     for (const auto& frame : m_frames) {
+        if (m_mode != OverviewMode::Spatial) {
+            if (frame.monitorId != m_selectedFrameMonitorId)
+                continue;
+            const auto matches = m_searchMatcher.matchingStageWindowIds(frame, m_searchQuery);
+            m_searchMatches.insert(matches.begin(), matches.end());
+            continue;
+        }
         if (m_searchQuery.empty()) {
             for (const auto& workspace : frame.workspaces) {
                 for (const auto& window : workspace.windows)
@@ -543,7 +712,20 @@ std::vector<OverviewTarget> OverlayRenderer::matchingSearchTargets() const {
     std::unordered_set<std::int64_t> workspaceIds;
     std::unordered_set<std::uint64_t> windowIds;
     for (const auto& frame : m_frames) {
+        if (m_mode != OverviewMode::Spatial) {
+            if (frame.monitorId != m_selectedFrameMonitorId)
+                continue;
+            for (const auto& window : frame.stage.windows) {
+                if (m_searchMatches.contains(window.stableId) && !windowIds.contains(window.stableId)) {
+                    targets.push_back({.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
+                    windowIds.insert(window.stableId);
+                }
+            }
+            continue;
+        }
         for (const auto& workspace : frame.workspaces) {
+            if (workspace.createTarget)
+                continue;
             const auto workspaceNumber = std::to_string(workspace.workspaceId);
             if (!workspaceIds.contains(workspace.workspaceId) &&
                 (m_searchQuery.empty() || m_searchMatcher.matches(workspace.name, m_searchQuery) || m_searchMatcher.matches(workspaceNumber, m_searchQuery))) {
@@ -763,6 +945,9 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     const auto monitorMultiplier = m_selectedFrameMonitorId == -1 || frame.monitorId == m_selectedFrameMonitorId ? 1.0 : 0.72;
     const auto contentAlpha = alpha * searchMultiplier * monitorMultiplier;
     const auto accent       = resolvedAccentColor();
+    const auto background   = m_config.backgroundColor();
+    const auto railSurface  = tintedSurface(Theme::railColor(), background, 0.46);
+    const auto stageSurface = tintedSurface(Theme::stageWindowFill(1.0F), background, 0.34);
     const auto railBox      = boxFor(frame.rail.bounds);
     const auto transition   = std::clamp(m_stageTransition.value(), 0.0, 1.0);
     const auto previousFrameIt = std::ranges::find_if(m_previousFrames, [&frame](const WorkspaceWallFrame& candidate) {
@@ -772,7 +957,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
     drawRect(CBox{railBox.x + 7.0, railBox.y + 10.0, railBox.w, railBox.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.72), damage,
         Theme::railRadius() + 2);
-    drawRect(railBox, withAlpha(Theme::railColor(), contentAlpha), damage, Theme::railRadius(), true);
+    drawRect(railBox, withAlpha(railSurface, contentAlpha), damage, Theme::railRadius(), true);
 
     if (g_pHyprRenderer && railBox.w > 0.0 && railBox.h > 0.0) {
         CBorderPassElement::SBorderData border;
@@ -808,7 +993,14 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         }
 
         drawRect(CBox{cardBox.x + 3.0, cardBox.y + 5.0, cardBox.w, cardBox.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.55), damage, radius);
-        drawRect(cardBox, Theme::railCardFill(selected, workspace.empty, static_cast<float>(contentAlpha)), damage, radius);
+        auto cardFill = tintedSurface(Theme::railCardFill(selected, workspace.empty, static_cast<float>(contentAlpha)), background, 0.30);
+        if (selected && !workspace.createTarget)
+            cardFill = tintedSurface(cardFill, accent, 0.22);
+        drawRect(cardBox, cardFill, damage, radius);
+
+        if (workspace.createTarget)
+            renderLabel("+", cardBox.x + centered(cardBox.w, 24.0), cardBox.y + centered(cardBox.h, 28.0),
+                24.0, Theme::titleSize(), contentAlpha * (selected ? 1.0 : 0.62), damage);
 
         for (const auto& window : workspace.windows) {
             auto previewBox = boxFor(window.rect);
@@ -832,8 +1024,9 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 withAlpha(accent, contentAlpha * 0.72), damage, 2);
         }
 
-        const auto label = workspace.name == std::to_string(workspace.workspaceId) ? workspace.name :
-            std::format("{} · {}", workspace.workspaceId, workspace.name);
+        const auto label = workspace.createTarget ? std::format("NEW [{:02}]", workspace.workspaceId) :
+            workspace.name == std::to_string(workspace.workspaceId) ? std::format("[{:02}] · {}W", workspace.workspaceId, workspace.windows.size()) :
+            std::format("[{:02}] {} · {}W", workspace.workspaceId, workspace.name, workspace.windows.size());
         renderLabel(label, displayRect.x + 4.0, displayRect.y + displayRect.height + 8.0,
             std::max(1.0, displayRect.width - 8.0), Theme::hintSize(), contentAlpha * (selected ? 1.0 : 0.64), damage);
     }
@@ -861,7 +1054,8 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             renderWindowPreview(window, previousBox, previousAlpha, damage);
         }
     }
-    const auto stageLabel = frame.stage.name == std::to_string(frame.stage.workspaceId) ? std::format("Workspace {}", frame.stage.workspaceId) :
+    const auto stageLabel = m_mode == OverviewMode::AppExpose ? std::format("APP // {}", frame.stage.name) :
+        frame.stage.name == std::to_string(frame.stage.workspaceId) ? std::format("Workspace {}", frame.stage.workspaceId) :
         std::format("{} · {}", frame.stage.workspaceId, frame.stage.name);
     renderLabel(stageLabel, frame.stage.bounds.x, frame.stage.bounds.y - 28.0 + stageOffset,
         std::max(1.0, frame.stage.bounds.width * 0.5), Theme::labelSize(), stageAlpha * 0.78, damage);
@@ -878,14 +1072,19 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         windowBox.y += stageOffset;
         const auto radius = Theme::windowRadius();
 
+        if (window.appGroupStart)
+            renderLabel(window.appClass, window.rect.x + 2.0, window.rect.y - 20.0 + stageOffset,
+                std::max(1.0, window.rect.width - 4.0), Theme::hintSize(), stageAlpha * 0.68, damage);
+
+        const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? stageAlpha * 0.30 : stageAlpha;
         drawRect(CBox{windowBox.x + 7.0, windowBox.y + 10.0, windowBox.w, windowBox.h},
-            withAlpha(Theme::shadowColor(), stageAlpha * 0.86), damage, radius + 2);
+            withAlpha(Theme::shadowColor(), windowAlpha * 0.86), damage, radius + 2);
         if (selected) {
             drawRect(CBox{windowBox.x - 6.0, windowBox.y - 6.0, windowBox.w + 12.0, windowBox.h + 12.0},
                 withAlpha(accent, stageAlpha * 0.16), damage, radius + 6);
         }
-        drawRect(windowBox, Theme::stageWindowFill(static_cast<float>(stageAlpha)), damage, radius);
-        renderWindowPreview(window, windowBox, stageAlpha, damage);
+        drawRect(windowBox, withAlpha(stageSurface, windowAlpha), damage, radius);
+        renderWindowPreview(window, windowBox, windowAlpha, damage);
 
         if (selected) {
             CBorderPassElement::SBorderData border;
@@ -898,17 +1097,40 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
             const auto chipWidth = std::min(280.0, std::max(100.0, windowBox.w - 20.0));
             const auto chipY = windowBox.y + windowBox.h - 32.0;
-            drawRect(CBox{windowBox.x + 10.0, chipY, chipWidth, 24.0}, withAlpha(Theme::railColor(), stageAlpha * 0.94), damage, 8);
-            renderLabel(window.label, windowBox.x + 18.0, chipY + 5.0, chipWidth - 16.0, Theme::hintSize(), stageAlpha, damage);
+            drawRect(CBox{windowBox.x + 10.0, chipY, chipWidth, 24.0}, withAlpha(railSurface, stageAlpha * 0.94), damage, 6);
+            const auto state = window.fullscreen ? "FULL" : window.floating ? "FLOAT" : "TILED";
+            renderLabel(std::format("{} // {} // {}", window.appClass, state, window.label), windowBox.x + 18.0, chipY + 5.0,
+                chipWidth - 16.0, Theme::hintSize(), stageAlpha, damage);
+        }
+    }
+
+    if (m_dragging) {
+        const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
+        const auto* source = findWindowCard(m_pointerDownTarget.windowId);
+        if (bounds != m_frameBoundsByMonitor.end() && source && contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y)) {
+            const auto localX = m_pointerPosition.x - bounds->second.x;
+            const auto localY = m_pointerPosition.y - bounds->second.y;
+            const auto ghostWidth = std::clamp(source->rect.width * 0.58, 180.0, 320.0);
+            const auto aspect = source->rect.height > 0.0 ? source->rect.width / source->rect.height : 16.0 / 9.0;
+            const auto ghostHeight = std::clamp(ghostWidth / std::max(0.2, aspect), 100.0, 220.0);
+            const auto ghost = CBox{localX - ghostWidth / 2.0, localY - ghostHeight / 2.0, ghostWidth, ghostHeight};
+            drawRect(CBox{ghost.x + 9.0, ghost.y + 12.0, ghost.w, ghost.h}, withAlpha(Theme::shadowColor(), contentAlpha), damage, Theme::windowRadius() + 3);
+            drawRect(ghost, Theme::stageWindowFill(static_cast<float>(contentAlpha * 0.96)), damage, Theme::windowRadius());
+            renderWindowPreview(*source, ghost, contentAlpha * 0.96, damage);
         }
     }
 
     if (!m_searchActive) {
         const auto helpWidth = std::min(720.0, std::max(1.0, frame.bounds.width - 48.0));
-        renderLabel("\xe2\x86\x90 \xe2\x86\x92 workspace  \xc2\xb7  \xe2\x86\x93 windows  \xc2\xb7  Enter open  \xc2\xb7  / search  \xc2\xb7  Esc close",
+        const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSE" : "SPATIAL";
+        renderLabel("RADIANT // HYPRLAND", frame.stage.bounds.x, frame.bounds.height - 32.0,
+            180.0, Theme::hintSize(), contentAlpha * 0.46, damage);
+        renderLabel(modeLabel, frame.stage.bounds.x + frame.stage.bounds.width - 120.0, frame.stage.bounds.y - 28.0,
+            120.0, Theme::hintSize(), contentAlpha * 0.72, damage);
+        renderLabel("[\xe2\x86\x90\xe2\x86\x92] SPACE  [\xe2\x86\x93] WINDOWS  [TAB] VIEW  [ENTER] OPEN  [/] FIND  [ESC] CLOSE",
             centered(frame.bounds.width, helpWidth), frame.bounds.height - 32.0, helpWidth, Theme::hintSize(), contentAlpha * 0.62, damage);
     } else {
-        auto dim = Theme::stageBackdropColor();
+        auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
         drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, dim, damage);
         renderSearchPanel(frame, alpha, damage);
@@ -967,13 +1189,14 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
         return color;
     };
     const auto accent = resolvedAccentColor();
+    const auto background = m_config.backgroundColor();
 
     const auto panelBox = CBox{geometry.panelX, geometry.panelY, geometry.panelW, geometry.panelH};
     const auto inputBox = CBox{geometry.inputX, geometry.inputY, geometry.inputW, geometry.inputH};
 
     drawRect(CBox{panelBox.x + Theme::shadowOffsetX(), panelBox.y + Theme::shadowOffsetY(), panelBox.w, panelBox.h},
         withAlpha(Theme::shadowColor(), alpha), damage, Theme::searchRadius());
-    drawRect(panelBox, withAlpha(Theme::searchPanelColor(), alpha), damage, Theme::searchRadius(), true);
+    drawRect(panelBox, withAlpha(tintedSurface(Theme::searchPanelColor(), background, 0.34), alpha), damage, Theme::searchRadius(), true);
 
     CBorderPassElement::SBorderData border;
     border.box        = panelBox;
@@ -984,7 +1207,7 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
     border.borderSize = 1;
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
 
-    drawRect(inputBox, withAlpha(Theme::searchInputColor(), alpha), damage, Theme::inputRadius());
+    drawRect(inputBox, withAlpha(tintedSurface(Theme::searchInputColor(), background, 0.28), alpha), damage, Theme::inputRadius());
 
     const auto promptTexture = [this]() -> SP<Render::ITexture> {
         if (!g_pHyprRenderer)
@@ -995,7 +1218,7 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
         const auto        key = std::format("{}:{}:{}", size, maxWidth, text);
         auto              it = m_textures.find(key);
         if (it == m_textures.end())
-            it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, Theme::textColor(), size, false, "", maxWidth)).first;
+            it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, m_config.foregroundColor(), size, false, m_config.fontFamily(), maxWidth)).first;
         return it->second;
     }();
     const auto promptWidth  = promptTexture && promptTexture->ok() ? promptTexture->m_size.x : 0.0;
@@ -1128,7 +1351,8 @@ void OverlayRenderer::renderLabel(const std::string& text, double x, double y, d
     const auto key = std::format("{}:{}:{}", pointSize, static_cast<int>(std::ceil(maxWidth)), text);
     auto       it  = m_textures.find(key);
     if (it == m_textures.end()) {
-        it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, Theme::textColor(), pointSize, false, "", static_cast<int>(maxWidth))).first;
+        it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, m_config.foregroundColor(), pointSize, false,
+            m_config.fontFamily(), static_cast<int>(maxWidth))).first;
     }
 
     const auto& texture = it->second;

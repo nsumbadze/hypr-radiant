@@ -72,7 +72,12 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         }
         if (!ids.contains(activeId))
             ids.insert(activeId);
-        const auto nextId = activeId + 1;
+        std::int64_t globalMaxId = 0;
+        for (const auto& workspace : state.workspaces) {
+            if (containsPositiveWorkspaceId(workspace))
+                globalMaxId = std::max(globalMaxId, workspace.id);
+        }
+        const auto nextId = globalMaxId + 1;
         if (!ids.contains(nextId))
             ids.insert(nextId);
 
@@ -154,6 +159,19 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             };
         };
 
+        const auto cardForWindow = [&](const WindowSnapshot& window, const LayoutRect& target, bool groupStart = false) {
+            return WindowCard{
+                .stableId     = window.stableId,
+                .workspaceId  = window.workspaceId,
+                .rect         = target,
+                .label        = labelFor(window),
+                .appClass     = window.className.empty() ? "Application" : window.className,
+                .floating     = window.floating,
+                .fullscreen   = window.fullscreen,
+                .appGroupStart = groupStart,
+            };
+        };
+
         for (std::size_t index = 0; index < orderedIds.size(); ++index) {
             const auto id = orderedIds[index];
             const LayoutRect rect{
@@ -171,6 +189,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 .windows     = {},
                 .active      = monitor.activeWorkspaceId == id,
                 .empty       = true,
+                .createTarget = id == nextId,
             };
 
             const auto windows = windowsForWorkspace(id);
@@ -178,12 +197,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 card.empty = false;
                 const auto inner = inset(rect, 4.0);
                 for (const auto& window : windows) {
-                    card.windows.push_back({
-                        .stableId    = window.stableId,
-                        .workspaceId = id,
-                        .rect        = mapWindow(window, inner),
-                        .label       = labelFor(window),
-                    });
+                    card.windows.push_back(cardForWindow(window, mapWindow(window, inner)));
                 }
             }
 
@@ -198,14 +212,58 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             .windows     = {},
             .empty       = true,
         };
-        for (const auto& window : windowsForWorkspace(previewId)) {
-            frame.stage.empty = false;
-            frame.stage.windows.push_back({
-                .stableId    = window.stableId,
-                .workspaceId = previewId,
-                .rect        = mapWindow(window, stageBounds),
-                .label       = labelFor(window),
+        auto stageWindows = windowsForWorkspace(previewId);
+        if (options.mode == OverviewMode::AppExpose) {
+            stageWindows.clear();
+            for (const auto& window : state.windows) {
+                if (!window.mapped || (window.monitorId != monitor.id && window.monitorId != -1))
+                    continue;
+                if (!options.applicationFilter.empty() && window.className != options.applicationFilter)
+                    continue;
+                stageWindows.push_back(window);
+            }
+        }
+
+        if (options.mode != OverviewMode::Spatial) {
+            std::sort(stageWindows.begin(), stageWindows.end(), [](const WindowSnapshot& lhs, const WindowSnapshot& rhs) {
+                if (lhs.className != rhs.className)
+                    return lhs.className < rhs.className;
+                if (lhs.workspaceId != rhs.workspaceId)
+                    return lhs.workspaceId < rhs.workspaceId;
+                return lhs.stableId < rhs.stableId;
             });
+        }
+
+        if (options.mode == OverviewMode::AppExpose) {
+            frame.stage.workspaceId = stageWindows.empty() ? previewId : stageWindows.front().workspaceId;
+            frame.stage.name = options.applicationFilter.empty() ? "Application" : options.applicationFilter;
+        }
+
+        const auto gridRect = [&](std::size_t index, std::size_t count) {
+            const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
+            const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
+            const auto gap = std::clamp(renderSize.width * 0.012, 14.0, 24.0);
+            const auto header = options.mode == OverviewMode::Grouped ? 22.0 : 0.0;
+            const auto width = std::max(1.0, stageBounds.width - gap * (columns - 1)) / columns;
+            const auto height = std::max(1.0, stageBounds.height - gap * (rows - 1) - header * rows) / rows;
+            const auto row = static_cast<int>(index) / columns;
+            const auto col = static_cast<int>(index) % columns;
+            return LayoutRect{
+                .x = stageBounds.x + col * (width + gap),
+                .y = stageBounds.y + row * (height + gap + header) + header,
+                .width = width,
+                .height = height,
+            };
+        };
+
+        std::string previousClass;
+        for (std::size_t index = 0; index < stageWindows.size(); ++index) {
+            const auto& window = stageWindows[index];
+            frame.stage.empty = false;
+            const auto groupStart = options.mode == OverviewMode::Grouped && window.className != previousClass;
+            const auto rect = options.mode == OverviewMode::Spatial ? mapWindow(window, stageBounds) : gridRect(index, stageWindows.size());
+            frame.stage.windows.push_back(cardForWindow(window, rect, groupStart));
+            previousClass = window.className;
         }
 
         return frame;
@@ -277,6 +335,9 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                         .height = winH,
                     },
                     .label = labelFor(windows[i]),
+                    .appClass = windows[i].className.empty() ? "Application" : windows[i].className,
+                    .floating = windows[i].floating,
+                    .fullscreen = windows[i].fullscreen,
                 });
             }
         }

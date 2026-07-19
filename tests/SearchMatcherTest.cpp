@@ -44,6 +44,16 @@ void firstMatchReturnsWindowTarget() {
     assert(target->windowId == 21);
 }
 
+void stageSearchMatchesApplicationClass() {
+    auto testFrame = frame();
+    testFrame.stage.windows.push_back({.stableId = 88, .workspaceId = 2, .label = "Private tab", .appClass = "Firefox"});
+
+    const auto matches = SearchMatcher{}.matchingStageWindowIds(testFrame, "fire");
+
+    assert(matches.size() == 1);
+    assert(matches.front() == 88);
+}
+
 } // namespace
 
 int main() {
@@ -51,6 +61,7 @@ int main() {
     emptyQueryHasNoMatches();
     returnsAllMatchingWindowIdsInLayoutOrder();
     firstMatchReturnsWindowTarget();
+    stageSearchMatchesApplicationClass();
     std::cout << "SearchMatcherTest passed\n";
     return 0;
 }
