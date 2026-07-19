@@ -32,10 +32,27 @@ struct WorkspaceCard {
     bool                    empty       = true;
 };
 
+struct WorkspaceRail {
+    LayoutRect bounds;
+    bool       overflowLeft  = false;
+    bool       overflowRight = false;
+};
+
+struct WorkspaceStage {
+    std::int64_t            workspaceId = -1;
+    std::string             name;
+    LayoutRect              bounds;
+    std::vector<WindowCard> windows;
+    bool                    empty = true;
+};
+
 struct WorkspaceWallFrame {
     std::int64_t               monitorId = -1;
     LayoutRect                 bounds;
     std::vector<WorkspaceCard> workspaces;
+    WorkspaceRail              rail;
+    WorkspaceStage             stage;
+    bool                       focusedStage = false;
 };
 
 struct WorkspaceWallOptions {
@@ -45,6 +62,7 @@ struct WorkspaceWallOptions {
     double windowGap             = 10.0;
     double windowInset           = 22.0;
     bool   focusedStage          = false;
+    std::int64_t previewWorkspaceId = -1;
 };
 
 class WorkspaceWallLayout {
