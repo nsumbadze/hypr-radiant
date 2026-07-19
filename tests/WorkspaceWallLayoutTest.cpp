@@ -67,6 +67,7 @@ void focusedStageUsesRealWorkspacesPlusEmptyNext() {
     assert(frame.workspaces.at(0).workspaceId == 1);
     assert(frame.workspaces.at(1).workspaceId == 2);
     assert(frame.workspaces.at(2).workspaceId == 3);
+    assert(frame.workspaces.at(2).createTarget);
     assert(frame.workspaces.at(0).empty);
     assert(frame.workspaces.at(2).empty);
     assert(!frame.workspaces.at(1).empty);
@@ -89,6 +90,7 @@ void focusedStageDoesNotGeneratePhantomWorkspacesForGaps() {
     assert(frame.workspaces.at(0).workspaceId == 1);
     assert(frame.workspaces.at(1).workspaceId == 5);
     assert(frame.workspaces.at(2).workspaceId == 6);
+    assert(frame.workspaces.at(2).createTarget);
     assert(frame.workspaces.at(0).empty);
     assert(frame.workspaces.at(1).empty);
     assert(frame.workspaces.at(2).empty);

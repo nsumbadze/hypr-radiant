@@ -21,6 +21,18 @@ class ITexture;
 
 namespace hypr_radiant {
 
+enum class PointerActionType {
+    None,
+    Activate,
+    MoveWindow,
+};
+
+struct PointerAction {
+    PointerActionType type = PointerActionType::None;
+    OverviewTarget target;
+    std::uint64_t windowId = 0;
+};
+
 class OverlayRenderer {
   public:
     explicit OverlayRenderer(const RadiantConfig& config);
@@ -38,6 +50,9 @@ class OverlayRenderer {
     void backspaceSearch();
     void clearSearchOrHide();
     void toggleGroupedMode();
+    void pointerMoved(double x, double y);
+    [[nodiscard]] PointerAction pointerButton(bool pressed, double x, double y);
+    void refresh(RadiantState state);
 
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] bool           searchActive() const noexcept;
@@ -70,6 +85,7 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* frameForSelectedTarget() const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
+    void resetPointerInteraction();
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;
@@ -93,6 +109,12 @@ class OverlayRenderer {
     std::int64_t                                          m_preSearchMonitorId = -1;
     std::unordered_set<std::uint64_t>                     m_searchMatches;
     std::unordered_map<std::string, SP<Render::ITexture>> m_textures;
+    OverviewTarget                                        m_pointerDownTarget;
+    OverviewTarget                                        m_dragTarget;
+    RadiantPoint                                            m_pointerDownPosition;
+    RadiantPoint                                            m_pointerPosition;
+    bool                                                  m_pointerDown = false;
+    bool                                                  m_dragging = false;
 };
 
 } // namespace hypr_radiant

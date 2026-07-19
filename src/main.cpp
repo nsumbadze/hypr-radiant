@@ -67,7 +67,21 @@ bool RadiantPlugin::initialize() {
         [this] { return m_overlay.active(); },
         [this](double x, double y) { return m_overlay.hitTest(x, y); },
         [this](OverviewTarget target) { activate(target); },
-        [this](double x, double y) { m_overlay.selectTargetAt(x, y); },
+        [this](double x, double y) { m_overlay.pointerMoved(x, y); },
+        [this](bool pressed, double x, double y) {
+            const auto action = m_overlay.pointerButton(pressed, x, y);
+            if (action.type == PointerActionType::Activate) {
+                activate(action.target);
+                return;
+            }
+            if (action.type != PointerActionType::MoveWindow)
+                return;
+            if (!m_activation.moveWindow(action.windowId, action.target.workspaceId, action.target.monitorId)) {
+                log::warn("window move target disappeared or was invalid");
+                return;
+            }
+            m_overlay.refresh(m_stateCollector.collect());
+        },
         [this](char value) { m_overlay.appendSearchChar(value); },
         [this] { m_overlay.backspaceSearch(); },
         [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },

@@ -241,6 +241,7 @@ void OverlayRenderer::show(RadiantState state) {
     m_mode = OverviewMode::Spatial;
     m_applicationFilter.clear();
     m_state = std::move(state);
+    resetPointerInteraction();
     m_previousFrames.clear();
     clearSearch();
     rebuildFrames();
@@ -264,6 +265,7 @@ void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationC
     m_mode = OverviewMode::AppExpose;
     m_applicationFilter = std::move(applicationClass);
     m_state = std::move(state);
+    resetPointerInteraction();
     m_previousFrames.clear();
     clearSearch();
     rebuildFrames();
@@ -343,6 +345,72 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
         m_stageTransition.hideImmediate();
         m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
     }
+    damageAllMonitors();
+}
+
+void OverlayRenderer::pointerMoved(double x, double y) {
+    m_pointerPosition = {.x = x, .y = y};
+    if (!m_pointerDown) {
+        selectTargetAt(x, y);
+        return;
+    }
+
+    if (m_pointerDownTarget.type != OverviewTargetType::Window)
+        return;
+
+    const auto dx = x - m_pointerDownPosition.x;
+    const auto dy = y - m_pointerDownPosition.y;
+    if (!m_dragging && std::hypot(dx, dy) >= 8.0)
+        m_dragging = true;
+
+    if (!m_dragging)
+        return;
+
+    const auto target = hitTest(x, y);
+    m_dragTarget = target.type == OverviewTargetType::Workspace || target.type == OverviewTargetType::NewWorkspace ? target : OverviewTarget{};
+    if (m_dragTarget.type != OverviewTargetType::None) {
+        m_selectedTarget = m_dragTarget;
+        m_selectedFrameMonitorId = m_dragTarget.monitorId;
+    }
+    damageAllMonitors();
+}
+
+PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
+    if (pressed) {
+        m_pointerDown = true;
+        m_dragging = false;
+        m_pointerDownPosition = {.x = x, .y = y};
+        m_pointerPosition = m_pointerDownPosition;
+        m_pointerDownTarget = hitTest(x, y);
+        m_dragTarget = {};
+        return {};
+    }
+
+    if (!m_pointerDown)
+        return {};
+
+    pointerMoved(x, y);
+    PointerAction action;
+    if (m_dragging && m_dragTarget.type != OverviewTargetType::None) {
+        action = {.type = PointerActionType::MoveWindow, .target = m_dragTarget, .windowId = m_pointerDownTarget.windowId};
+    } else if (!m_dragging) {
+        const auto releasedTarget = hitTest(x, y);
+        if (sameTarget(releasedTarget, m_pointerDownTarget))
+            action = {.type = PointerActionType::Activate, .target = releasedTarget};
+    }
+
+    resetPointerInteraction();
+    damageAllMonitors();
+    return action;
+}
+
+void OverlayRenderer::refresh(RadiantState state) {
+    m_state = std::move(state);
+    m_previousFrames = m_frames;
+    rebuildFrames();
+    m_stageTransition.hideImmediate();
+    m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    m_textures.clear();
     damageAllMonitors();
 }
 
@@ -427,9 +495,19 @@ void OverlayRenderer::hideImmediate() {
     m_selectedTarget = {};
     m_selectedFrameMonitorId = -1;
     clearSearch();
+    resetPointerInteraction();
 
     if (wasRenderable)
         damageAllMonitors();
+}
+
+void OverlayRenderer::resetPointerInteraction() {
+    m_pointerDownTarget = {};
+    m_dragTarget = {};
+    m_pointerDownPosition = {};
+    m_pointerPosition = {};
+    m_pointerDown = false;
+    m_dragging = false;
 }
 
 bool OverlayRenderer::active() const noexcept {
@@ -863,6 +941,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         drawRect(CBox{cardBox.x + 3.0, cardBox.y + 5.0, cardBox.w, cardBox.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.55), damage, radius);
         drawRect(cardBox, Theme::railCardFill(selected, workspace.empty, static_cast<float>(contentAlpha)), damage, radius);
 
+        if (workspace.createTarget)
+            renderLabel("+", cardBox.x + centered(cardBox.w, 24.0), cardBox.y + centered(cardBox.h, 28.0),
+                24.0, Theme::titleSize(), contentAlpha * (selected ? 1.0 : 0.62), damage);
+
         for (const auto& window : workspace.windows) {
             auto previewBox = boxFor(window.rect);
             previewBox.x += cardOffsetX;
@@ -885,7 +967,8 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 withAlpha(accent, contentAlpha * 0.72), damage, 2);
         }
 
-        const auto label = workspace.name == std::to_string(workspace.workspaceId) ? workspace.name :
+        const auto label = workspace.createTarget ? std::format("NEW [{}]", workspace.workspaceId) :
+            workspace.name == std::to_string(workspace.workspaceId) ? workspace.name :
             std::format("{} · {}", workspace.workspaceId, workspace.name);
         renderLabel(label, displayRect.x + 4.0, displayRect.y + displayRect.height + 8.0,
             std::max(1.0, displayRect.width - 8.0), Theme::hintSize(), contentAlpha * (selected ? 1.0 : 0.64), damage);
@@ -935,14 +1018,15 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             renderLabel(window.appClass, window.rect.x + 2.0, window.rect.y - 20.0 + stageOffset,
                 std::max(1.0, window.rect.width - 4.0), Theme::hintSize(), stageAlpha * 0.68, damage);
 
+        const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? stageAlpha * 0.30 : stageAlpha;
         drawRect(CBox{windowBox.x + 7.0, windowBox.y + 10.0, windowBox.w, windowBox.h},
-            withAlpha(Theme::shadowColor(), stageAlpha * 0.86), damage, radius + 2);
+            withAlpha(Theme::shadowColor(), windowAlpha * 0.86), damage, radius + 2);
         if (selected) {
             drawRect(CBox{windowBox.x - 6.0, windowBox.y - 6.0, windowBox.w + 12.0, windowBox.h + 12.0},
                 withAlpha(accent, stageAlpha * 0.16), damage, radius + 6);
         }
-        drawRect(windowBox, Theme::stageWindowFill(static_cast<float>(stageAlpha)), damage, radius);
-        renderWindowPreview(window, windowBox, stageAlpha, damage);
+        drawRect(windowBox, Theme::stageWindowFill(static_cast<float>(windowAlpha)), damage, radius);
+        renderWindowPreview(window, windowBox, windowAlpha, damage);
 
         if (selected) {
             CBorderPassElement::SBorderData border;
@@ -957,6 +1041,22 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             const auto chipY = windowBox.y + windowBox.h - 32.0;
             drawRect(CBox{windowBox.x + 10.0, chipY, chipWidth, 24.0}, withAlpha(Theme::railColor(), stageAlpha * 0.94), damage, 8);
             renderLabel(window.label, windowBox.x + 18.0, chipY + 5.0, chipWidth - 16.0, Theme::hintSize(), stageAlpha, damage);
+        }
+    }
+
+    if (m_dragging) {
+        const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
+        const auto* source = findWindowCard(m_pointerDownTarget.windowId);
+        if (bounds != m_frameBoundsByMonitor.end() && source && contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y)) {
+            const auto localX = m_pointerPosition.x - bounds->second.x;
+            const auto localY = m_pointerPosition.y - bounds->second.y;
+            const auto ghostWidth = std::clamp(source->rect.width * 0.58, 180.0, 320.0);
+            const auto aspect = source->rect.height > 0.0 ? source->rect.width / source->rect.height : 16.0 / 9.0;
+            const auto ghostHeight = std::clamp(ghostWidth / std::max(0.2, aspect), 100.0, 220.0);
+            const auto ghost = CBox{localX - ghostWidth / 2.0, localY - ghostHeight / 2.0, ghostWidth, ghostHeight};
+            drawRect(CBox{ghost.x + 9.0, ghost.y + 12.0, ghost.w, ghost.h}, withAlpha(Theme::shadowColor(), contentAlpha), damage, Theme::windowRadius() + 3);
+            drawRect(ghost, Theme::stageWindowFill(static_cast<float>(contentAlpha * 0.96)), damage, Theme::windowRadius());
+            renderWindowPreview(*source, ghost, contentAlpha * 0.96, damage);
         }
     }
 

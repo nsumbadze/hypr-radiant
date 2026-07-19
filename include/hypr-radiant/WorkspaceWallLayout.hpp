@@ -40,6 +40,7 @@ struct WorkspaceCard {
     std::vector<WindowCard> windows;
     bool                    active      = false;
     bool                    empty       = true;
+    bool                    createTarget = false;
 };
 
 struct WorkspaceRail {

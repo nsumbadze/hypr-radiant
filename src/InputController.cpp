@@ -33,12 +33,13 @@ std::optional<char> searchCharForKey(uint32_t key) {
 
 } // namespace
 
-void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, SelectAtFn selectAt, TextInputFn textInput, BackspaceFn backspace,
+void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
     MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close, ToggleModeFn toggleMode) {
     m_active   = std::move(active);
     m_hitTest  = std::move(hitTest);
     m_activate = std::move(activate);
-    m_selectAt = std::move(selectAt);
+    m_pointerMove = std::move(pointerMove);
+    m_pointerButton = std::move(pointerButton);
     m_textInput = std::move(textInput);
     m_backspace = std::move(backspace);
     m_move     = std::move(move);
@@ -56,8 +57,8 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!inputArmed())
             return;
 
-        if (m_selectAt)
-            m_selectAt(position.x, position.y);
+        if (m_pointerMove)
+            m_pointerMove(position.x, position.y);
     });
 
     m_mouseButtonListener = Event::bus()->m_events.input.mouse.button.listen([this](IPointer::SButtonEvent event, Event::SCallbackInfo& info) {
@@ -69,16 +70,12 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!inputArmed())
             return;
 
-        if (!pointerPressed(event.state))
-            return;
-
         if (!g_pInputManager)
             return;
 
-        const auto pos    = g_pInputManager->getMouseCoordsInternal();
-        const auto target = m_hitTest ? m_hitTest(pos.x, pos.y) : OverviewTarget{};
-        if (target.type != OverviewTargetType::None && m_activate)
-            m_activate(target);
+        const auto pos = g_pInputManager->getMouseCoordsInternal();
+        if (m_pointerButton)
+            m_pointerButton(pointerPressed(event.state), pos.x, pos.y);
     });
 
     m_mouseAxisListener = Event::bus()->m_events.input.mouse.axis.listen([this](IPointer::SAxisEvent event, Event::SCallbackInfo& info) {
@@ -209,7 +206,8 @@ void InputController::uninstall() {
     m_active = {};
     m_hitTest = {};
     m_activate = {};
-    m_selectAt = {};
+    m_pointerMove = {};
+    m_pointerButton = {};
     m_textInput = {};
     m_backspace = {};
     m_move = {};

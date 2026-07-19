@@ -25,7 +25,7 @@ LayoutRect rectFor(const WorkspaceWallFrame& frame, OverviewTarget target) {
     }
 
     for (const auto& workspace : frame.workspaces) {
-        if (target.type == OverviewTargetType::Workspace && workspace.workspaceId == target.workspaceId)
+        if ((target.type == OverviewTargetType::Workspace || target.type == OverviewTargetType::NewWorkspace) && workspace.workspaceId == target.workspaceId)
             return workspace.rect;
 
         for (const auto& window : workspace.windows) {
@@ -41,7 +41,11 @@ std::vector<OverviewTarget> workspaceTargets(const WorkspaceWallFrame& frame) {
     std::vector<OverviewTarget> targets;
     for (const auto& workspace : frame.workspaces) {
         if (selectable(workspace.rect))
-            targets.push_back({.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
+            targets.push_back({
+                .type = workspace.createTarget ? OverviewTargetType::NewWorkspace : OverviewTargetType::Workspace,
+                .workspaceId = workspace.workspaceId,
+                .monitorId = frame.monitorId,
+            });
     }
     return targets;
 }
@@ -61,7 +65,11 @@ OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, dou
         if (contains(frame.rail.bounds, x, y)) {
             for (const auto& workspace : frame.workspaces) {
                 if (contains(workspace.rect, x, y))
-                    return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
+                    return {
+                        .type = workspace.createTarget ? OverviewTargetType::NewWorkspace : OverviewTargetType::Workspace,
+                        .workspaceId = workspace.workspaceId,
+                        .monitorId = frame.monitorId,
+                    };
             }
         }
 
@@ -80,7 +88,11 @@ OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, dou
 
     for (const auto& workspace : frame.workspaces) {
         if (contains(workspace.rect, x, y))
-            return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
+            return {
+                .type = workspace.createTarget ? OverviewTargetType::NewWorkspace : OverviewTargetType::Workspace,
+                .workspaceId = workspace.workspaceId,
+                .monitorId = frame.monitorId,
+            };
     }
 
     return {};
@@ -89,7 +101,7 @@ OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, dou
 OverviewTarget HitTester::initialSelection(const WorkspaceWallFrame& frame) const {
     for (const auto& workspace : frame.workspaces) {
         if (workspace.active && selectable(workspace.rect))
-            return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
+            return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId, .monitorId = frame.monitorId};
     }
 
     const auto targets = workspaceTargets(frame);

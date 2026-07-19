@@ -72,7 +72,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         }
         if (!ids.contains(activeId))
             ids.insert(activeId);
-        const auto nextId = activeId + 1;
+        const auto nextId = ids.empty() ? std::int64_t{1} : *ids.rbegin() + 1;
         if (!ids.contains(nextId))
             ids.insert(nextId);
 
@@ -184,6 +184,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 .windows     = {},
                 .active      = monitor.activeWorkspaceId == id,
                 .empty       = true,
+                .createTarget = id == nextId,
             };
 
             const auto windows = windowsForWorkspace(id);
