@@ -670,6 +670,13 @@ void OverlayRenderer::rebuildSearchMatches() {
         return;
 
     for (const auto& frame : m_frames) {
+        if (m_mode != OverviewMode::Spatial) {
+            if (frame.monitorId != m_selectedFrameMonitorId)
+                continue;
+            const auto matches = m_searchMatcher.matchingStageWindowIds(frame, m_searchQuery);
+            m_searchMatches.insert(matches.begin(), matches.end());
+            continue;
+        }
         if (m_searchQuery.empty()) {
             for (const auto& workspace : frame.workspaces) {
                 for (const auto& window : workspace.windows)
@@ -705,7 +712,20 @@ std::vector<OverviewTarget> OverlayRenderer::matchingSearchTargets() const {
     std::unordered_set<std::int64_t> workspaceIds;
     std::unordered_set<std::uint64_t> windowIds;
     for (const auto& frame : m_frames) {
+        if (m_mode != OverviewMode::Spatial) {
+            if (frame.monitorId != m_selectedFrameMonitorId)
+                continue;
+            for (const auto& window : frame.stage.windows) {
+                if (m_searchMatches.contains(window.stableId) && !windowIds.contains(window.stableId)) {
+                    targets.push_back({.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
+                    windowIds.insert(window.stableId);
+                }
+            }
+            continue;
+        }
         for (const auto& workspace : frame.workspaces) {
+            if (workspace.createTarget)
+                continue;
             const auto workspaceNumber = std::to_string(workspace.workspaceId);
             if (!workspaceIds.contains(workspace.workspaceId) &&
                 (m_searchQuery.empty() || m_searchMatcher.matches(workspace.name, m_searchQuery) || m_searchMatcher.matches(workspaceNumber, m_searchQuery))) {
