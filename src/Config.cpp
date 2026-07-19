@@ -30,6 +30,12 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         "plugin:radiant:accent_color",
         "Overview accent color, or auto to inherit the focused Hyprland border.",
         "auto");
+    m_backgroundColor = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:background_color", "Overview glass background color.", "111c18");
+    m_foregroundColor = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:foreground_color", "Overview text color.", "C1C497");
+    m_fontFamily = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:font_family", "Overview interface font family.", "JetBrainsMono Nerd Font");
 
     m_gestureEnabled = makeShared<Config::Values::CIntValue>(
         "plugin:radiant:gesture_enabled", "Enable interactive overview trackpad gestures.", 0,
@@ -43,6 +49,8 @@ bool RadiantConfig::registerValues(HANDLE handle) {
 
     return HyprlandAPI::addConfigValueV2(handle, m_opacity) && HyprlandAPI::addConfigValueV2(handle, m_animationDurationMs) &&
         HyprlandAPI::addConfigValueV2(handle, m_layout) && HyprlandAPI::addConfigValueV2(handle, m_accentColor) &&
+        HyprlandAPI::addConfigValueV2(handle, m_backgroundColor) && HyprlandAPI::addConfigValueV2(handle, m_foregroundColor) &&
+        HyprlandAPI::addConfigValueV2(handle, m_fontFamily) &&
         HyprlandAPI::addConfigValueV2(handle, m_gestureEnabled) && HyprlandAPI::addConfigValueV2(handle, m_gestureFingers) &&
         HyprlandAPI::addConfigValueV2(handle, m_gestureDistance);
 }
@@ -93,6 +101,26 @@ std::optional<CHyprColor> RadiantConfig::accentColorOverride() const {
         return std::nullopt;
 
     return CHyprColor{parsed->red, parsed->green, parsed->blue, parsed->alpha};
+}
+
+CHyprColor RadiantConfig::backgroundColor() const {
+    const auto parsed = m_backgroundColor ? parseAccentColor(m_backgroundColor->value()) : std::nullopt;
+    if (!parsed)
+        return {0.067F, 0.110F, 0.094F, 1.0F};
+    return {parsed->red, parsed->green, parsed->blue, parsed->alpha};
+}
+
+CHyprColor RadiantConfig::foregroundColor() const {
+    const auto parsed = m_foregroundColor ? parseAccentColor(m_foregroundColor->value()) : std::nullopt;
+    if (!parsed)
+        return {0.757F, 0.769F, 0.592F, 1.0F};
+    return {parsed->red, parsed->green, parsed->blue, parsed->alpha};
+}
+
+std::string RadiantConfig::fontFamily() const {
+    if (!m_fontFamily || m_fontFamily->value().empty())
+        return "monospace";
+    return m_fontFamily->value();
 }
 
 LayoutMode parseLayoutMode(std::string_view value) {

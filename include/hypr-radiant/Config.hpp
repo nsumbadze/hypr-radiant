@@ -34,6 +34,9 @@ class RadiantConfig {
     [[nodiscard]] int             animationDurationMs() const;
     [[nodiscard]] LayoutMode layoutMode() const;
     [[nodiscard]] std::optional<CHyprColor> accentColorOverride() const;
+    [[nodiscard]] CHyprColor       backgroundColor() const;
+    [[nodiscard]] CHyprColor       foregroundColor() const;
+    [[nodiscard]] std::string      fontFamily() const;
     [[nodiscard]] bool            gestureEnabled() const;
     [[nodiscard]] int             gestureFingers() const;
     [[nodiscard]] double          gestureDistance() const;
@@ -43,6 +46,9 @@ class RadiantConfig {
     SP<Config::Values::CIntValue>    m_animationDurationMs;
     SP<Config::Values::CStringValue> m_layout;
     SP<Config::Values::CStringValue> m_accentColor;
+    SP<Config::Values::CStringValue> m_backgroundColor;
+    SP<Config::Values::CStringValue> m_foregroundColor;
+    SP<Config::Values::CStringValue> m_fontFamily;
     SP<Config::Values::CIntValue>    m_gestureEnabled;
     SP<Config::Values::CIntValue>    m_gestureFingers;
     SP<Config::Values::CFloatValue>  m_gestureDistance;

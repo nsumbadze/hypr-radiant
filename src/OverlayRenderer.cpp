@@ -59,6 +59,14 @@ void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int roun
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(data));
 }
 
+CHyprColor tintedSurface(CHyprColor surface, CHyprColor tint, double amount) {
+    const auto mix = static_cast<float>(std::clamp(amount, 0.0, 1.0));
+    surface.r = std::lerp(surface.r, tint.r, mix);
+    surface.g = std::lerp(surface.g, tint.g, mix);
+    surface.b = std::lerp(surface.b, tint.b, mix);
+    return surface;
+}
+
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
     for (const auto& monitor : state.monitors) {
         if (monitor.id == id)
@@ -589,7 +597,9 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
     const auto& damage = g_pHyprRenderer->renderData().damage;
     const auto backdropAlpha = alpha * m_config.opacity();
 
-    auto backdrop = m_config.layoutMode() == LayoutMode::Stage ? Theme::stageBackdropColor() : Theme::backdropColor();
+    auto backdrop = m_config.layoutMode() == LayoutMode::Stage ? m_config.backgroundColor() : Theme::backdropColor();
+    if (m_config.layoutMode() == LayoutMode::Stage)
+        backdrop.a = Theme::stageBackdropColor().a;
     backdrop.a *= backdropAlpha;
     drawRect(box, backdrop, damage, 0, true);
 
@@ -915,6 +925,9 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     const auto monitorMultiplier = m_selectedFrameMonitorId == -1 || frame.monitorId == m_selectedFrameMonitorId ? 1.0 : 0.72;
     const auto contentAlpha = alpha * searchMultiplier * monitorMultiplier;
     const auto accent       = resolvedAccentColor();
+    const auto background   = m_config.backgroundColor();
+    const auto railSurface  = tintedSurface(Theme::railColor(), background, 0.46);
+    const auto stageSurface = tintedSurface(Theme::stageWindowFill(1.0F), background, 0.34);
     const auto railBox      = boxFor(frame.rail.bounds);
     const auto transition   = std::clamp(m_stageTransition.value(), 0.0, 1.0);
     const auto previousFrameIt = std::ranges::find_if(m_previousFrames, [&frame](const WorkspaceWallFrame& candidate) {
@@ -924,7 +937,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
     drawRect(CBox{railBox.x + 7.0, railBox.y + 10.0, railBox.w, railBox.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.72), damage,
         Theme::railRadius() + 2);
-    drawRect(railBox, withAlpha(Theme::railColor(), contentAlpha), damage, Theme::railRadius(), true);
+    drawRect(railBox, withAlpha(railSurface, contentAlpha), damage, Theme::railRadius(), true);
 
     if (g_pHyprRenderer && railBox.w > 0.0 && railBox.h > 0.0) {
         CBorderPassElement::SBorderData border;
@@ -960,7 +973,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         }
 
         drawRect(CBox{cardBox.x + 3.0, cardBox.y + 5.0, cardBox.w, cardBox.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.55), damage, radius);
-        drawRect(cardBox, Theme::railCardFill(selected, workspace.empty, static_cast<float>(contentAlpha)), damage, radius);
+        auto cardFill = tintedSurface(Theme::railCardFill(selected, workspace.empty, static_cast<float>(contentAlpha)), background, 0.30);
+        if (selected && !workspace.createTarget)
+            cardFill = tintedSurface(cardFill, accent, 0.22);
+        drawRect(cardBox, cardFill, damage, radius);
 
         if (workspace.createTarget)
             renderLabel("+", cardBox.x + centered(cardBox.w, 24.0), cardBox.y + centered(cardBox.h, 28.0),
@@ -988,9 +1004,9 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 withAlpha(accent, contentAlpha * 0.72), damage, 2);
         }
 
-        const auto label = workspace.createTarget ? std::format("NEW [{}]", workspace.workspaceId) :
-            workspace.name == std::to_string(workspace.workspaceId) ? workspace.name :
-            std::format("{} · {}", workspace.workspaceId, workspace.name);
+        const auto label = workspace.createTarget ? std::format("NEW [{:02}]", workspace.workspaceId) :
+            workspace.name == std::to_string(workspace.workspaceId) ? std::format("[{:02}] · {}W", workspace.workspaceId, workspace.windows.size()) :
+            std::format("[{:02}] {} · {}W", workspace.workspaceId, workspace.name, workspace.windows.size());
         renderLabel(label, displayRect.x + 4.0, displayRect.y + displayRect.height + 8.0,
             std::max(1.0, displayRect.width - 8.0), Theme::hintSize(), contentAlpha * (selected ? 1.0 : 0.64), damage);
     }
@@ -1018,7 +1034,8 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             renderWindowPreview(window, previousBox, previousAlpha, damage);
         }
     }
-    const auto stageLabel = frame.stage.name == std::to_string(frame.stage.workspaceId) ? std::format("Workspace {}", frame.stage.workspaceId) :
+    const auto stageLabel = m_mode == OverviewMode::AppExpose ? std::format("APP // {}", frame.stage.name) :
+        frame.stage.name == std::to_string(frame.stage.workspaceId) ? std::format("Workspace {}", frame.stage.workspaceId) :
         std::format("{} · {}", frame.stage.workspaceId, frame.stage.name);
     renderLabel(stageLabel, frame.stage.bounds.x, frame.stage.bounds.y - 28.0 + stageOffset,
         std::max(1.0, frame.stage.bounds.width * 0.5), Theme::labelSize(), stageAlpha * 0.78, damage);
@@ -1046,7 +1063,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             drawRect(CBox{windowBox.x - 6.0, windowBox.y - 6.0, windowBox.w + 12.0, windowBox.h + 12.0},
                 withAlpha(accent, stageAlpha * 0.16), damage, radius + 6);
         }
-        drawRect(windowBox, Theme::stageWindowFill(static_cast<float>(windowAlpha)), damage, radius);
+        drawRect(windowBox, withAlpha(stageSurface, windowAlpha), damage, radius);
         renderWindowPreview(window, windowBox, windowAlpha, damage);
 
         if (selected) {
@@ -1060,8 +1077,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
             const auto chipWidth = std::min(280.0, std::max(100.0, windowBox.w - 20.0));
             const auto chipY = windowBox.y + windowBox.h - 32.0;
-            drawRect(CBox{windowBox.x + 10.0, chipY, chipWidth, 24.0}, withAlpha(Theme::railColor(), stageAlpha * 0.94), damage, 8);
-            renderLabel(window.label, windowBox.x + 18.0, chipY + 5.0, chipWidth - 16.0, Theme::hintSize(), stageAlpha, damage);
+            drawRect(CBox{windowBox.x + 10.0, chipY, chipWidth, 24.0}, withAlpha(railSurface, stageAlpha * 0.94), damage, 6);
+            const auto state = window.fullscreen ? "FULL" : window.floating ? "FLOAT" : "TILED";
+            renderLabel(std::format("{} // {} // {}", window.appClass, state, window.label), windowBox.x + 18.0, chipY + 5.0,
+                chipWidth - 16.0, Theme::hintSize(), stageAlpha, damage);
         }
     }
 
@@ -1084,12 +1103,14 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     if (!m_searchActive) {
         const auto helpWidth = std::min(720.0, std::max(1.0, frame.bounds.width - 48.0));
         const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSE" : "SPATIAL";
+        renderLabel("RADIANT // HYPRLAND", frame.stage.bounds.x, frame.bounds.height - 32.0,
+            180.0, Theme::hintSize(), contentAlpha * 0.46, damage);
         renderLabel(modeLabel, frame.stage.bounds.x + frame.stage.bounds.width - 120.0, frame.stage.bounds.y - 28.0,
             120.0, Theme::hintSize(), contentAlpha * 0.72, damage);
-        renderLabel("\xe2\x86\x90 \xe2\x86\x92 workspace  \xc2\xb7  \xe2\x86\x93 windows  \xc2\xb7  Tab view  \xc2\xb7  Enter open  \xc2\xb7  / search  \xc2\xb7  Esc close",
+        renderLabel("[\xe2\x86\x90\xe2\x86\x92] SPACE  [\xe2\x86\x93] WINDOWS  [TAB] VIEW  [ENTER] OPEN  [/] FIND  [ESC] CLOSE",
             centered(frame.bounds.width, helpWidth), frame.bounds.height - 32.0, helpWidth, Theme::hintSize(), contentAlpha * 0.62, damage);
     } else {
-        auto dim = Theme::stageBackdropColor();
+        auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
         drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, dim, damage);
         renderSearchPanel(frame, alpha, damage);
@@ -1148,13 +1169,14 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
         return color;
     };
     const auto accent = resolvedAccentColor();
+    const auto background = m_config.backgroundColor();
 
     const auto panelBox = CBox{geometry.panelX, geometry.panelY, geometry.panelW, geometry.panelH};
     const auto inputBox = CBox{geometry.inputX, geometry.inputY, geometry.inputW, geometry.inputH};
 
     drawRect(CBox{panelBox.x + Theme::shadowOffsetX(), panelBox.y + Theme::shadowOffsetY(), panelBox.w, panelBox.h},
         withAlpha(Theme::shadowColor(), alpha), damage, Theme::searchRadius());
-    drawRect(panelBox, withAlpha(Theme::searchPanelColor(), alpha), damage, Theme::searchRadius(), true);
+    drawRect(panelBox, withAlpha(tintedSurface(Theme::searchPanelColor(), background, 0.34), alpha), damage, Theme::searchRadius(), true);
 
     CBorderPassElement::SBorderData border;
     border.box        = panelBox;
@@ -1165,7 +1187,7 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
     border.borderSize = 1;
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
 
-    drawRect(inputBox, withAlpha(Theme::searchInputColor(), alpha), damage, Theme::inputRadius());
+    drawRect(inputBox, withAlpha(tintedSurface(Theme::searchInputColor(), background, 0.28), alpha), damage, Theme::inputRadius());
 
     const auto promptTexture = [this]() -> SP<Render::ITexture> {
         if (!g_pHyprRenderer)
@@ -1176,7 +1198,7 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
         const auto        key = std::format("{}:{}:{}", size, maxWidth, text);
         auto              it = m_textures.find(key);
         if (it == m_textures.end())
-            it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, Theme::textColor(), size, false, "", maxWidth)).first;
+            it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, m_config.foregroundColor(), size, false, m_config.fontFamily(), maxWidth)).first;
         return it->second;
     }();
     const auto promptWidth  = promptTexture && promptTexture->ok() ? promptTexture->m_size.x : 0.0;
@@ -1309,7 +1331,8 @@ void OverlayRenderer::renderLabel(const std::string& text, double x, double y, d
     const auto key = std::format("{}:{}:{}", pointSize, static_cast<int>(std::ceil(maxWidth)), text);
     auto       it  = m_textures.find(key);
     if (it == m_textures.end()) {
-        it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, Theme::textColor(), pointSize, false, "", static_cast<int>(maxWidth))).first;
+        it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, m_config.foregroundColor(), pointSize, false,
+            m_config.fontFamily(), static_cast<int>(maxWidth))).first;
     }
 
     const auto& texture = it->second;
