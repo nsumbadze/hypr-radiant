@@ -206,13 +206,15 @@ void multiMonitorPerFrameBounds() {
     assert(frame1.workspaces.size() == 3);
     assert(frame1.workspaces.at(0).workspaceId == 1);
     assert(frame1.workspaces.at(1).workspaceId == 2);
-    assert(frame1.workspaces.at(2).workspaceId == 3);
+    assert(frame1.workspaces.at(2).workspaceId == 6);
+    assert(frame1.workspaces.at(2).createTarget);
 
     assert(frame2.monitorId == 2);
     assert(frame2.workspaces.size() == 3);
     assert(frame2.workspaces.at(0).workspaceId == 4);
     assert(frame2.workspaces.at(1).workspaceId == 5);
     assert(frame2.workspaces.at(2).workspaceId == 6);
+    assert(frame2.workspaces.at(2).createTarget);
     assert(frame2.workspaces.at(2).empty);
 }
 
@@ -336,6 +338,15 @@ void appExposeFiltersAcrossLocalWorkspaces() {
     assert(frame.stage.windows.at(1).stableId == 10);
 }
 
+void newWorkspaceTargetAvoidsOtherMonitorIds() {
+    auto state = sampleState();
+    state.workspaces.push_back({.id = 7, .name = "remote", .monitorId = 2, .monitorName = "HDMI-A-1"});
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
+
+    assert(frame.workspaces.back().createTarget);
+    assert(frame.workspaces.back().workspaceId == 8);
+}
+
 } // namespace
 
 int main() {
@@ -355,6 +366,7 @@ int main() {
     fillsEmptySlotsAndFallsBackToClassName();
     groupedModeOrdersApplicationsAndMarksHeaders();
     appExposeFiltersAcrossLocalWorkspaces();
+    newWorkspaceTargetAvoidsOtherMonitorIds();
     std::cout << "WorkspaceWallLayoutTest passed\n";
     return 0;
 }

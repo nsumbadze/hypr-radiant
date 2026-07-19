@@ -72,7 +72,12 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         }
         if (!ids.contains(activeId))
             ids.insert(activeId);
-        const auto nextId = ids.empty() ? std::int64_t{1} : *ids.rbegin() + 1;
+        std::int64_t globalMaxId = 0;
+        for (const auto& workspace : state.workspaces) {
+            if (containsPositiveWorkspaceId(workspace))
+                globalMaxId = std::max(globalMaxId, workspace.id);
+        }
+        const auto nextId = globalMaxId + 1;
         if (!ids.contains(nextId))
             ids.insert(nextId);
 
