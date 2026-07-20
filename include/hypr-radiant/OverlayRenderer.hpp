@@ -77,6 +77,8 @@ class OverlayRenderer {
     void renderWindowPreview(const WindowCard& window, const CBox& clipBox, double alpha, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
+    void renderColoredLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha,
+        const CRegion& damage);
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
     [[nodiscard]] OverviewTarget searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const;

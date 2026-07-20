@@ -16,6 +16,7 @@
 #include <hyprland/src/render/Texture.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstddef>
@@ -58,23 +59,6 @@ LayoutRect remapRect(const LayoutRect& child, const LayoutRect& source, const La
     };
 }
 
-std::string appGlyph(std::string appClass) {
-    std::ranges::transform(appClass, appClass.begin(), [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
-    if (appClass.contains("firefox") || appClass.contains("chrom") || appClass.contains("browser") || appClass.contains("zen"))
-        return "󰈹";
-    if (appClass.contains("code") || appClass.contains("editor") || appClass.contains("opencode"))
-        return "󰨞";
-    if (appClass.contains("foot") || appClass.contains("kitty") || appClass.contains("ghostty") || appClass.contains("alacritty") || appClass.contains("term"))
-        return "";
-    if (appClass.contains("discord") || appClass.contains("slack") || appClass.contains("chat"))
-        return "󰙯";
-    if (appClass.contains("nautilus") || appClass.contains("thunar") || appClass.contains("file"))
-        return "󰉋";
-    if (appClass.contains("spotify") || appClass.contains("music"))
-        return "󰎆";
-    return "󰣆";
-}
-
 CBox insetBox(const CBox& box, double amount) {
     return CBox{
         box.x + amount,
@@ -106,6 +90,78 @@ CHyprColor tintedSurface(CHyprColor surface, CHyprColor tint, double amount) {
     surface.g = std::lerp(surface.g, tint.g, mix);
     surface.b = std::lerp(surface.b, tint.b, mix);
     return surface;
+}
+
+std::string normalizedAppClass(std::string appClass) {
+    std::ranges::transform(appClass, appClass.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return appClass;
+}
+
+bool classContains(const std::string& appClass, std::string_view candidate) {
+    return appClass.find(candidate) != std::string::npos;
+}
+
+std::string appGlyph(const std::string& appClass) {
+    const auto normalized = normalizedAppClass(appClass);
+    if (classContains(normalized, "firefox") || classContains(normalized, "zen"))
+        return "󰈹";
+    if (classContains(normalized, "chrom") || classContains(normalized, "browser"))
+        return "󰊯";
+    if (classContains(normalized, "code") || classContains(normalized, "editor") || classContains(normalized, "opencode"))
+        return "󰨞";
+    if (classContains(normalized, "foot") || classContains(normalized, "kitty") || classContains(normalized, "ghostty") ||
+        classContains(normalized, "alacritty") || classContains(normalized, "term"))
+        return "";
+    if (classContains(normalized, "discord") || classContains(normalized, "slack") || classContains(normalized, "chat"))
+        return "󰙯";
+    if (classContains(normalized, "nautilus") || classContains(normalized, "thunar") || classContains(normalized, "file"))
+        return "󰉋";
+    if (classContains(normalized, "spotify") || classContains(normalized, "music"))
+        return "󰎆";
+    return "󰣆";
+}
+
+CHyprColor appSignalColor(const std::string& appClass, CHyprColor inheritedAccent) {
+    const auto normalized = normalizedAppClass(appClass);
+    const auto inherited = [inheritedAccent](CHyprColor color, double amount) {
+        color = tintedSurface(color, inheritedAccent, amount);
+        color.a = 1.0F;
+        return color;
+    };
+
+    if (classContains(normalized, "firefox") || classContains(normalized, "zen"))
+        return inherited(CHyprColor{1.0F, 0.43F, 0.20F, 1.0F}, 0.12);
+    if (classContains(normalized, "chrom") || classContains(normalized, "browser"))
+        return inherited(CHyprColor{0.28F, 0.57F, 0.96F, 1.0F}, 0.12);
+    if (classContains(normalized, "code") || classContains(normalized, "editor") || classContains(normalized, "opencode"))
+        return inherited(CHyprColor{0.12F, 0.68F, 0.96F, 1.0F}, 0.16);
+    if (classContains(normalized, "foot") || classContains(normalized, "kitty") || classContains(normalized, "ghostty") ||
+        classContains(normalized, "alacritty") || classContains(normalized, "term")) {
+        inheritedAccent.a = 1.0F;
+        return inheritedAccent;
+    }
+    if (classContains(normalized, "discord") || classContains(normalized, "slack") || classContains(normalized, "chat"))
+        return inherited(CHyprColor{0.42F, 0.45F, 0.96F, 1.0F}, 0.15);
+    if (classContains(normalized, "nautilus") || classContains(normalized, "thunar") || classContains(normalized, "file"))
+        return inherited(CHyprColor{0.83F, 0.78F, 0.52F, 1.0F}, 0.18);
+    if (classContains(normalized, "spotify") || classContains(normalized, "music"))
+        return inherited(CHyprColor{0.16F, 0.82F, 0.38F, 1.0F}, 0.14);
+
+    static const std::array<CHyprColor, 5> palette{
+        CHyprColor{0.38F, 0.74F, 0.98F, 1.0F},
+        CHyprColor{0.68F, 0.55F, 0.98F, 1.0F},
+        CHyprColor{0.31F, 0.84F, 0.70F, 1.0F},
+        CHyprColor{0.95F, 0.62F, 0.34F, 1.0F},
+        CHyprColor{0.93F, 0.47F, 0.66F, 1.0F},
+    };
+    std::uint32_t hash = 2166136261U;
+    for (const auto character : normalized) {
+        hash ^= static_cast<unsigned char>(character);
+        hash *= 16777619U;
+    }
+    return inherited(palette[hash % palette.size()], 0.22);
 }
 
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
@@ -1144,17 +1200,21 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         auto displayRect = window.rect;
         displayRect.y += stageOffset;
         if (selected)
-            displayRect = scaledAroundCenter(displayRect, std::lerp(0.985, 1.026, selectionTransition), -5.0 * selectionTransition);
+            displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.014, selectionTransition), -3.0 * selectionTransition);
         const auto windowBox = boxFor(displayRect);
         const auto radius = Theme::windowRadius();
 
-        if (window.appGroupStart)
-            renderLabel(std::format("{}  {}", appGlyph(window.appClass), window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
-                std::max(1.0, displayRect.width - 4.0), Theme::hintSize(), stageAlpha * 0.74, damage);
+        if (window.appGroupStart) {
+            const auto glyphColor = appSignalColor(window.appClass, accent);
+            renderColoredLabel(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
+                18.0, Theme::hintSize(), glyphColor, stageAlpha * 0.92, damage);
+            renderLabel(window.appClass, displayRect.x + 24.0, displayRect.y - 22.0,
+                std::max(1.0, displayRect.width - 26.0), Theme::hintSize(), stageAlpha * 0.68, damage);
+        }
 
         const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? stageAlpha * 0.30 : stageAlpha;
         drawRect(CBox{windowBox.x + 7.0, windowBox.y + 10.0, windowBox.w, windowBox.h},
-            withAlpha(Theme::shadowColor(), windowAlpha * 0.86), damage, radius + 2);
+            withAlpha(Theme::shadowColor(), windowAlpha * 0.72), damage, radius + 2);
         if (selected) {
             drawRect(CBox{windowBox.x - 6.0, windowBox.y - 6.0, windowBox.w + 12.0, windowBox.h + 12.0},
                 withAlpha(accent, stageAlpha * 0.16), damage, radius + 6);
@@ -1191,9 +1251,11 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), stageAlpha * 0.52), damage, 9);
         drawRect(titleBox, withAlpha(titleSurface, stageAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
         if (selected)
-            drawRect(CBox{titleBox.x + 10.0, titleBox.y + titleBox.h - 2.0, std::max(1.0, titleBox.w - 20.0), 2.0}, withAlpha(accent, stageAlpha * 0.82), damage, 1);
-        renderLabel(std::format("{}  {}", appGlyph(window.appClass), window.label), titleBox.x + 12.0, titleBox.y + 6.0,
-            std::max(1.0, titleBox.w - 24.0), Theme::hintSize(), stageAlpha * (selected ? 1.0 : 0.76), damage);
+            drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(accent, stageAlpha * 0.64), damage, 1);
+        renderColoredLabel(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
+            18.0, Theme::hintSize(), appSignalColor(window.appClass, accent), stageAlpha * (selected ? 1.0 : 0.82), damage);
+        renderLabel(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
+            std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), stageAlpha * (selected ? 1.0 : 0.76), damage);
     }
 
     if (m_dragging) {
@@ -1214,26 +1276,24 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     }
 
     if (!m_searchActive) {
-        const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSE" : "SPATIAL";
-        const auto deckWidth = std::min(940.0, std::max(1.0, frame.bounds.width - 64.0));
-        const auto deck = CBox{centered(frame.bounds.width, deckWidth), frame.bounds.height - 54.0, deckWidth, 36.0};
+        const auto modeLabel = m_mode == OverviewMode::Grouped ? "Apps" : m_mode == OverviewMode::AppExpose ? "App Exposé" : "Spatial";
+        const auto deckWidth = std::min(920.0, std::max(1.0, frame.bounds.width - 64.0));
+        const auto deck = CBox{centered(frame.bounds.width, deckWidth), frame.bounds.height - 52.0, deckWidth, 34.0};
         drawRect(CBox{deck.x + 5.0, deck.y + 7.0, deck.w, deck.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.58), damage, 14);
-        drawRect(deck, withAlpha(railSurface, contentAlpha * 0.90), damage, 14, true);
+        drawRect(deck, withAlpha(railSurface, contentAlpha * 0.84), damage, 14, true);
         if (g_pHyprRenderer) {
             CBorderPassElement::SBorderData border;
             border.box = deck;
-            border.grad1 = Config::CGradientValueData{withAlpha(accent, contentAlpha * 0.24)};
-            border.a = static_cast<float>(accent.a * contentAlpha * 0.24);
+            border.grad1 = Config::CGradientValueData{withAlpha(accent, contentAlpha * 0.16)};
+            border.a = static_cast<float>(accent.a * contentAlpha * 0.16);
             border.round = 14;
             border.borderSize = 1;
             g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
         }
-        renderLabel("󰣇  RADIANT // HYPRLAND", deck.x + 16.0, deck.y + 10.0,
-            190.0, Theme::hintSize(), contentAlpha * 0.72, damage);
-        renderLabel("[←→] SPACE   [↓] WINDOWS   [TAB] VIEW   [ENTER] OPEN   [/] FIND   [ESC] CLOSE",
-            deck.x + 205.0, deck.y + 10.0, std::max(1.0, deck.w - 335.0), Theme::hintSize(), contentAlpha * 0.76, damage);
-        renderLabel(modeLabel, deck.x + deck.w - 112.0, deck.y + 10.0,
-            96.0, Theme::hintSize(), contentAlpha * 0.92, damage);
+        renderLabel("← → navigate  ·  Tab view  ·  Enter open  ·  / search  ·  Esc close",
+            deck.x + 18.0, deck.y + 9.0, std::max(1.0, deck.w - 138.0), Theme::hintSize(), contentAlpha * 0.66, damage);
+        renderLabel(modeLabel, deck.x + deck.w - 104.0, deck.y + 9.0,
+            88.0, Theme::hintSize(), contentAlpha * 0.84, damage);
     } else {
         auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
@@ -1436,10 +1496,15 @@ const WorkspaceCard* OverlayRenderer::findWorkspaceCard(std::int64_t workspaceId
 }
 
 void OverlayRenderer::renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage) {
+    renderColoredLabel(text, x, y, maxWidth, pointSize, m_config.foregroundColor(), alpha, damage);
+}
+
+void OverlayRenderer::renderColoredLabel(
+    const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha, const CRegion& damage) {
     if (!g_pHyprRenderer || text.empty() || maxWidth <= 0.0 || alpha <= 0.001)
         return;
 
-    // m_textures is an open-session text cache keyed by (pointSize, ceil(maxWidth), text).
+    // m_textures is an open-session text cache keyed by (pointSize, ceil(maxWidth), color, text).
     // It is cleared in show() and hideImmediate(), so repeated frames reuse the same labels
     // instead of accumulating across overview opens. Per session, growth is naturally bounded
     // by rendered workspace names (one per workspace card), visible window labels (one per
@@ -1453,10 +1518,14 @@ void OverlayRenderer::renderLabel(const std::string& text, double x, double y, d
     // strings/max widths collapse further. The cache therefore cannot realistically grow
     // without bound during normal use; do not add eviction here unless future analysis changes
     // those inputs.
-    const auto key = std::format("{}:{}:{}", pointSize, static_cast<int>(std::ceil(maxWidth)), text);
+    const auto channel = [](float value) {
+        return static_cast<int>(std::round(std::clamp(value, 0.0F, 1.0F) * 255.0F));
+    };
+    const auto key = std::format("{}:{}:{:02x}{:02x}{:02x}{:02x}:{}", pointSize, static_cast<int>(std::ceil(maxWidth)),
+        channel(color.r), channel(color.g), channel(color.b), channel(color.a), text);
     auto       it  = m_textures.find(key);
     if (it == m_textures.end()) {
-        it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, m_config.foregroundColor(), pointSize, false,
+        it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, color, pointSize, false,
             m_config.fontFamily(), static_cast<int>(maxWidth))).first;
     }
 
