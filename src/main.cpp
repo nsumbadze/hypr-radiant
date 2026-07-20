@@ -79,12 +79,14 @@ bool RadiantPlugin::initialize() {
                 activate(action.target, "pointer activation");
                 return;
             }
-            if (action.type != PointerActionType::MoveWindow)
+            if (action.type != PointerActionType::MoveWindow && action.type != PointerActionType::CreateWorkspaceAndMoveWindow)
                 return;
             if (!m_activation.moveWindow(action.windowId, action.target.workspaceId, action.target.monitorId)) {
                 log::warn("window move target disappeared or was invalid");
                 return;
             }
+            if (action.type == PointerActionType::CreateWorkspaceAndMoveWindow)
+                log::info("created workspace {} and moved window {}", action.target.workspaceId, action.windowId);
             m_input.deferActivation(POST_DROP_ACTIVATION_DELAY);
             m_overlay.refresh(m_stateCollector.collect());
         },

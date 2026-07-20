@@ -558,7 +558,12 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
     pointerMoved(x, y);
     PointerAction action;
     if (m_dragging && m_dragTarget.type != OverviewTargetType::None) {
-        action = {.type = PointerActionType::MoveWindow, .target = m_dragTarget, .windowId = m_pointerDownTarget.windowId};
+        action = {
+            .type = m_dragTarget.type == OverviewTargetType::NewWorkspace ? PointerActionType::CreateWorkspaceAndMoveWindow :
+                                                                           PointerActionType::MoveWindow,
+            .target = m_dragTarget,
+            .windowId = m_pointerDownTarget.windowId,
+        };
     } else if (!m_dragging) {
         const auto releasedTarget = hitTest(x, y);
         if (sameTarget(releasedTarget, m_pointerDownTarget))

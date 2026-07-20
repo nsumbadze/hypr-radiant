@@ -25,6 +25,7 @@ enum class PointerActionType {
     None,
     Activate,
     MoveWindow,
+    CreateWorkspaceAndMoveWindow,
 };
 
 struct PointerAction {
