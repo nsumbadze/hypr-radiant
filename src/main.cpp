@@ -15,6 +15,8 @@ namespace {
 
 constexpr auto PLUGIN_NAME        = "hypr-radiant";
 constexpr auto DISPATCHER_TOGGLE  = "radiant:toggle";
+constexpr auto DISPATCHER_OPEN    = "radiant:open";
+constexpr auto DISPATCHER_CLOSE   = "radiant:close";
 constexpr auto DISPATCHER_APP     = "radiant:app";
 constexpr auto DISPATCHER_STATUS  = "radiant:status";
 constexpr auto PLUGIN_DESCRIPTION = "Native workspace overview with live previews and search.";
@@ -213,6 +215,31 @@ SDispatchResult RadiantPlugin::toggle(const std::string& args) {
     return {.passEvent = false, .success = true, .error = ""};
 }
 
+SDispatchResult RadiantPlugin::open(const std::string& args) {
+    if (!args.empty())
+        log::warn("radiant:open ignores dispatcher arguments: {}", args);
+    if (m_overlay.active())
+        return {.passEvent = false, .success = true, .error = ""};
+
+    m_overlay.show(m_stateCollector.collect());
+    m_lastOpenedAt = Clock::now();
+    m_input.grabKeyboard();
+    recordTransition("opened by explicit dispatcher");
+    return {.passEvent = false, .success = true, .error = ""};
+}
+
+SDispatchResult RadiantPlugin::close(const std::string& args) {
+    if (!args.empty())
+        log::warn("radiant:close ignores dispatcher arguments: {}", args);
+    if (!m_overlay.active())
+        return {.passEvent = false, .success = true, .error = ""};
+
+    m_overlay.toggle(m_stateCollector.collect());
+    m_input.releaseKeyboard();
+    recordTransition("closed by explicit dispatcher", true);
+    return {.passEvent = false, .success = true, .error = ""};
+}
+
 bool RadiantPlugin::active() const noexcept {
     return m_overlay.active();
 }
@@ -262,6 +289,38 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:toggle"};
     }
 
+    const auto openRegistered = HyprlandAPI::addDispatcherV2(
+        g_pluginHandle,
+        DISPATCHER_OPEN,
+        [](std::string args) -> SDispatchResult {
+            try {
+                if (!g_plugin)
+                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
+                return g_plugin->open(args);
+            } catch (const std::exception& error) {
+                hypr_radiant::log::error("radiant:open failed: {}", error.what());
+                return {.passEvent = false, .success = false, .error = error.what()};
+            }
+        });
+    const auto closeRegistered = HyprlandAPI::addDispatcherV2(
+        g_pluginHandle,
+        DISPATCHER_CLOSE,
+        [](std::string args) -> SDispatchResult {
+            try {
+                if (!g_plugin)
+                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
+                return g_plugin->close(args);
+            } catch (const std::exception& error) {
+                hypr_radiant::log::error("radiant:close failed: {}", error.what());
+                return {.passEvent = false, .success = false, .error = error.what()};
+            }
+        });
+
+    if (!openRegistered || !closeRegistered) {
+        resetPluginState();
+        throw std::runtime_error{"hypr-radiant: failed to register explicit overview dispatchers"};
+    }
+
     const auto appRegistered = HyprlandAPI::addDispatcherV2(
         g_pluginHandle,
         DISPATCHER_APP,
@@ -294,7 +353,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:status"};
     }
 
-    hypr_radiant::log::info("loaded; dispatchers radiant:toggle and radiant:app registered");
+    hypr_radiant::log::info("loaded; dispatchers radiant:toggle, radiant:open, radiant:close, and radiant:app registered");
 
     return {
         .name        = PLUGIN_NAME,

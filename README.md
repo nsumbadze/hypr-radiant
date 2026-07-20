@@ -102,6 +102,8 @@ layout retains the original grid.
 ## Controls
 
 - `hyprctl dispatch radiant:toggle`: open or close overview
+- `hyprctl dispatch radiant:open`: open overview only if it is closed
+- `hyprctl dispatch radiant:close`: close overview only if it is open
 - Hover a rail workspace or stage window: move selection
 - Drag a stage window onto a rail card: move it to that workspace
 - Drag a stage window onto `NEW [id]`: create a workspace and move it there

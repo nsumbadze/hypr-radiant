@@ -22,6 +22,8 @@ class RadiantPlugin {
 
     bool            initialize();
     void            shutdown();
+    SDispatchResult open(const std::string& args);
+    SDispatchResult close(const std::string& args);
     SDispatchResult toggle(const std::string& args);
     SDispatchResult showApplication(const std::string& args);
     SDispatchResult status(const std::string& args);
