@@ -1,7 +1,8 @@
-#include <hypr-radiant/GestureController.hpp>
+#include <hypr-radiant/SwipeTracker.hpp>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace hypr_radiant {
 

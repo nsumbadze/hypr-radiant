@@ -1,4 +1,4 @@
-#include <hypr-radiant/GestureController.hpp>
+#include <hypr-radiant/SwipeTracker.hpp>
 
 #include <cassert>
 #include <iostream>
