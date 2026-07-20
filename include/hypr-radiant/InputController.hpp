@@ -33,6 +33,7 @@ class InputController {
 
     void grabKeyboard(bool waitForOpeningRelease = true);
     void releaseKeyboard();
+    void deferActivation(std::chrono::milliseconds duration);
 
   private:
     [[nodiscard]] bool inputArmed() const noexcept;

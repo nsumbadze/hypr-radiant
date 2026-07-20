@@ -5,6 +5,7 @@
 
 #include <linux/input-event-codes.h>
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 
@@ -209,6 +210,10 @@ void InputController::grabKeyboard(bool waitForOpeningRelease) {
 void InputController::releaseKeyboard() {
     if (m_seatGrab && g_pSeatManager && g_pSeatManager->m_seatGrab == m_seatGrab)
         g_pSeatManager->setGrab(nullptr);
+}
+
+void InputController::deferActivation(std::chrono::milliseconds duration) {
+    m_acceptActivationAfter = std::max(m_acceptActivationAfter, Clock::now() + std::max(duration, std::chrono::milliseconds{0}));
 }
 
 void InputController::uninstall() {

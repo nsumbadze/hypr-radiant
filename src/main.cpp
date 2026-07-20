@@ -23,6 +23,7 @@ constexpr auto PLUGIN_DESCRIPTION = "Native workspace overview with live preview
 constexpr auto PLUGIN_AUTHOR      = "Nika Sumbadze (@nsumbadze)";
 constexpr auto PLUGIN_VERSION     = "0.3.0-dev";
 constexpr auto TOGGLE_GUARD_DELAY = std::chrono::milliseconds{300};
+constexpr auto POST_DROP_ACTIVATION_DELAY = std::chrono::milliseconds{320};
 
 HANDLE g_pluginHandle = nullptr;
 std::unique_ptr<hypr_radiant::RadiantPlugin> g_plugin;
@@ -83,6 +84,7 @@ bool RadiantPlugin::initialize() {
                 log::warn("window move target disappeared or was invalid");
                 return;
             }
+            m_input.deferActivation(POST_DROP_ACTIVATION_DELAY);
             m_overlay.refresh(m_stateCollector.collect());
         },
         [this](char value) { m_overlay.appendSearchChar(value); },
