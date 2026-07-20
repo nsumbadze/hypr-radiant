@@ -256,12 +256,55 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             };
         };
 
+        const auto spatialRect = [&](const WindowSnapshot& window, std::size_t index, std::size_t count) {
+            const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
+            const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
+            const auto outerInset = std::clamp(std::min(stageBounds.width, stageBounds.height) * 0.035, 18.0, 40.0);
+            const auto content = inset(stageBounds, outerInset);
+            const auto gap = std::clamp(renderSize.width * 0.014, 18.0, 28.0);
+            const auto labelReserve = renderSize.height >= 400.0 ? 34.0 : 0.0;
+            const auto cellWidth = std::max(1.0, content.width - gap * static_cast<double>(columns - 1)) / columns;
+            const auto cellHeight = std::max(1.0, content.height - gap * static_cast<double>(rows - 1)) / rows;
+            const auto row = static_cast<int>(index) / columns;
+            const auto column = static_cast<int>(index) % columns;
+            const auto rowStart = static_cast<std::size_t>(row * columns);
+            const auto itemsInRow = std::min(static_cast<std::size_t>(columns), count - rowStart);
+            const auto rowWidth = static_cast<double>(itemsInRow) * cellWidth + static_cast<double>(itemsInRow - 1) * gap;
+            const auto rowX = content.x + centered(content.width, rowWidth);
+            const LayoutRect cell{
+                .x = rowX + static_cast<double>(column) * (cellWidth + gap),
+                .y = content.y + static_cast<double>(row) * (cellHeight + gap),
+                .width = cellWidth,
+                .height = cellHeight,
+            };
+
+            const auto density = count == 1 ? 0.76 : count == 2 ? 0.88 : 0.92;
+            const auto availableWidth = std::max(1.0, cell.width * density);
+            const auto availableHeight = std::max(1.0, (cell.height - labelReserve) * density);
+            const auto sourceWidth = std::max(1.0, window.geometry.size.width);
+            const auto sourceHeight = std::max(1.0, window.geometry.size.height);
+            const auto sourceAspect = sourceWidth / sourceHeight;
+            auto width = availableWidth;
+            auto height = width / sourceAspect;
+            if (height > availableHeight) {
+                height = availableHeight;
+                width = height * sourceAspect;
+            }
+
+            return LayoutRect{
+                .x = cell.x + centered(cell.width, width),
+                .y = cell.y + centered(std::max(1.0, cell.height - labelReserve), height),
+                .width = width,
+                .height = height,
+            };
+        };
+
         std::string previousClass;
         for (std::size_t index = 0; index < stageWindows.size(); ++index) {
             const auto& window = stageWindows[index];
             frame.stage.empty = false;
             const auto groupStart = options.mode == OverviewMode::Grouped && window.className != previousClass;
-            const auto rect = options.mode == OverviewMode::Spatial ? mapWindow(window, stageBounds) : gridRect(index, stageWindows.size());
+            const auto rect = options.mode == OverviewMode::Spatial ? spatialRect(window, index, stageWindows.size()) : gridRect(index, stageWindows.size());
             frame.stage.windows.push_back(cardForWindow(window, rect, groupStart));
             previousClass = window.className;
         }
