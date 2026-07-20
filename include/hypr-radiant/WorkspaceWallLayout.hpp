@@ -74,7 +74,7 @@ struct WorkspaceWallOptions {
     double windowInset           = 22.0;
     bool   focusedStage          = false;
     std::int64_t previewWorkspaceId = -1;
-    OverviewMode mode            = OverviewMode::Spatial;
+    OverviewMode mode = OverviewMode::Spatial;
     std::string  applicationFilter;
 };
 

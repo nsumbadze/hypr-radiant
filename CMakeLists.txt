@@ -44,6 +44,7 @@ endfunction()
 
 add_library(hypr-radiant MODULE
     src/ActivationController.cpp
+    src/AppIdentity.cpp
     src/Config.cpp
     src/FadeAnimation.cpp
     src/GestureController.cpp
@@ -55,6 +56,7 @@ add_library(hypr-radiant MODULE
     src/OpeningInputGuard.cpp
     src/SearchMatcher.cpp
     src/SearchPanelGeometry.cpp
+    src/StageTransform.cpp
     src/WorkspaceWallLayout.cpp
     src/StateCollector.cpp
     src/Theme.cpp
@@ -199,4 +201,26 @@ if(BUILD_TESTING)
     hypr_radiant_enable_warnings(hypr-radiant-input-guard-tests)
     hypr_radiant_enable_sanitizers(hypr-radiant-input-guard-tests)
     add_test(NAME hypr-radiant-input-guard-tests COMMAND hypr-radiant-input-guard-tests)
+
+    add_executable(hypr-radiant-app-identity-tests
+        tests/AppIdentityTest.cpp
+        src/AppIdentity.cpp
+    )
+    target_include_directories(hypr-radiant-app-identity-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-app-identity-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-app-identity-tests PRIVATE -UNDEBUG)
+    hypr_radiant_enable_warnings(hypr-radiant-app-identity-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-app-identity-tests)
+    add_test(NAME hypr-radiant-app-identity-tests COMMAND hypr-radiant-app-identity-tests)
+
+    add_executable(hypr-radiant-stage-transform-tests
+        tests/StageTransformTest.cpp
+        src/StageTransform.cpp
+    )
+    target_include_directories(hypr-radiant-stage-transform-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-stage-transform-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-stage-transform-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-stage-transform-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-stage-transform-tests)
+    add_test(NAME hypr-radiant-stage-transform-tests COMMAND hypr-radiant-stage-transform-tests)
 endif()

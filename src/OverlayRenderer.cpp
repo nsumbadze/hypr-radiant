@@ -1,6 +1,8 @@
 #include <hypr-radiant/OverlayRenderer.hpp>
+#include <hypr-radiant/AppIdentity.hpp>
 #include <hypr-radiant/Log.hpp>
 #include <hypr-radiant/SearchPanelGeometry.hpp>
+#include <hypr-radiant/StageTransform.hpp>
 #include <hypr-radiant/Theme.hpp>
 
 #include <hyprland/src/Compositor.hpp>
@@ -16,8 +18,6 @@
 #include <hyprland/src/render/Texture.hpp>
 
 #include <algorithm>
-#include <array>
-#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -92,76 +92,14 @@ CHyprColor tintedSurface(CHyprColor surface, CHyprColor tint, double amount) {
     return surface;
 }
 
-std::string normalizedAppClass(std::string appClass) {
-    std::ranges::transform(appClass, appClass.begin(), [](unsigned char character) {
-        return static_cast<char>(std::tolower(character));
-    });
-    return appClass;
-}
-
-bool classContains(const std::string& appClass, std::string_view candidate) {
-    return appClass.find(candidate) != std::string::npos;
-}
-
-std::string appGlyph(const std::string& appClass) {
-    const auto normalized = normalizedAppClass(appClass);
-    if (classContains(normalized, "firefox") || classContains(normalized, "zen"))
-        return "󰈹";
-    if (classContains(normalized, "chrom") || classContains(normalized, "browser"))
-        return "󰊯";
-    if (classContains(normalized, "code") || classContains(normalized, "editor") || classContains(normalized, "opencode"))
-        return "󰨞";
-    if (classContains(normalized, "foot") || classContains(normalized, "kitty") || classContains(normalized, "ghostty") ||
-        classContains(normalized, "alacritty") || classContains(normalized, "term"))
-        return "";
-    if (classContains(normalized, "discord") || classContains(normalized, "slack") || classContains(normalized, "chat"))
-        return "󰙯";
-    if (classContains(normalized, "nautilus") || classContains(normalized, "thunar") || classContains(normalized, "file"))
-        return "󰉋";
-    if (classContains(normalized, "spotify") || classContains(normalized, "music"))
-        return "󰎆";
-    return "󰣆";
-}
-
-CHyprColor appSignalColor(const std::string& appClass, CHyprColor inheritedAccent) {
-    const auto normalized = normalizedAppClass(appClass);
-    const auto inherited = [inheritedAccent](CHyprColor color, double amount) {
-        color = tintedSurface(color, inheritedAccent, amount);
-        color.a = 1.0F;
-        return color;
-    };
-
-    if (classContains(normalized, "firefox") || classContains(normalized, "zen"))
-        return inherited(CHyprColor{1.0F, 0.43F, 0.20F, 1.0F}, 0.12);
-    if (classContains(normalized, "chrom") || classContains(normalized, "browser"))
-        return inherited(CHyprColor{0.28F, 0.57F, 0.96F, 1.0F}, 0.12);
-    if (classContains(normalized, "code") || classContains(normalized, "editor") || classContains(normalized, "opencode"))
-        return inherited(CHyprColor{0.12F, 0.68F, 0.96F, 1.0F}, 0.16);
-    if (classContains(normalized, "foot") || classContains(normalized, "kitty") || classContains(normalized, "ghostty") ||
-        classContains(normalized, "alacritty") || classContains(normalized, "term")) {
-        inheritedAccent.a = 1.0F;
-        return inheritedAccent;
-    }
-    if (classContains(normalized, "discord") || classContains(normalized, "slack") || classContains(normalized, "chat"))
-        return inherited(CHyprColor{0.42F, 0.45F, 0.96F, 1.0F}, 0.15);
-    if (classContains(normalized, "nautilus") || classContains(normalized, "thunar") || classContains(normalized, "file"))
-        return inherited(CHyprColor{0.83F, 0.78F, 0.52F, 1.0F}, 0.18);
-    if (classContains(normalized, "spotify") || classContains(normalized, "music"))
-        return inherited(CHyprColor{0.16F, 0.82F, 0.38F, 1.0F}, 0.14);
-
-    static const std::array<CHyprColor, 5> palette{
-        CHyprColor{0.38F, 0.74F, 0.98F, 1.0F},
-        CHyprColor{0.68F, 0.55F, 0.98F, 1.0F},
-        CHyprColor{0.31F, 0.84F, 0.70F, 1.0F},
-        CHyprColor{0.95F, 0.62F, 0.34F, 1.0F},
-        CHyprColor{0.93F, 0.47F, 0.66F, 1.0F},
-    };
-    std::uint32_t hash = 2166136261U;
-    for (const auto character : normalized) {
-        hash ^= static_cast<unsigned char>(character);
-        hash *= 16777619U;
-    }
-    return inherited(palette[hash % palette.size()], 0.22);
+CHyprColor resolvedAppSignalColor(const std::string& appClass, CHyprColor inheritedAccent) {
+    const auto color = appSignalColor(appClass, {
+                                               .r = static_cast<float>(inheritedAccent.r),
+                                               .g = static_cast<float>(inheritedAccent.g),
+                                               .b = static_cast<float>(inheritedAccent.b),
+                                               .a = static_cast<float>(inheritedAccent.a),
+                                           });
+    return {color.r, color.g, color.b, color.a};
 }
 
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
@@ -323,44 +261,12 @@ LayoutRect interpolatedRect(const LayoutRect& from, const LayoutRect& to, double
     };
 }
 
-LayoutRect remapStageRect(const LayoutRect& child, const LayoutRect& source, const LayoutRect& target) {
-    if (source.width <= 0.0 || source.height <= 0.0 || target.width <= 0.0 || target.height <= 0.0)
-        return child;
-
-    const auto scale = std::min(target.width / source.width, target.height / source.height);
-    const auto contentWidth = source.width * scale;
-    const auto contentHeight = source.height * scale;
-    const auto originX = target.x + centered(target.width, contentWidth);
-    const auto originY = target.y + centered(target.height, contentHeight);
-    return {
-        .x = originX + (child.x - source.x) * scale,
-        .y = originY + (child.y - source.y) * scale,
-        .width = child.width * scale,
-        .height = child.height * scale,
-    };
-}
-
 RadiantPoint mapDisplayedStagePoint(const WorkspaceWallFrame& frame, RadiantPoint point, bool shelfVisible) {
     if (shelfVisible)
         return point;
 
     const auto displayed = collapsedStageBounds(frame);
-    if (frame.stage.bounds.width <= 0.0 || frame.stage.bounds.height <= 0.0 || displayed.width <= 0.0 || displayed.height <= 0.0)
-        return point;
-
-    const auto scale = std::min(displayed.width / frame.stage.bounds.width, displayed.height / frame.stage.bounds.height);
-    const auto contentWidth = frame.stage.bounds.width * scale;
-    const auto contentHeight = frame.stage.bounds.height * scale;
-    const auto originX = displayed.x + centered(displayed.width, contentWidth);
-    const auto originY = displayed.y + centered(displayed.height, contentHeight);
-    const LayoutRect content{.x = originX, .y = originY, .width = contentWidth, .height = contentHeight};
-    if (!contains(content, point.x, point.y))
-        return point;
-
-    return {
-        .x = frame.stage.bounds.x + (point.x - originX) / scale,
-        .y = frame.stage.bounds.y + (point.y - originY) / scale,
-    };
+    return mapStagePointToSource(frame.stage.bounds, displayed, point).value_or(point);
 }
 
 std::size_t selectedSearchIndex(const std::vector<OverviewTarget>& targets, OverviewTarget selected) {
@@ -586,8 +492,7 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
     PointerAction action;
     if (m_dragging && m_dragTarget.type != OverviewTargetType::None) {
         action = {
-            .type = m_dragTarget.type == OverviewTargetType::NewWorkspace ? PointerActionType::CreateWorkspaceAndMoveWindow :
-                                                                           PointerActionType::MoveWindow,
+            .type = m_dragTarget.type == OverviewTargetType::NewWorkspace ? PointerActionType::CreateWorkspaceAndMoveWindow : PointerActionType::MoveWindow,
             .target = m_dragTarget,
             .windowId = m_pointerDownTarget.windowId,
         };
@@ -1232,7 +1137,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         if (selected) {
             if (!workspace.createTarget)
                 drawRect(CBox{cardBox.x - 8.0, cardBox.y - 8.0, cardBox.w + 16.0, cardBox.h + 16.0},
-                withAlpha(accent, railAlpha * 0.065), damage, radius + 8);
+                    withAlpha(accent, railAlpha * 0.065), damage, radius + 8);
             const auto tracerX = cardBox.x + 16.0;
             const auto tracerWidth = std::max(12.0, cardBox.w - 32.0);
             drawRect(CBox{tracerX - 5.0, spineY - 3.0, tracerWidth + 10.0, 7.0},
@@ -1284,7 +1189,6 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             drawRect(CBox{cardBox.x + centered(cardBox.w, lineWidth), cardBox.y + cardBox.h - 4.0, lineWidth, 2.0},
                 withAlpha(accent, railAlpha * 0.56), damage, 1);
         }
-
     }
 
     if (frame.rail.overflowLeft)
@@ -1327,7 +1231,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         const auto radius = Theme::windowRadius();
 
         if (window.appGroupStart) {
-            const auto glyphColor = appSignalColor(window.appClass, accent);
+            const auto glyphColor = resolvedAppSignalColor(window.appClass, accent);
             renderColoredLabel(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
                 18.0, Theme::hintSize(), glyphColor, stageAlpha * 0.92, damage);
             renderLabel(window.appClass, displayRect.x + 24.0, displayRect.y - 22.0,
@@ -1375,7 +1279,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         if (selected)
             drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(accent, stageAlpha * 0.64), damage, 1);
         renderColoredLabel(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
-            18.0, Theme::hintSize(), appSignalColor(window.appClass, accent), stageAlpha * (selected ? 1.0 : 0.82), damage);
+            18.0, Theme::hintSize(), resolvedAppSignalColor(window.appClass, accent), stageAlpha * (selected ? 1.0 : 0.82), damage);
         renderLabel(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
             std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), stageAlpha * (selected ? 1.0 : 0.76), damage);
     }
@@ -1405,10 +1309,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         drawRect(deck, withAlpha(railSurface, contentAlpha * 0.84), damage, 14, true);
         if (g_pHyprRenderer) {
             CBorderPassElement::SBorderData border;
-            border.box = deck;
+            border.box        = deck;
             border.grad1 = Config::CGradientValueData{withAlpha(accent, contentAlpha * 0.16)};
             border.a = static_cast<float>(accent.a * contentAlpha * 0.16);
-            border.round = 14;
+            border.round      = 14;
             border.borderSize = 1;
             g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
         }
