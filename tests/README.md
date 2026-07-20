@@ -29,4 +29,4 @@ These modules directly read Hyprland compositor/renderer/input state or subscrib
 
 We do not manufacture mocks or stubs for Hyprland globals such as `g_pCompositor`, `g_pHyprRenderer`, `g_pInputManager`, or `Event::bus()`. Code that depends on those process-global services is validated through integration/runtime testing in Hyprland, while unit tests remain limited to meaningful pure logic.
 
-GitHub Actions builds and runs every pure-logic test without Hyprland headers. The full CMake suite also runs config parsing and the plugin build whenever matching Hyprland headers are available.
+GitHub Actions configures the CMake test graph without the plugin, then builds and runs every pure-logic test with compiler warnings as errors and AddressSanitizer/UndefinedBehaviorSanitizer enabled. The full CMake suite also runs config parsing and the plugin build whenever matching Hyprland headers are available.

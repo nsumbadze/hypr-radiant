@@ -8,13 +8,17 @@ project(
 )
 
 option(HYPR_RADIANT_ENABLE_SANITIZERS "Enable AddressSanitizer and UndefinedBehaviorSanitizer for tests" OFF)
+option(HYPR_RADIANT_BUILD_PLUGIN "Build the Hyprland plugin" ON)
+option(HYPR_RADIANT_WARNINGS_AS_ERRORS "Treat compiler warnings as errors" OFF)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland)
+if(HYPR_RADIANT_BUILD_PLUGIN)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland)
+endif()
 
 function(hypr_radiant_enable_warnings target)
     target_compile_options(${target}
@@ -23,6 +27,9 @@ function(hypr_radiant_enable_warnings target)
             -Wextra
             -Wpedantic
     )
+    if(HYPR_RADIANT_WARNINGS_AS_ERRORS)
+        target_compile_options(${target} PRIVATE -Werror)
+    endif()
 endfunction()
 
 set(HYPR_RADIANT_SANITIZER_FLAGS
@@ -42,49 +49,51 @@ function(hypr_radiant_enable_sanitizers target)
     endif()
 endfunction()
 
-add_library(hypr-radiant MODULE
-    src/ActivationController.cpp
-    src/AppIdentity.cpp
-    src/Config.cpp
-    src/FadeAnimation.cpp
-    src/GestureController.cpp
-    src/SwipeTracker.cpp
-    src/HitTester.cpp
-    src/InputController.cpp
-    src/main.cpp
-    src/OverlayRenderer.cpp
-    src/OpeningInputGuard.cpp
-    src/SearchMatcher.cpp
-    src/SearchPanelGeometry.cpp
-    src/StageTransform.cpp
-    src/WorkspaceWallLayout.cpp
-    src/StateCollector.cpp
-    src/Theme.cpp
-)
+if(HYPR_RADIANT_BUILD_PLUGIN)
+    add_library(hypr-radiant MODULE
+        src/ActivationController.cpp
+        src/AppIdentity.cpp
+        src/Config.cpp
+        src/FadeAnimation.cpp
+        src/GestureController.cpp
+        src/SwipeTracker.cpp
+        src/HitTester.cpp
+        src/InputController.cpp
+        src/main.cpp
+        src/OverlayRenderer.cpp
+        src/OpeningInputGuard.cpp
+        src/SearchMatcher.cpp
+        src/SearchPanelGeometry.cpp
+        src/StageTransform.cpp
+        src/WorkspaceWallLayout.cpp
+        src/StateCollector.cpp
+        src/Theme.cpp
+    )
 
-target_include_directories(hypr-radiant
-    PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+    target_include_directories(hypr-radiant
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+    )
 
-target_compile_options(hypr-radiant
-    PRIVATE
-        -fno-gnu-unique
-)
+    target_compile_options(hypr-radiant
+        PRIVATE
+            -fno-gnu-unique
+    )
 
-hypr_radiant_enable_warnings(hypr-radiant)
+    hypr_radiant_enable_warnings(hypr-radiant)
 
-target_link_libraries(hypr-radiant
-    PRIVATE
-        PkgConfig::HYPRLAND
-)
+    target_link_libraries(hypr-radiant
+        PRIVATE
+            PkgConfig::HYPRLAND
+    )
 
-set_target_properties(hypr-radiant PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-    PREFIX ""
-    OUTPUT_NAME "hypr-radiant"
-    SUFFIX ".so"
-)
+    set_target_properties(hypr-radiant PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+        PREFIX ""
+        OUTPUT_NAME "hypr-radiant"
+        SUFFIX ".so"
+    )
+endif()
 
 include(CTest)
 
@@ -141,27 +150,29 @@ if(BUILD_TESTING)
 
     add_test(NAME hypr-radiant-search-tests COMMAND hypr-radiant-search-tests)
 
-    add_executable(hypr-radiant-config-tests
-        tests/ConfigParserTest.cpp
-        tests/stubs/HyprlandConfigStub.cpp
-        src/Config.cpp
-    )
+    if(HYPR_RADIANT_BUILD_PLUGIN)
+        add_executable(hypr-radiant-config-tests
+            tests/ConfigParserTest.cpp
+            tests/stubs/HyprlandConfigStub.cpp
+            src/Config.cpp
+        )
 
-    target_include_directories(hypr-radiant-config-tests
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/include
-    )
+        target_include_directories(hypr-radiant-config-tests
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}/include
+        )
 
-    target_compile_features(hypr-radiant-config-tests PRIVATE cxx_std_23)
-    target_compile_options(hypr-radiant-config-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
-    hypr_radiant_enable_warnings(hypr-radiant-config-tests)
-    hypr_radiant_enable_sanitizers(hypr-radiant-config-tests)
-    target_link_libraries(hypr-radiant-config-tests
-        PRIVATE
-            PkgConfig::HYPRLAND
-    )
+        target_compile_features(hypr-radiant-config-tests PRIVATE cxx_std_23)
+        target_compile_options(hypr-radiant-config-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+        hypr_radiant_enable_warnings(hypr-radiant-config-tests)
+        hypr_radiant_enable_sanitizers(hypr-radiant-config-tests)
+        target_link_libraries(hypr-radiant-config-tests
+            PRIVATE
+                PkgConfig::HYPRLAND
+        )
 
-    add_test(NAME hypr-radiant-config-tests COMMAND hypr-radiant-config-tests)
+        add_test(NAME hypr-radiant-config-tests COMMAND hypr-radiant-config-tests)
+    endif()
 
     add_executable(hypr-radiant-fade-tests
         tests/FadeAnimationTest.cpp
