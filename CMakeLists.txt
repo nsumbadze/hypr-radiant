@@ -2,8 +2,8 @@ cmake_minimum_required(VERSION 3.25)
 
 project(
     hypr-radiant
-    VERSION 0.1.0
-    DESCRIPTION "Minimal Hyprland plugin skeleton for hypr-radiant"
+    VERSION 0.3.0
+    DESCRIPTION "Native workspace overview for Hyprland"
     LANGUAGES CXX
 )
 

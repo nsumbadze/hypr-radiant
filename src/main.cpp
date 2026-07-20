@@ -21,7 +21,7 @@ constexpr auto DISPATCHER_APP     = "radiant:app";
 constexpr auto DISPATCHER_STATUS  = "radiant:status";
 constexpr auto PLUGIN_DESCRIPTION = "Native workspace overview with live previews and search.";
 constexpr auto PLUGIN_AUTHOR      = "Nika Sumbadze (@nsumbadze)";
-constexpr auto PLUGIN_VERSION     = "0.2.0-dev";
+constexpr auto PLUGIN_VERSION     = "0.3.0-dev";
 constexpr auto TOGGLE_GUARD_DELAY = std::chrono::milliseconds{300};
 
 HANDLE g_pluginHandle = nullptr;

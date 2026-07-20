@@ -6,7 +6,7 @@ commit_pins = [
 ]
 
 [hypr-radiant]
-description = "Minimal Hyprland plugin skeleton for radiant overview experiments."
+description = "Native workspace overview with live previews, gestures, and search."
 authors = ["Nika Sumbadze (@nsumbadze)"]
 output = "build/hypr-radiant.so"
 build = [
