@@ -10,8 +10,13 @@ permissions:
 jobs:
   logic:
     name: Pure logic validation
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     env:
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+      CLANG_FORMAT: clang-format-22
+      CLANG_TIDY: clang-tidy-22
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
       PURE_TIDY_FILES: >-
         src/WorkspaceWallLayout.cpp
         src/SearchPanelGeometry.cpp
@@ -32,63 +37,51 @@ jobs:
         tests/StageTransformTest.cpp
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install validation tools
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            clang-format \
-            clang-tidy \
+            ca-certificates \
             cmake \
             g++ \
-            pkg-config
+            pkg-config \
+            wget
+          wget --quiet https://apt.llvm.org/llvm.sh --output-document=/tmp/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 22
+          sudo apt-get install -y --no-install-recommends \
+            clang-format-22 \
+            clang-tidy-22
+
+      - name: Report validation toolchain
+        run: |
+          "$CLANG_FORMAT" --version
+          "$CLANG_TIDY" --version
 
       - name: Validate formatter configuration
-        run: clang-format --dump-config > /dev/null
+        run: |
+          "$CLANG_FORMAT" --dump-config > /dev/null
 
       - name: Check formatting
-        run: clang-format --dry-run -Werror $(git ls-files '*.cpp' '*.hpp')
+        run: |
+          "$CLANG_FORMAT" --dry-run -Werror $(git ls-files '*.cpp' '*.hpp')
 
       - name: Build and run pure logic tests
         run: |
-          mkdir -p build/ci-logic
-          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
-            tests/WorkspaceWallLayoutTest.cpp src/WorkspaceWallLayout.cpp src/SearchPanelGeometry.cpp \
-            -o build/ci-logic/hypr-radiant-layout-tests
-          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
-            tests/HitTesterTest.cpp src/HitTester.cpp \
-            -o build/ci-logic/hypr-radiant-hit-tests
-          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
-            tests/SearchMatcherTest.cpp src/SearchMatcher.cpp \
-            -o build/ci-logic/hypr-radiant-search-tests
-          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
-            tests/FadeAnimationTest.cpp src/FadeAnimation.cpp \
-            -o build/ci-logic/hypr-radiant-fade-tests
-          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
-            tests/GestureControllerTest.cpp src/SwipeTracker.cpp \
-            -o build/ci-logic/hypr-radiant-gesture-tests
-          g++ -std=c++23 -Wall -Wextra -Wpedantic -Iinclude \
-            tests/OpeningInputGuardTest.cpp src/OpeningInputGuard.cpp \
-            -o build/ci-logic/hypr-radiant-input-guard-tests
-          g++ -std=c++23 -Wall -Wextra -Wpedantic -Iinclude \
-            tests/AppIdentityTest.cpp src/AppIdentity.cpp \
-            -o build/ci-logic/hypr-radiant-app-identity-tests
-          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
-            tests/StageTransformTest.cpp src/StageTransform.cpp \
-            -o build/ci-logic/hypr-radiant-stage-transform-tests
-          build/ci-logic/hypr-radiant-layout-tests
-          build/ci-logic/hypr-radiant-hit-tests
-          build/ci-logic/hypr-radiant-search-tests
-          build/ci-logic/hypr-radiant-fade-tests
-          build/ci-logic/hypr-radiant-gesture-tests
-          build/ci-logic/hypr-radiant-input-guard-tests
-          build/ci-logic/hypr-radiant-app-identity-tests
-          build/ci-logic/hypr-radiant-stage-transform-tests
+          cmake -S . -B build/ci-logic \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DBUILD_TESTING=ON \
+            -DHYPR_RADIANT_BUILD_PLUGIN=OFF \
+            -DHYPR_RADIANT_ENABLE_SANITIZERS=ON \
+            -DHYPR_RADIANT_WARNINGS_AS_ERRORS=ON
+          cmake --build build/ci-logic --parallel 2
+          ctest --test-dir build/ci-logic --output-on-failure
 
       - name: Run scoped clang-tidy
         run: >-
-          clang-tidy --config-file=.clang-tidy $PURE_TIDY_FILES
+          "$CLANG_TIDY" --warnings-as-errors='*' --config-file=.clang-tidy $PURE_TIDY_FILES
           -- -std=c++23 -Iinclude
 
       - name: Check for matching Hyprland headers
@@ -105,7 +98,7 @@ jobs:
             echo "Hyprland $version headers are available; running full plugin build."
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice title=Full plugin build skipped::Hyprland 0.55.2 headers/pkg-config are not available on ubuntu-latest. Full plugin builds are validated locally against matching Hyprland headers."
+            echo "::notice title=Full plugin build skipped::Hyprland 0.55.2 headers/pkg-config are not available on ubuntu-24.04. Full plugin builds are validated locally against matching Hyprland headers."
           fi
 
       - name: Build full plugin when matching headers exist
