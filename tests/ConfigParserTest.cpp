@@ -111,6 +111,12 @@ void rejectsAutomaticAndInvalidAccents() {
     assert(!parseAccentColor("not-a-color").has_value());
 }
 
+void overviewGestureDefaultsAreDiscoverable() {
+    assert(DEFAULT_GESTURE_ENABLED);
+    assert(DEFAULT_GESTURE_FINGERS == 3);
+    assert(DEFAULT_GESTURE_DISTANCE == 300.0);
+}
+
 } // namespace
 
 int main() {
@@ -120,6 +126,7 @@ int main() {
     emptyLayoutModeFallsBackToStage();
     parsesAccentFormats();
     rejectsAutomaticAndInvalidAccents();
+    overviewGestureDefaultsAreDiscoverable();
     std::cout << "ConfigParserTest passed\n";
     return 0;
 }

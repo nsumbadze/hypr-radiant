@@ -25,6 +25,7 @@ enum class PointerActionType {
     None,
     Activate,
     MoveWindow,
+    CreateWorkspaceAndMoveWindow,
 };
 
 struct PointerAction {
@@ -50,6 +51,10 @@ class OverlayRenderer {
     void backspaceSearch();
     void clearSearchOrHide();
     void toggleGroupedMode();
+    void setWorkspaceShelfVisible(bool visible);
+    void toggleWorkspaceShelf();
+    void setWorkspaceShelfGestureProgress(bool revealing, double progress);
+    void finishWorkspaceShelfGesture(bool revealing, bool commit);
     void pointerMoved(double x, double y);
     [[nodiscard]] PointerAction pointerButton(bool pressed, double x, double y);
     void refresh(RadiantState state);
@@ -59,6 +64,7 @@ class OverlayRenderer {
 
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] bool           searchActive() const noexcept;
+    [[nodiscard]] bool           workspaceShelfVisible() const noexcept;
     [[nodiscard]] OverviewMode   mode() const noexcept;
     [[nodiscard]] OverviewTarget selectedTarget() const noexcept;
     [[nodiscard]] OverviewTarget hitTest(double x, double y) const;
@@ -77,6 +83,8 @@ class OverlayRenderer {
     void renderWindowPreview(const WindowCard& window, const CBox& clipBox, double alpha, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
+    void renderColoredLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha,
+        const CRegion& damage);
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
     [[nodiscard]] OverviewTarget searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const;
@@ -89,10 +97,13 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
     void resetPointerInteraction();
+    void animateSelection();
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;
     FadeAnimation                                      m_stageTransition;
+    FadeAnimation                                      m_selectionTransition;
+    FadeAnimation                                      m_shelfTransition;
     CHyprSignalListener                                m_renderStageListener;
     CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;

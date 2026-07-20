@@ -10,7 +10,10 @@ These modules do not directly touch Hyprland globals and are suitable for unit t
 - `HitTester`: resolves selections and pointer hits inside computed frames.
 - `SearchMatcher`: matches window labels and workspace names/numbers.
 - `FadeAnimation`: advances visibility/alpha state from time deltas.
-- `SwipeTracker`: recognizes vertical gestures and resolves progress, velocity commits, and cancellation.
+- `SwipeTracker`: recognizes overview and workspace gestures and resolves progress, velocity commits, and cancellation.
+- `OpeningInputGuard`: rejects the input events that triggered keyboard or pointer activation.
+- `AppIdentity`: maps app classes to stable glyphs and inherited Omarchy signal colors.
+- `StageTransform`: preserves preview geometry and pointer alignment across shelf states.
 - Config parsing: converts plugin config strings into typed options.
 
 ## Non-testable without mocking
@@ -25,3 +28,5 @@ These modules directly read Hyprland compositor/renderer/input state or subscrib
 ## Policy
 
 We do not manufacture mocks or stubs for Hyprland globals such as `g_pCompositor`, `g_pHyprRenderer`, `g_pInputManager`, or `Event::bus()`. Code that depends on those process-global services is validated through integration/runtime testing in Hyprland, while unit tests remain limited to meaningful pure logic.
+
+GitHub Actions builds and runs every pure-logic test without Hyprland headers. The full CMake suite also runs config parsing and the plugin build whenever matching Hyprland headers are available.

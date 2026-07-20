@@ -11,7 +11,7 @@ namespace hypr_radiant::Theme {
 }
 
 [[nodiscard]] constexpr int railRadius() noexcept {
-    return 24;
+    return 22;
 }
 
 [[nodiscard]] constexpr int windowRadius() noexcept {
@@ -87,15 +87,15 @@ namespace hypr_radiant::Theme {
 }
 
 [[nodiscard]] inline CHyprColor railColor() noexcept {
-    return {0.045F, 0.048F, 0.054F, 0.82F};
+    return {0.038F, 0.043F, 0.047F, 0.78F};
 }
 
 [[nodiscard]] inline CHyprColor railCardFill(bool selected, bool empty, float alpha) noexcept {
     if (empty)
-        return {0.035F, 0.038F, 0.043F, 0.68F * alpha};
+        return {0.030F, 0.035F, 0.038F, 0.62F * alpha};
     if (selected)
-        return {0.105F, 0.110F, 0.118F, 0.94F * alpha};
-    return {0.071F, 0.075F, 0.082F, 0.90F * alpha};
+        return {0.090F, 0.102F, 0.103F, 0.91F * alpha};
+    return {0.061F, 0.069F, 0.071F, 0.84F * alpha};
 }
 
 [[nodiscard]] inline CHyprColor stageWindowFill(float alpha) noexcept {
@@ -137,6 +137,11 @@ namespace hypr_radiant::Theme {
 /// Primary accent colour (#509475).
 [[nodiscard]] inline CHyprColor accentColor() noexcept {
     return {0.314F, 0.580F, 0.459F, 1.0F};
+}
+
+/// Cool signal used sparingly at the leading edge of animated rail accents.
+[[nodiscard]] inline CHyprColor signalColor() noexcept {
+    return {0.200F, 0.800F, 1.000F, 1.0F};
 }
 
 /// Text colour (#C1C497).

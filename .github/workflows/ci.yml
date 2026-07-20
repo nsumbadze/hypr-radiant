@@ -14,12 +14,22 @@ jobs:
     env:
       PURE_TIDY_FILES: >-
         src/WorkspaceWallLayout.cpp
+        src/SearchPanelGeometry.cpp
         src/HitTester.cpp
         src/SearchMatcher.cpp
         src/FadeAnimation.cpp
+        src/SwipeTracker.cpp
+        src/OpeningInputGuard.cpp
+        src/AppIdentity.cpp
+        src/StageTransform.cpp
         tests/WorkspaceWallLayoutTest.cpp
         tests/HitTesterTest.cpp
         tests/SearchMatcherTest.cpp
+        tests/FadeAnimationTest.cpp
+        tests/GestureControllerTest.cpp
+        tests/OpeningInputGuardTest.cpp
+        tests/AppIdentityTest.cpp
+        tests/StageTransformTest.cpp
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -34,6 +44,9 @@ jobs:
             g++ \
             pkg-config
 
+      - name: Validate formatter configuration
+        run: clang-format --dump-config > /dev/null
+
       - name: Check formatting
         run: clang-format --dry-run -Werror $(git ls-files '*.cpp' '*.hpp')
 
@@ -41,7 +54,7 @@ jobs:
         run: |
           mkdir -p build/ci-logic
           g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
-            tests/WorkspaceWallLayoutTest.cpp src/WorkspaceWallLayout.cpp \
+            tests/WorkspaceWallLayoutTest.cpp src/WorkspaceWallLayout.cpp src/SearchPanelGeometry.cpp \
             -o build/ci-logic/hypr-radiant-layout-tests
           g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
             tests/HitTesterTest.cpp src/HitTester.cpp \
@@ -49,9 +62,29 @@ jobs:
           g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
             tests/SearchMatcherTest.cpp src/SearchMatcher.cpp \
             -o build/ci-logic/hypr-radiant-search-tests
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
+            tests/FadeAnimationTest.cpp src/FadeAnimation.cpp \
+            -o build/ci-logic/hypr-radiant-fade-tests
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
+            tests/GestureControllerTest.cpp src/SwipeTracker.cpp \
+            -o build/ci-logic/hypr-radiant-gesture-tests
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Iinclude \
+            tests/OpeningInputGuardTest.cpp src/OpeningInputGuard.cpp \
+            -o build/ci-logic/hypr-radiant-input-guard-tests
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Iinclude \
+            tests/AppIdentityTest.cpp src/AppIdentity.cpp \
+            -o build/ci-logic/hypr-radiant-app-identity-tests
+          g++ -std=c++23 -Wall -Wextra -Wpedantic -Wno-missing-field-initializers -Iinclude \
+            tests/StageTransformTest.cpp src/StageTransform.cpp \
+            -o build/ci-logic/hypr-radiant-stage-transform-tests
           build/ci-logic/hypr-radiant-layout-tests
           build/ci-logic/hypr-radiant-hit-tests
           build/ci-logic/hypr-radiant-search-tests
+          build/ci-logic/hypr-radiant-fade-tests
+          build/ci-logic/hypr-radiant-gesture-tests
+          build/ci-logic/hypr-radiant-input-guard-tests
+          build/ci-logic/hypr-radiant-app-identity-tests
+          build/ci-logic/hypr-radiant-stage-transform-tests
 
       - name: Run scoped clang-tidy
         run: >-

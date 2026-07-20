@@ -147,7 +147,7 @@ void focusedStageEmptyNextWorkspaceGeometry() {
     assert(frame.stage.workspaceId == 3);
 }
 
-void focusedStageMapsWindowGeometrySpatially() {
+void focusedStageArrangesWindowsAsANonOverlappingLayer() {
     auto state = sampleState();
     state.windows.push_back({
         .stableId = 11,
@@ -166,10 +166,19 @@ void focusedStageMapsWindowGeometrySpatially() {
     assert(frame.stage.windows.at(0).stableId == 10);
     assert(frame.stage.windows.at(1).stableId == 11);
     assert(frame.stage.windows.at(0).rect.x < frame.stage.windows.at(1).rect.x);
+    assert(frame.stage.windows.at(0).rect.x + frame.stage.windows.at(0).rect.width < frame.stage.windows.at(1).rect.x);
 
-    const auto scale = std::min(frame.stage.bounds.width / 1920.0, frame.stage.bounds.height / 1080.0);
-    assert(std::abs(frame.stage.windows.at(0).rect.width - 900.0 * scale) < 0.5);
-    assert(std::abs(frame.stage.windows.at(1).rect.height - 620.0 * scale) < 0.5);
+    for (const auto& window : frame.stage.windows) {
+        assert(window.rect.x >= frame.stage.bounds.x);
+        assert(window.rect.y >= frame.stage.bounds.y);
+        assert(window.rect.x + window.rect.width <= frame.stage.bounds.x + frame.stage.bounds.width);
+        assert(window.rect.y + window.rect.height < frame.stage.bounds.y + frame.stage.bounds.height);
+    }
+
+    const auto firstAspect = frame.stage.windows.at(0).rect.width / frame.stage.windows.at(0).rect.height;
+    const auto secondAspect = frame.stage.windows.at(1).rect.width / frame.stage.windows.at(1).rect.height;
+    assert(std::abs(firstAspect - 900.0 / 760.0) < 0.01);
+    assert(std::abs(secondAspect - 700.0 / 620.0) < 0.01);
 }
 
 void focusedStageCentersOverflowAroundPreview() {
@@ -272,6 +281,10 @@ void tinyRenderSizeDoesNotProduceNegativeRects() {
             assert(window.rect.height >= 0.0);
         }
     }
+    for (const auto& window : frame.stage.windows) {
+        assert(window.rect.width >= 0.0);
+        assert(window.rect.height >= 0.0);
+    }
 }
 
 void sortsWindowsByStableId() {
@@ -319,6 +332,11 @@ void groupedModeOrdersApplicationsAndMarksHeaders() {
     assert(!frame.stage.windows.at(1).appGroupStart);
     assert(frame.stage.windows.at(2).appClass == "Firefox");
     assert(frame.stage.windows.at(2).appGroupStart);
+
+    const auto editor = std::ranges::find_if(frame.stage.windows, [](const WindowCard& window) { return window.stableId == 10; });
+    assert(editor != frame.stage.windows.end());
+    const auto editorAspect = editor->rect.width / editor->rect.height;
+    assert(std::abs(editorAspect - 900.0 / 760.0) < 0.01);
 }
 
 void appExposeFiltersAcrossLocalWorkspaces() {
@@ -327,7 +345,7 @@ void appExposeFiltersAcrossLocalWorkspaces() {
     state.windows.push_back({.stableId = 21, .title = "Other app", .className = "Firefox", .workspaceId = 1, .monitorId = 1, .mapped = true});
     state.windows.push_back({.stableId = 22, .title = "Other monitor", .className = "Code", .workspaceId = 3, .monitorId = 2, .mapped = true});
     auto options = stageOptions();
-    options.mode = OverviewMode::AppExpose;
+    options.mode              = OverviewMode::AppExpose;
     options.applicationFilter = "Code";
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, options);
@@ -356,7 +374,7 @@ int main() {
     focusedStageDoesNotGeneratePhantomWorkspacesForGaps();
     focusedStageCardSpacingMatchesSpec();
     focusedStageEmptyNextWorkspaceGeometry();
-    focusedStageMapsWindowGeometrySpatially();
+    focusedStageArrangesWindowsAsANonOverlappingLayer();
     focusedStageCentersOverflowAroundPreview();
     multiMonitorPerFrameBounds();
     searchPanelGeometryMatchesSpec();

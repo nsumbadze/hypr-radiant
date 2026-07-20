@@ -30,6 +30,16 @@ double centered(double available, double size) {
     return std::max(0.0, (available - size) / 2.0);
 }
 
+double stableNoise(std::uint64_t value, std::uint64_t salt) {
+    value ^= salt + 0x9e3779b97f4a7c15ULL + (value << 6U) + (value >> 2U);
+    value ^= value >> 30U;
+    value *= 0xbf58476d1ce4e5b9ULL;
+    value ^= value >> 27U;
+    value *= 0x94d049bb133111ebULL;
+    value ^= value >> 31U;
+    return static_cast<double>(value & 0xffffU) / 65535.0;
+}
+
 } // namespace
 
 WorkspaceWallFrame WorkspaceWallLayout::compute(
@@ -89,13 +99,12 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto edgePad      = std::clamp(renderSize.width * 0.0125, 16.0, 32.0);
         const auto topPad       = std::clamp(renderSize.height * 0.022, 16.0, 32.0);
         const auto cardGap      = std::clamp(renderSize.width * 0.00625, 8.0, 14.0);
-        const auto labelHeight  = std::clamp(renderSize.height * 0.030, 26.0, 34.0);
         const auto cardHeight   = std::clamp(renderSize.height * 0.145, 96.0, 168.0);
         const auto monitorWidth = std::max(1.0, monitor.geometry.size.width);
         const auto monitorHeight = std::max(1.0, monitor.geometry.size.height);
         const auto cardWidth    = cardHeight * monitorWidth / monitorHeight;
-        const auto railInset    = 16.0;
-        const auto railHeight   = cardHeight + labelHeight + railInset * 2.0;
+        const auto railInset    = 12.0;
+        const auto railHeight   = cardHeight + railInset * 2.0;
         const auto totalWidth   = static_cast<double>(orderedIds.size()) * cardWidth +
             static_cast<double>(orderedIds.empty() ? 0 : orderedIds.size() - 1) * cardGap;
         const auto railWidth    = std::min(std::max(1.0, renderSize.width - edgePad * 2.0), totalWidth + railInset * 2.0);
@@ -239,18 +248,94 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             frame.stage.name = options.applicationFilter.empty() ? "Application" : options.applicationFilter;
         }
 
-        const auto gridRect = [&](std::size_t index, std::size_t count) {
+        const auto gridRect = [&](const WindowSnapshot& window, std::size_t index, std::size_t count) {
             const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
             const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
             const auto gap = std::clamp(renderSize.width * 0.012, 14.0, 24.0);
             const auto header = options.mode == OverviewMode::Grouped ? 22.0 : 0.0;
-            const auto width = std::max(1.0, stageBounds.width - gap * (columns - 1)) / columns;
-            const auto height = std::max(1.0, stageBounds.height - gap * (rows - 1) - header * rows) / rows;
+            const auto cellWidth = std::max(1.0, (stageBounds.width - gap * (columns - 1)) / columns);
+            const auto cellHeight = std::max(1.0, (stageBounds.height - gap * (rows - 1) - header * rows) / rows);
             const auto row = static_cast<int>(index) / columns;
             const auto col = static_cast<int>(index) % columns;
+            const LayoutRect cell{
+                .x = stageBounds.x + col * (cellWidth + gap),
+                .y = stageBounds.y + row * (cellHeight + gap + header) + header,
+                .width = cellWidth,
+                .height = cellHeight,
+            };
+            const auto sourceWidth = std::max(1.0, window.geometry.size.width);
+            const auto sourceHeight = std::max(1.0, window.geometry.size.height);
+            const auto sourceAspect = sourceWidth / sourceHeight;
+            const auto availableWidth = std::max(1.0, cell.width * 0.92);
+            const auto availableHeight = std::max(1.0, cell.height * 0.90);
+            auto width = availableWidth;
+            auto height = width / sourceAspect;
+            if (height > availableHeight) {
+                height = availableHeight;
+                width = height * sourceAspect;
+            }
             return LayoutRect{
-                .x = stageBounds.x + col * (width + gap),
-                .y = stageBounds.y + row * (height + gap + header) + header,
+                .x = cell.x + centered(cell.width, width),
+                .y = cell.y + centered(cell.height, height),
+                .width = width,
+                .height = height,
+            };
+        };
+
+        const auto spatialRect = [&](const WindowSnapshot& window, std::size_t index, std::size_t count) {
+            const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
+            const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
+            const auto outerInset = std::clamp(std::min(stageBounds.width, stageBounds.height) * 0.035, 18.0, 40.0);
+            const auto content = inset(stageBounds, outerInset);
+            const auto gap = std::clamp(renderSize.width * 0.014, 18.0, 28.0);
+            const auto labelReserve = renderSize.height >= 400.0 ? 34.0 : 0.0;
+            const auto cellWidth = std::max(1.0, (content.width - gap * static_cast<double>(columns - 1)) / columns);
+            const auto cellHeight = std::max(1.0, (content.height - gap * static_cast<double>(rows - 1)) / rows);
+            const auto row = static_cast<int>(index) / columns;
+            const auto column = static_cast<int>(index) % columns;
+            const auto rowStart = static_cast<std::size_t>(row) * static_cast<std::size_t>(columns);
+            const auto itemsInRow = std::min(static_cast<std::size_t>(columns), count - rowStart);
+            const auto rowWidth = static_cast<double>(itemsInRow) * cellWidth + static_cast<double>(itemsInRow - 1) * gap;
+            const auto rowX = content.x + centered(content.width, rowWidth);
+            const LayoutRect cell{
+                .x = rowX + static_cast<double>(column) * (cellWidth + gap),
+                .y = content.y + static_cast<double>(row) * (cellHeight + gap),
+                .width = cellWidth,
+                .height = cellHeight,
+            };
+
+            // Keep each window in a non-overlapping cell, but salt its scale and
+            // position by stable ID. This produces the relaxed, spatial rhythm of
+            // Expose without making targets jump between overview sessions.
+            const auto scaleNoise = stableNoise(window.stableId, 0x51a7U);
+            const auto xNoise = stableNoise(window.stableId, 0x8d31U);
+            const auto yNoise = stableNoise(window.stableId, 0xc247U);
+            const auto density = count == 1 ? 0.80 : 0.80 + scaleNoise * 0.14;
+            const auto availableWidth = std::max(1.0, cell.width * density);
+            const auto availableHeight = std::max(1.0, (cell.height - labelReserve) * density);
+            const auto sourceWidth = std::max(1.0, window.geometry.size.width);
+            const auto sourceHeight = std::max(1.0, window.geometry.size.height);
+            const auto sourceAspect = sourceWidth / sourceHeight;
+            auto width = availableWidth;
+            auto height = width / sourceAspect;
+            if (height > availableHeight) {
+                height = availableHeight;
+                width = height * sourceAspect;
+            }
+
+            const auto usableHeight = std::max(1.0, cell.height - labelReserve);
+            const auto freeX = std::max(0.0, cell.width - width);
+            const auto freeY = std::max(0.0, usableHeight - height);
+            const auto wave = (static_cast<int>(index + static_cast<std::size_t>(window.stableId)) % 2 == 0 ? -1.0 : 1.0) *
+                std::min(12.0, freeY * 0.24);
+            const auto x = std::clamp(cell.x + centered(cell.width, width) + (xNoise - 0.5) * freeX * 0.72,
+                cell.x, std::max(cell.x, cell.x + cell.width - width));
+            const auto y = std::clamp(cell.y + centered(usableHeight, height) + (yNoise - 0.5) * freeY * 0.62 + wave,
+                cell.y, std::max(cell.y, cell.y + usableHeight - height));
+
+            return LayoutRect{
+                .x = x,
+                .y = y,
                 .width = width,
                 .height = height,
             };
@@ -261,7 +346,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             const auto& window = stageWindows[index];
             frame.stage.empty = false;
             const auto groupStart = options.mode == OverviewMode::Grouped && window.className != previousClass;
-            const auto rect = options.mode == OverviewMode::Spatial ? mapWindow(window, stageBounds) : gridRect(index, stageWindows.size());
+            const auto rect = options.mode == OverviewMode::Spatial ? spatialRect(window, index, stageWindows.size()) : gridRect(window, index, stageWindows.size());
             frame.stage.windows.push_back(cardForWindow(window, rect, groupStart));
             previousClass = window.className;
         }

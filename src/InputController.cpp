@@ -5,6 +5,7 @@
 
 #include <linux/input-event-codes.h>
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 
@@ -35,7 +36,8 @@ std::optional<char> searchCharForKey(uint32_t key) {
 } // namespace
 
 void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
-    MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close, ToggleModeFn toggleMode) {
+    MoveFn move, ShelfScrollFn shelfScroll, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close,
+    ToggleModeFn toggleMode) {
     m_active   = std::move(active);
     m_hitTest  = std::move(hitTest);
     m_activate = std::move(activate);
@@ -44,6 +46,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
     m_textInput = std::move(textInput);
     m_backspace = std::move(backspace);
     m_move     = std::move(move);
+    m_shelfScroll = std::move(shelfScroll);
     m_searchActive = std::move(searchActive);
     m_openSearch = std::move(openSearch);
     m_jump     = std::move(jump);
@@ -89,7 +92,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!inputArmed())
             return;
 
-        if (event.axis != WL_POINTER_AXIS_VERTICAL_SCROLL || !m_move)
+        if (event.axis != WL_POINTER_AXIS_VERTICAL_SCROLL || !m_shelfScroll)
             return;
 
         const auto amount = event.deltaDiscrete != 0 ? static_cast<double>(event.deltaDiscrete) : event.delta;
@@ -101,7 +104,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (std::abs(m_scrollAccumulator) < threshold)
             return;
 
-        m_move(m_scrollAccumulator > 0.0 ? NavigationDirection::Right : NavigationDirection::Left);
+        m_shelfScroll(m_scrollAccumulator < 0.0);
         m_scrollAccumulator = 0.0;
     });
 
@@ -211,6 +214,10 @@ void InputController::releaseKeyboard() {
         g_pSeatManager->setGrab(nullptr);
 }
 
+void InputController::deferActivation(std::chrono::milliseconds duration) {
+    m_acceptActivationAfter = std::max(m_acceptActivationAfter, Clock::now() + std::max(duration, std::chrono::milliseconds{0}));
+}
+
 void InputController::uninstall() {
     releaseKeyboard();
     m_mouseMoveListener.reset();
@@ -225,6 +232,7 @@ void InputController::uninstall() {
     m_textInput = {};
     m_backspace = {};
     m_move = {};
+    m_shelfScroll = {};
     m_searchActive = {};
     m_openSearch = {};
     m_jump = {};
