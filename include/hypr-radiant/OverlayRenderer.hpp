@@ -89,10 +89,12 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
     void resetPointerInteraction();
+    void animateSelection();
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;
     FadeAnimation                                      m_stageTransition;
+    FadeAnimation                                      m_selectionTransition;
     CHyprSignalListener                                m_renderStageListener;
     CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;

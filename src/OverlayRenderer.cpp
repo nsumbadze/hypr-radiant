@@ -16,6 +16,7 @@
 #include <hyprland/src/render/Texture.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -32,6 +33,46 @@ bool sameTarget(OverviewTarget lhs, OverviewTarget rhs) {
 
 CBox boxFor(const LayoutRect& rect) {
     return CBox{std::round(rect.x), std::round(rect.y), std::round(rect.width), std::round(rect.height)};
+}
+
+LayoutRect scaledAroundCenter(const LayoutRect& rect, double scale, double offsetY = 0.0) {
+    const auto width = rect.width * scale;
+    const auto height = rect.height * scale;
+    return {
+        .x = rect.x - (width - rect.width) / 2.0,
+        .y = rect.y - (height - rect.height) / 2.0 + offsetY,
+        .width = width,
+        .height = height,
+    };
+}
+
+LayoutRect remapRect(const LayoutRect& child, const LayoutRect& source, const LayoutRect& target) {
+    if (source.width <= 0.0 || source.height <= 0.0)
+        return child;
+
+    return {
+        .x = target.x + (child.x - source.x) * target.width / source.width,
+        .y = target.y + (child.y - source.y) * target.height / source.height,
+        .width = child.width * target.width / source.width,
+        .height = child.height * target.height / source.height,
+    };
+}
+
+std::string appGlyph(std::string appClass) {
+    std::ranges::transform(appClass, appClass.begin(), [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    if (appClass.contains("firefox") || appClass.contains("chrom") || appClass.contains("browser") || appClass.contains("zen"))
+        return "󰈹";
+    if (appClass.contains("code") || appClass.contains("editor") || appClass.contains("opencode"))
+        return "󰨞";
+    if (appClass.contains("foot") || appClass.contains("kitty") || appClass.contains("ghostty") || appClass.contains("alacritty") || appClass.contains("term"))
+        return "";
+    if (appClass.contains("discord") || appClass.contains("slack") || appClass.contains("chat"))
+        return "󰙯";
+    if (appClass.contains("nautilus") || appClass.contains("thunar") || appClass.contains("file"))
+        return "󰉋";
+    if (appClass.contains("spotify") || appClass.contains("music"))
+        return "󰎆";
+    return "󰣆";
 }
 
 CBox insetBox(const CBox& box, double amount) {
@@ -266,6 +307,7 @@ void OverlayRenderer::show(RadiantState state) {
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
+    animateSelection();
     damageAllMonitors();
 }
 
@@ -292,6 +334,7 @@ void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationC
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    animateSelection();
     damageAllMonitors();
 }
 
@@ -318,9 +361,12 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
     if (!frame)
         return;
 
+    const auto previousTarget = m_selectedTarget;
     const auto previousWorkspace = m_selectedTarget.workspaceId;
     m_selectedTarget = m_hitTester.moveSelection(*frame, m_selectedTarget, direction);
     m_selectedFrameMonitorId = frame->monitorId;
+    if (!sameTarget(previousTarget, m_selectedTarget))
+        animateSelection();
     if (m_config.layoutMode() == LayoutMode::Stage && m_selectedTarget.workspaceId != previousWorkspace) {
         m_previousFrames = m_frames;
         rebuildFrames();
@@ -347,6 +393,7 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     const auto previousWorkspace = m_selectedTarget.workspaceId;
     m_selectedTarget = target;
     m_selectedFrameMonitorId = frame->monitorId;
+    animateSelection();
     if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage && target.workspaceId != previousWorkspace) {
         m_previousFrames = m_frames;
         rebuildFrames();
@@ -418,6 +465,7 @@ void OverlayRenderer::refresh(RadiantState state) {
     rebuildFrames();
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    animateSelection();
     m_textures.clear();
     damageAllMonitors();
 }
@@ -509,6 +557,7 @@ void OverlayRenderer::toggleGroupedMode() {
     }
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    animateSelection();
     m_textures.clear();
     damageAllMonitors();
 }
@@ -517,6 +566,7 @@ void OverlayRenderer::hideImmediate() {
     const auto wasRenderable = m_animation.renderable();
     m_animation.hideImmediate();
     m_stageTransition.hideImmediate();
+    m_selectionTransition.hideImmediate();
     m_frames.clear();
     m_previousFrames.clear();
     m_frameBoundsByMonitor.clear();
@@ -537,6 +587,11 @@ void OverlayRenderer::resetPointerInteraction() {
     m_pointerPosition = {};
     m_pointerDown = false;
     m_dragging = false;
+}
+
+void OverlayRenderer::animateSelection() {
+    m_selectionTransition.hideImmediate();
+    m_selectionTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.62))));
 }
 
 bool OverlayRenderer::active() const noexcept {
@@ -574,7 +629,7 @@ void OverlayRenderer::onRenderStage(eRenderStage stage) {
     if (alpha > 0.001F)
         renderCurrentMonitor(alpha);
 
-    if (m_animation.running() || m_stageTransition.running())
+    if (m_animation.running() || m_stageTransition.running() || m_selectionTransition.running())
         damageAllMonitors();
 }
 
@@ -948,16 +1003,31 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     const auto background   = m_config.backgroundColor();
     const auto railSurface  = tintedSurface(Theme::railColor(), background, 0.46);
     const auto stageSurface = tintedSurface(Theme::stageWindowFill(1.0F), background, 0.34);
-    const auto railBox      = boxFor(frame.rail.bounds);
+    auto railBox            = boxFor(frame.rail.bounds);
     const auto transition   = std::clamp(m_stageTransition.value(), 0.0, 1.0);
+    const auto selectionTransition = std::clamp(m_selectionTransition.value(), 0.0, 1.0);
+    const auto railEntranceOffset = -(1.0 - alpha) * 18.0;
+    railBox.y += railEntranceOffset;
     const auto previousFrameIt = std::ranges::find_if(m_previousFrames, [&frame](const WorkspaceWallFrame& candidate) {
         return candidate.monitorId == frame.monitorId;
     });
     const auto* previousFrame = previousFrameIt == m_previousFrames.end() ? nullptr : &*previousFrameIt;
 
+    auto gridColor = accent;
+    gridColor.a *= static_cast<float>(contentAlpha * 0.028);
+    for (double x = 0.0; x < frame.bounds.width; x += 160.0)
+        drawRect(CBox{x, frame.stage.bounds.y - 24.0, 1.0, frame.stage.bounds.height + 30.0}, gridColor, damage);
+    for (double y = frame.stage.bounds.y; y < frame.stage.bounds.y + frame.stage.bounds.height; y += 96.0)
+        drawRect(CBox{0.0, y, frame.bounds.width, 1.0}, gridColor, damage);
+
     drawRect(CBox{railBox.x + 7.0, railBox.y + 10.0, railBox.w, railBox.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.72), damage,
         Theme::railRadius() + 2);
     drawRect(railBox, withAlpha(railSurface, contentAlpha), damage, Theme::railRadius(), true);
+    drawRect(CBox{railBox.x + 28.0, railBox.y + 1.0, std::max(1.0, railBox.w - 56.0), 1.0},
+        withAlpha(accent, contentAlpha * 0.22), damage, 1);
+    if (railBox.x >= 170.0)
+        renderLabel(std::format("󰍹  SPACES // {:02}", frame.workspaces.size()), 42.0, railBox.y + 16.0,
+            railBox.x - 70.0, Theme::hintSize(), contentAlpha * 0.68, damage);
 
     if (g_pHyprRenderer && railBox.w > 0.0 && railBox.h > 0.0) {
         CBorderPassElement::SBorderData border;
@@ -971,6 +1041,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
     for (const auto& workspace : frame.workspaces) {
         auto displayRect = workspace.rect;
+        displayRect.y += railEntranceOffset;
         if (previousFrame && transition < 1.0) {
             const auto previousWorkspace = std::ranges::find_if(previousFrame->workspaces, [&workspace](const WorkspaceCard& candidate) {
                 return candidate.workspaceId == workspace.workspaceId;
@@ -979,13 +1050,16 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 displayRect.x = std::lerp(previousWorkspace->rect.x, workspace.rect.x, transition);
         }
 
-        if (!intersects(displayRect, frame.rail.bounds))
+        auto visibleRailBounds = frame.rail.bounds;
+        visibleRailBounds.y += railEntranceOffset;
+        if (!intersects(displayRect, visibleRailBounds))
             continue;
 
         const auto selected = workspace.workspaceId == m_selectedTarget.workspaceId && frame.monitorId == m_selectedFrameMonitorId;
+        if (selected)
+            displayRect = scaledAroundCenter(displayRect, std::lerp(0.99, 1.035, selectionTransition), -4.0 * selectionTransition);
         const auto cardBox  = boxFor(displayRect);
         const auto radius   = Theme::workspaceRadius(true);
-        const auto cardOffsetX = displayRect.x - workspace.rect.x;
 
         if (selected) {
             drawRect(CBox{cardBox.x - 5.0, cardBox.y - 5.0, cardBox.w + 10.0, cardBox.h + 10.0},
@@ -1003,8 +1077,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 24.0, Theme::titleSize(), contentAlpha * (selected ? 1.0 : 0.62), damage);
 
         for (const auto& window : workspace.windows) {
-            auto previewBox = boxFor(window.rect);
-            previewBox.x += cardOffsetX;
+            const auto previewBox = boxFor(remapRect(window.rect, workspace.rect, displayRect));
             renderWindowPreview(window, previewBox, contentAlpha, damage);
         }
 
@@ -1032,11 +1105,11 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     }
 
     if (frame.rail.overflowLeft)
-        renderLabel("\xe2\x80\xb9", frame.rail.bounds.x + 5.0, frame.rail.bounds.y + frame.rail.bounds.height / 2.0 - 10.0,
+        renderLabel("\xe2\x80\xb9", frame.rail.bounds.x + 5.0, frame.rail.bounds.y + railEntranceOffset + frame.rail.bounds.height / 2.0 - 10.0,
             20.0, Theme::titleSize(), contentAlpha * 0.72, damage);
     if (frame.rail.overflowRight)
         renderLabel("\xe2\x80\xba", frame.rail.bounds.x + frame.rail.bounds.width - 20.0,
-            frame.rail.bounds.y + frame.rail.bounds.height / 2.0 - 10.0, 16.0, Theme::titleSize(), contentAlpha * 0.72, damage);
+            frame.rail.bounds.y + railEntranceOffset + frame.rail.bounds.height / 2.0 - 10.0, 16.0, Theme::titleSize(), contentAlpha * 0.72, damage);
 
     const auto stageAlpha = contentAlpha * transition;
     const auto stageOffset = (1.0 - transition) * 10.0;
@@ -1054,9 +1127,9 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             renderWindowPreview(window, previousBox, previousAlpha, damage);
         }
     }
-    const auto stageLabel = m_mode == OverviewMode::AppExpose ? std::format("APP // {}", frame.stage.name) :
-        frame.stage.name == std::to_string(frame.stage.workspaceId) ? std::format("Workspace {}", frame.stage.workspaceId) :
-        std::format("{} · {}", frame.stage.workspaceId, frame.stage.name);
+    const auto stageLabel = m_mode == OverviewMode::AppExpose ? std::format("󰀻  APP EXPOSE // {}", frame.stage.name) :
+        frame.stage.name == std::to_string(frame.stage.workspaceId) ? std::format("󰍹  DESKTOP // [{:02}]", frame.stage.workspaceId) :
+        std::format("󰍹  DESKTOP // [{:02}] {}", frame.stage.workspaceId, frame.stage.name);
     renderLabel(stageLabel, frame.stage.bounds.x, frame.stage.bounds.y - 28.0 + stageOffset,
         std::max(1.0, frame.stage.bounds.width * 0.5), Theme::labelSize(), stageAlpha * 0.78, damage);
 
@@ -1068,13 +1141,16 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     for (const auto& window : frame.stage.windows) {
         const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
             m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-        auto windowBox = boxFor(window.rect);
-        windowBox.y += stageOffset;
+        auto displayRect = window.rect;
+        displayRect.y += stageOffset;
+        if (selected)
+            displayRect = scaledAroundCenter(displayRect, std::lerp(0.985, 1.026, selectionTransition), -5.0 * selectionTransition);
+        const auto windowBox = boxFor(displayRect);
         const auto radius = Theme::windowRadius();
 
         if (window.appGroupStart)
-            renderLabel(window.appClass, window.rect.x + 2.0, window.rect.y - 20.0 + stageOffset,
-                std::max(1.0, window.rect.width - 4.0), Theme::hintSize(), stageAlpha * 0.68, damage);
+            renderLabel(std::format("{}  {}", appGlyph(window.appClass), window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
+                std::max(1.0, displayRect.width - 4.0), Theme::hintSize(), stageAlpha * 0.74, damage);
 
         const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? stageAlpha * 0.30 : stageAlpha;
         drawRect(CBox{windowBox.x + 7.0, windowBox.y + 10.0, windowBox.w, windowBox.h},
@@ -1095,13 +1171,29 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             border.borderSize = 3;
             g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
 
-            const auto chipWidth = std::min(280.0, std::max(100.0, windowBox.w - 20.0));
-            const auto chipY = windowBox.y + windowBox.h - 32.0;
-            drawRect(CBox{windowBox.x + 10.0, chipY, chipWidth, 24.0}, withAlpha(railSurface, stageAlpha * 0.94), damage, 6);
             const auto state = window.fullscreen ? "FULL" : window.floating ? "FLOAT" : "TILED";
-            renderLabel(std::format("{} // {} // {}", window.appClass, state, window.label), windowBox.x + 18.0, chipY + 5.0,
-                chipWidth - 16.0, Theme::hintSize(), stageAlpha, damage);
+            if (windowBox.w >= 112.0 && windowBox.h >= 56.0) {
+                const auto badge = CBox{windowBox.x + windowBox.w - 74.0, windowBox.y + 10.0, 64.0, 22.0};
+                drawRect(badge, withAlpha(railSurface, stageAlpha * 0.88), damage, 7, true);
+                drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(accent, stageAlpha), damage, 2);
+                renderLabel(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), stageAlpha * 0.92, damage);
+            }
         }
+
+        const auto titleUpper = std::max(1.0, std::min(380.0, frame.stage.bounds.width - 24.0));
+        const auto titleLower = std::min(136.0, titleUpper);
+        const auto titleWidth = std::clamp(84.0 + static_cast<double>(window.label.size()) * 6.2, titleLower, titleUpper);
+        const auto stageRight = frame.stage.bounds.x + frame.stage.bounds.width;
+        const auto titleX = std::clamp(windowBox.x + centered(windowBox.w, titleWidth), frame.stage.bounds.x, std::max(frame.stage.bounds.x, stageRight - titleWidth));
+        const auto titleY = std::min(windowBox.y + windowBox.h + 8.0, frame.stage.bounds.y + frame.stage.bounds.height - 26.0);
+        const auto titleBox = CBox{titleX, titleY, titleWidth, 26.0};
+        auto titleSurface = tintedSurface(railSurface, accent, selected ? 0.18 : 0.04);
+        drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), stageAlpha * 0.52), damage, 9);
+        drawRect(titleBox, withAlpha(titleSurface, stageAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
+        if (selected)
+            drawRect(CBox{titleBox.x + 10.0, titleBox.y + titleBox.h - 2.0, std::max(1.0, titleBox.w - 20.0), 2.0}, withAlpha(accent, stageAlpha * 0.82), damage, 1);
+        renderLabel(std::format("{}  {}", appGlyph(window.appClass), window.label), titleBox.x + 12.0, titleBox.y + 6.0,
+            std::max(1.0, titleBox.w - 24.0), Theme::hintSize(), stageAlpha * (selected ? 1.0 : 0.76), damage);
     }
 
     if (m_dragging) {
@@ -1122,14 +1214,26 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     }
 
     if (!m_searchActive) {
-        const auto helpWidth = std::min(720.0, std::max(1.0, frame.bounds.width - 48.0));
         const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSE" : "SPATIAL";
-        renderLabel("RADIANT // HYPRLAND", frame.stage.bounds.x, frame.bounds.height - 32.0,
-            180.0, Theme::hintSize(), contentAlpha * 0.46, damage);
-        renderLabel(modeLabel, frame.stage.bounds.x + frame.stage.bounds.width - 120.0, frame.stage.bounds.y - 28.0,
-            120.0, Theme::hintSize(), contentAlpha * 0.72, damage);
-        renderLabel("[\xe2\x86\x90\xe2\x86\x92] SPACE  [\xe2\x86\x93] WINDOWS  [TAB] VIEW  [ENTER] OPEN  [/] FIND  [ESC] CLOSE",
-            centered(frame.bounds.width, helpWidth), frame.bounds.height - 32.0, helpWidth, Theme::hintSize(), contentAlpha * 0.62, damage);
+        const auto deckWidth = std::min(940.0, std::max(1.0, frame.bounds.width - 64.0));
+        const auto deck = CBox{centered(frame.bounds.width, deckWidth), frame.bounds.height - 54.0, deckWidth, 36.0};
+        drawRect(CBox{deck.x + 5.0, deck.y + 7.0, deck.w, deck.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.58), damage, 14);
+        drawRect(deck, withAlpha(railSurface, contentAlpha * 0.90), damage, 14, true);
+        if (g_pHyprRenderer) {
+            CBorderPassElement::SBorderData border;
+            border.box = deck;
+            border.grad1 = Config::CGradientValueData{withAlpha(accent, contentAlpha * 0.24)};
+            border.a = static_cast<float>(accent.a * contentAlpha * 0.24);
+            border.round = 14;
+            border.borderSize = 1;
+            g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+        }
+        renderLabel("󰣇  RADIANT // HYPRLAND", deck.x + 16.0, deck.y + 10.0,
+            190.0, Theme::hintSize(), contentAlpha * 0.72, damage);
+        renderLabel("[←→] SPACE   [↓] WINDOWS   [TAB] VIEW   [ENTER] OPEN   [/] FIND   [ESC] CLOSE",
+            deck.x + 205.0, deck.y + 10.0, std::max(1.0, deck.w - 335.0), Theme::hintSize(), contentAlpha * 0.76, damage);
+        renderLabel(modeLabel, deck.x + deck.w - 112.0, deck.y + 10.0,
+            96.0, Theme::hintSize(), contentAlpha * 0.92, damage);
     } else {
         auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
