@@ -253,8 +253,8 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
             const auto gap = std::clamp(renderSize.width * 0.012, 14.0, 24.0);
             const auto header = options.mode == OverviewMode::Grouped ? 22.0 : 0.0;
-            const auto cellWidth = std::max(1.0, stageBounds.width - gap * (columns - 1)) / columns;
-            const auto cellHeight = std::max(1.0, stageBounds.height - gap * (rows - 1) - header * rows) / rows;
+            const auto cellWidth = std::max(1.0, (stageBounds.width - gap * (columns - 1)) / columns);
+            const auto cellHeight = std::max(1.0, (stageBounds.height - gap * (rows - 1) - header * rows) / rows);
             const auto row = static_cast<int>(index) / columns;
             const auto col = static_cast<int>(index) % columns;
             const LayoutRect cell{
@@ -289,11 +289,11 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             const auto content = inset(stageBounds, outerInset);
             const auto gap = std::clamp(renderSize.width * 0.014, 18.0, 28.0);
             const auto labelReserve = renderSize.height >= 400.0 ? 34.0 : 0.0;
-            const auto cellWidth = std::max(1.0, content.width - gap * static_cast<double>(columns - 1)) / columns;
-            const auto cellHeight = std::max(1.0, content.height - gap * static_cast<double>(rows - 1)) / rows;
+            const auto cellWidth = std::max(1.0, (content.width - gap * static_cast<double>(columns - 1)) / columns);
+            const auto cellHeight = std::max(1.0, (content.height - gap * static_cast<double>(rows - 1)) / rows);
             const auto row = static_cast<int>(index) / columns;
             const auto column = static_cast<int>(index) % columns;
-            const auto rowStart = static_cast<std::size_t>(row * columns);
+            const auto rowStart = static_cast<std::size_t>(row) * static_cast<std::size_t>(columns);
             const auto itemsInRow = std::min(static_cast<std::size_t>(columns), count - rowStart);
             const auto rowWidth = static_cast<double>(itemsInRow) * cellWidth + static_cast<double>(itemsInRow - 1) * gap;
             const auto rowX = content.x + centered(content.width, rowWidth);
@@ -329,9 +329,9 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             const auto wave = (static_cast<int>(index + static_cast<std::size_t>(window.stableId)) % 2 == 0 ? -1.0 : 1.0) *
                 std::min(12.0, freeY * 0.24);
             const auto x = std::clamp(cell.x + centered(cell.width, width) + (xNoise - 0.5) * freeX * 0.72,
-                cell.x, cell.x + cell.width - width);
+                cell.x, std::max(cell.x, cell.x + cell.width - width));
             const auto y = std::clamp(cell.y + centered(usableHeight, height) + (yNoise - 0.5) * freeY * 0.62 + wave,
-                cell.y, cell.y + usableHeight - height);
+                cell.y, std::max(cell.y, cell.y + usableHeight - height));
 
             return LayoutRect{
                 .x = x,

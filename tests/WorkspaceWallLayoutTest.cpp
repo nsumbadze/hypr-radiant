@@ -281,6 +281,10 @@ void tinyRenderSizeDoesNotProduceNegativeRects() {
             assert(window.rect.height >= 0.0);
         }
     }
+    for (const auto& window : frame.stage.windows) {
+        assert(window.rect.width >= 0.0);
+        assert(window.rect.height >= 0.0);
+    }
 }
 
 void sortsWindowsByStableId() {
@@ -341,7 +345,7 @@ void appExposeFiltersAcrossLocalWorkspaces() {
     state.windows.push_back({.stableId = 21, .title = "Other app", .className = "Firefox", .workspaceId = 1, .monitorId = 1, .mapped = true});
     state.windows.push_back({.stableId = 22, .title = "Other monitor", .className = "Code", .workspaceId = 3, .monitorId = 2, .mapped = true});
     auto options = stageOptions();
-    options.mode = OverviewMode::AppExpose;
+    options.mode              = OverviewMode::AppExpose;
     options.applicationFilter = "Code";
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, options);
