@@ -305,10 +305,11 @@ bool intersects(const LayoutRect& lhs, const LayoutRect& rhs) {
 LayoutRect collapsedStageBounds(const WorkspaceWallFrame& frame) {
     const auto bottom = frame.stage.bounds.y + frame.stage.bounds.height;
     const auto collapsedY = std::min(bottom, frame.rail.bounds.y + 70.0);
+    const auto sideInset = std::min(24.0, frame.bounds.width * 0.025);
     return {
-        .x = frame.stage.bounds.x,
+        .x = sideInset,
         .y = collapsedY,
-        .width = frame.stage.bounds.width,
+        .width = std::max(0.0, frame.bounds.width - sideInset * 2.0),
         .height = std::max(0.0, bottom - collapsedY),
     };
 }
@@ -322,17 +323,43 @@ LayoutRect interpolatedRect(const LayoutRect& from, const LayoutRect& to, double
     };
 }
 
+LayoutRect remapStageRect(const LayoutRect& child, const LayoutRect& source, const LayoutRect& target) {
+    if (source.width <= 0.0 || source.height <= 0.0 || target.width <= 0.0 || target.height <= 0.0)
+        return child;
+
+    const auto scale = std::min(target.width / source.width, target.height / source.height);
+    const auto contentWidth = source.width * scale;
+    const auto contentHeight = source.height * scale;
+    const auto originX = target.x + centered(target.width, contentWidth);
+    const auto originY = target.y + centered(target.height, contentHeight);
+    return {
+        .x = originX + (child.x - source.x) * scale,
+        .y = originY + (child.y - source.y) * scale,
+        .width = child.width * scale,
+        .height = child.height * scale,
+    };
+}
+
 RadiantPoint mapDisplayedStagePoint(const WorkspaceWallFrame& frame, RadiantPoint point, bool shelfVisible) {
     if (shelfVisible)
         return point;
 
     const auto displayed = collapsedStageBounds(frame);
-    if (!contains(displayed, point.x, point.y) || displayed.width <= 0.0 || displayed.height <= 0.0)
+    if (frame.stage.bounds.width <= 0.0 || frame.stage.bounds.height <= 0.0 || displayed.width <= 0.0 || displayed.height <= 0.0)
+        return point;
+
+    const auto scale = std::min(displayed.width / frame.stage.bounds.width, displayed.height / frame.stage.bounds.height);
+    const auto contentWidth = frame.stage.bounds.width * scale;
+    const auto contentHeight = frame.stage.bounds.height * scale;
+    const auto originX = displayed.x + centered(displayed.width, contentWidth);
+    const auto originY = displayed.y + centered(displayed.height, contentHeight);
+    const LayoutRect content{.x = originX, .y = originY, .width = contentWidth, .height = contentHeight};
+    if (!contains(content, point.x, point.y))
         return point;
 
     return {
-        .x = frame.stage.bounds.x + (point.x - displayed.x) * frame.stage.bounds.width / displayed.width,
-        .y = frame.stage.bounds.y + (point.y - displayed.y) * frame.stage.bounds.height / displayed.height,
+        .x = frame.stage.bounds.x + (point.x - originX) / scale,
+        .y = frame.stage.bounds.y + (point.y - originY) / scale,
     };
 }
 
@@ -1275,7 +1302,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         const auto previousOffset = -transition * 6.0;
         for (const auto& window : previousFrame->stage.windows) {
             const auto previousDisplayedStage = interpolatedRect(collapsedStageBounds(*previousFrame), previousFrame->stage.bounds, shelfProgress);
-            auto previousBox = boxFor(remapRect(window.rect, previousFrame->stage.bounds, previousDisplayedStage));
+            auto previousBox = boxFor(remapStageRect(window.rect, previousFrame->stage.bounds, previousDisplayedStage));
             previousBox.y += previousOffset;
             const auto radius = Theme::windowRadius();
             drawRect(CBox{previousBox.x + 7.0, previousBox.y + 10.0, previousBox.w, previousBox.h},
@@ -1292,7 +1319,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     for (const auto& window : frame.stage.windows) {
         const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
             m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-        auto displayRect = remapRect(window.rect, frame.stage.bounds, displayedStageBounds);
+        auto displayRect = remapStageRect(window.rect, frame.stage.bounds, displayedStageBounds);
         displayRect.y += stageOffset;
         if (selected)
             displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.014, selectionTransition), -3.0 * selectionTransition);
