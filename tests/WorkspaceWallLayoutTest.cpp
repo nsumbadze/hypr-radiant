@@ -328,6 +328,11 @@ void groupedModeOrdersApplicationsAndMarksHeaders() {
     assert(!frame.stage.windows.at(1).appGroupStart);
     assert(frame.stage.windows.at(2).appClass == "Firefox");
     assert(frame.stage.windows.at(2).appGroupStart);
+
+    const auto editor = std::ranges::find_if(frame.stage.windows, [](const WindowCard& window) { return window.stableId == 10; });
+    assert(editor != frame.stage.windows.end());
+    const auto editorAspect = editor->rect.width / editor->rect.height;
+    assert(std::abs(editorAspect - 900.0 / 760.0) < 0.01);
 }
 
 void appExposeFiltersAcrossLocalWorkspaces() {

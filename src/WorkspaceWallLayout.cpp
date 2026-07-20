@@ -239,18 +239,35 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             frame.stage.name = options.applicationFilter.empty() ? "Application" : options.applicationFilter;
         }
 
-        const auto gridRect = [&](std::size_t index, std::size_t count) {
+        const auto gridRect = [&](const WindowSnapshot& window, std::size_t index, std::size_t count) {
             const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
             const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
             const auto gap = std::clamp(renderSize.width * 0.012, 14.0, 24.0);
             const auto header = options.mode == OverviewMode::Grouped ? 22.0 : 0.0;
-            const auto width = std::max(1.0, stageBounds.width - gap * (columns - 1)) / columns;
-            const auto height = std::max(1.0, stageBounds.height - gap * (rows - 1) - header * rows) / rows;
+            const auto cellWidth = std::max(1.0, stageBounds.width - gap * (columns - 1)) / columns;
+            const auto cellHeight = std::max(1.0, stageBounds.height - gap * (rows - 1) - header * rows) / rows;
             const auto row = static_cast<int>(index) / columns;
             const auto col = static_cast<int>(index) % columns;
+            const LayoutRect cell{
+                .x = stageBounds.x + col * (cellWidth + gap),
+                .y = stageBounds.y + row * (cellHeight + gap + header) + header,
+                .width = cellWidth,
+                .height = cellHeight,
+            };
+            const auto sourceWidth = std::max(1.0, window.geometry.size.width);
+            const auto sourceHeight = std::max(1.0, window.geometry.size.height);
+            const auto sourceAspect = sourceWidth / sourceHeight;
+            const auto availableWidth = std::max(1.0, cell.width * 0.92);
+            const auto availableHeight = std::max(1.0, cell.height * 0.90);
+            auto width = availableWidth;
+            auto height = width / sourceAspect;
+            if (height > availableHeight) {
+                height = availableHeight;
+                width = height * sourceAspect;
+            }
             return LayoutRect{
-                .x = stageBounds.x + col * (width + gap),
-                .y = stageBounds.y + row * (height + gap + header) + header,
+                .x = cell.x + centered(cell.width, width),
+                .y = cell.y + centered(cell.height, height),
                 .width = width,
                 .height = height,
             };
@@ -304,7 +321,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             const auto& window = stageWindows[index];
             frame.stage.empty = false;
             const auto groupStart = options.mode == OverviewMode::Grouped && window.className != previousClass;
-            const auto rect = options.mode == OverviewMode::Spatial ? spatialRect(window, index, stageWindows.size()) : gridRect(index, stageWindows.size());
+            const auto rect = options.mode == OverviewMode::Spatial ? spatialRect(window, index, stageWindows.size()) : gridRect(window, index, stageWindows.size());
             frame.stage.windows.push_back(cardForWindow(window, rect, groupStart));
             previousClass = window.className;
         }
