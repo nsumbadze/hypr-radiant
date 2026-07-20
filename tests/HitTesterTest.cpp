@@ -194,6 +194,26 @@ void focusedNavigationEntersStageAndReturnsToRail() {
     assert(workspace.workspaceId == 1);
 }
 
+void horizontalWorkspaceNavigationWrapsAndSkipsCreateTarget() {
+    auto testFrame = focusedFrame();
+    testFrame.workspaces.push_back({
+        .workspaceId = 3,
+        .name = "new",
+        .rect = {.x = 500, .y = 40, .width = 200, .height = 112},
+        .createTarget = true,
+    });
+
+    const auto previous = HitTester{}.moveSelection(
+        testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 1}, NavigationDirection::Left);
+    assert(previous.type == OverviewTargetType::Workspace);
+    assert(previous.workspaceId == 2);
+
+    const auto next = HitTester{}.moveSelection(
+        testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 2}, NavigationDirection::Right);
+    assert(next.type == OverviewTargetType::Workspace);
+    assert(next.workspaceId == 1);
+}
+
 void scaledGlobalPointerMapsToRenderCoordinates() {
     const auto point = mapGlobalPointToFrame(
         {.x = 100.0, .y = 50.0, .width = 1280.0, .height = 800.0},
@@ -236,6 +256,7 @@ int main() {
     createCardHasDedicatedTarget();
     focusedStageWindowsAreInteractive();
     focusedNavigationEntersStageAndReturnsToRail();
+    horizontalWorkspaceNavigationWrapsAndSkipsCreateTarget();
     scaledGlobalPointerMapsToRenderCoordinates();
     unscaledGlobalPointerOnlyRemovesMonitorOrigin();
     std::cout << "HitTesterTest passed\n";

@@ -125,7 +125,10 @@ OverviewTarget HitTester::initialSelection(const WorkspaceWallFrame& frame) cons
 }
 
 OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, OverviewTarget current, NavigationDirection direction) const {
-    const auto targets = workspaceTargets(frame);
+    auto targets = workspaceTargets(frame);
+    const auto horizontal = direction == NavigationDirection::Left || direction == NavigationDirection::Right;
+    if (horizontal)
+        std::erase_if(targets, [](OverviewTarget target) { return target.type == OverviewTargetType::NewWorkspace; });
     if (targets.empty())
         return {};
 
@@ -232,6 +235,14 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
             bestScore = score;
             best      = target;
         }
+    }
+
+    if (bestScore == 1.0e18 && horizontal) {
+        const auto compareX = [&frame](OverviewTarget lhs, OverviewTarget rhs) {
+            return centerX(rectFor(frame, lhs)) < centerX(rectFor(frame, rhs));
+        };
+        return direction == NavigationDirection::Left ? *std::ranges::max_element(targets, compareX) :
+                                                        *std::ranges::min_element(targets, compareX);
     }
 
     return best;
