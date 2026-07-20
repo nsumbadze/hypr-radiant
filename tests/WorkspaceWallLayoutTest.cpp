@@ -1,9 +1,13 @@
+#include <hypr-radiant/RadiantState.hpp>
 #include <hypr-radiant/SearchPanelGeometry.hpp>
 #include <hypr-radiant/WorkspaceWallLayout.hpp>
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
+#include <string>
 
 using namespace hypr_radiant;
 
