@@ -30,6 +30,16 @@ double centered(double available, double size) {
     return std::max(0.0, (available - size) / 2.0);
 }
 
+double stableNoise(std::uint64_t value, std::uint64_t salt) {
+    value ^= salt + 0x9e3779b97f4a7c15ULL + (value << 6U) + (value >> 2U);
+    value ^= value >> 30U;
+    value *= 0xbf58476d1ce4e5b9ULL;
+    value ^= value >> 27U;
+    value *= 0x94d049bb133111ebULL;
+    value ^= value >> 31U;
+    return static_cast<double>(value & 0xffffU) / 65535.0;
+}
+
 } // namespace
 
 WorkspaceWallFrame WorkspaceWallLayout::compute(
@@ -89,12 +99,12 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto edgePad      = std::clamp(renderSize.width * 0.0125, 16.0, 32.0);
         const auto topPad       = std::clamp(renderSize.height * 0.022, 16.0, 32.0);
         const auto cardGap      = std::clamp(renderSize.width * 0.00625, 8.0, 14.0);
-        const auto labelHeight  = std::clamp(renderSize.height * 0.030, 26.0, 34.0);
+        const auto labelHeight  = std::clamp(renderSize.height * 0.026, 24.0, 30.0);
         const auto cardHeight   = std::clamp(renderSize.height * 0.145, 96.0, 168.0);
         const auto monitorWidth = std::max(1.0, monitor.geometry.size.width);
         const auto monitorHeight = std::max(1.0, monitor.geometry.size.height);
         const auto cardWidth    = cardHeight * monitorWidth / monitorHeight;
-        const auto railInset    = 16.0;
+        const auto railInset    = 12.0;
         const auto railHeight   = cardHeight + labelHeight + railInset * 2.0;
         const auto totalWidth   = static_cast<double>(orderedIds.size()) * cardWidth +
             static_cast<double>(orderedIds.empty() ? 0 : orderedIds.size() - 1) * cardGap;
@@ -295,7 +305,13 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 .height = cellHeight,
             };
 
-            const auto density = count == 1 ? 0.76 : count == 2 ? 0.88 : 0.92;
+            // Keep each window in a non-overlapping cell, but salt its scale and
+            // position by stable ID. This produces the relaxed, spatial rhythm of
+            // Expose without making targets jump between overview sessions.
+            const auto scaleNoise = stableNoise(window.stableId, 0x51a7U);
+            const auto xNoise = stableNoise(window.stableId, 0x8d31U);
+            const auto yNoise = stableNoise(window.stableId, 0xc247U);
+            const auto density = count == 1 ? 0.80 : 0.80 + scaleNoise * 0.14;
             const auto availableWidth = std::max(1.0, cell.width * density);
             const auto availableHeight = std::max(1.0, (cell.height - labelReserve) * density);
             const auto sourceWidth = std::max(1.0, window.geometry.size.width);
@@ -308,9 +324,19 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 width = height * sourceAspect;
             }
 
+            const auto usableHeight = std::max(1.0, cell.height - labelReserve);
+            const auto freeX = std::max(0.0, cell.width - width);
+            const auto freeY = std::max(0.0, usableHeight - height);
+            const auto wave = (static_cast<int>(index + static_cast<std::size_t>(window.stableId)) % 2 == 0 ? -1.0 : 1.0) *
+                std::min(12.0, freeY * 0.24);
+            const auto x = std::clamp(cell.x + centered(cell.width, width) + (xNoise - 0.5) * freeX * 0.72,
+                cell.x, cell.x + cell.width - width);
+            const auto y = std::clamp(cell.y + centered(usableHeight, height) + (yNoise - 0.5) * freeY * 0.62 + wave,
+                cell.y, cell.y + usableHeight - height);
+
             return LayoutRect{
-                .x = cell.x + centered(cell.width, width),
-                .y = cell.y + centered(std::max(1.0, cell.height - labelReserve), height),
+                .x = x,
+                .y = y,
                 .width = width,
                 .height = height,
             };
