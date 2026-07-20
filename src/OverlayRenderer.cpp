@@ -156,12 +156,12 @@ RadiantSize renderSizeForMonitor(const PHLMONITOR& monitor) {
     };
 }
 
-LayoutRect globalBoundsForMonitor(const PHLMONITOR& monitor, RadiantSize renderSize) {
+LayoutRect globalBoundsForMonitor(const PHLMONITOR& monitor) {
     return {
         .x      = monitor->m_position.x,
         .y      = monitor->m_position.y,
-        .width  = renderSize.width,
-        .height = renderSize.height,
+        .width  = std::max(1.0, monitor->m_size.x),
+        .height = std::max(1.0, monitor->m_size.y),
     };
 }
 
@@ -633,7 +633,7 @@ void OverlayRenderer::rebuildFrames() {
             const auto renderSize = renderSizeForMonitor(monitor);
             const auto previewWorkspaceId = snapshot.id == m_selectedFrameMonitorId && m_selectedTarget.workspaceId > 0 ?
                 m_selectedTarget.workspaceId : snapshot.activeWorkspaceId;
-            m_frameBoundsByMonitor[snapshot.id] = globalBoundsForMonitor(monitor, renderSize);
+            m_frameBoundsByMonitor[snapshot.id] = globalBoundsForMonitor(monitor);
             m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize,
                 layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
         }
@@ -1108,8 +1108,9 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
         const auto* source = findWindowCard(m_pointerDownTarget.windowId);
         if (bounds != m_frameBoundsByMonitor.end() && source && contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y)) {
-            const auto localX = m_pointerPosition.x - bounds->second.x;
-            const auto localY = m_pointerPosition.y - bounds->second.y;
+            const auto local = mapGlobalPointToFrame(bounds->second, frame.bounds, m_pointerPosition.x, m_pointerPosition.y);
+            const auto localX = local.x;
+            const auto localY = local.y;
             const auto ghostWidth = std::clamp(source->rect.width * 0.58, 180.0, 320.0);
             const auto aspect = source->rect.height > 0.0 ? source->rect.width / source->rect.height : 16.0 / 9.0;
             const auto ghostHeight = std::clamp(ghostWidth / std::max(0.2, aspect), 100.0, 220.0);
@@ -1382,8 +1383,9 @@ const WorkspaceWallFrame* OverlayRenderer::frameForPoint(double x, double y, dou
         if (!contains(bounds->second, x, y))
             continue;
 
-        localX = x - bounds->second.x;
-        localY = y - bounds->second.y;
+        const auto local = mapGlobalPointToFrame(bounds->second, frame.bounds, x, y);
+        localX = local.x;
+        localY = local.y;
         return &frame;
     }
 

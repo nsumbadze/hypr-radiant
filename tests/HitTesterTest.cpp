@@ -194,6 +194,28 @@ void focusedNavigationEntersStageAndReturnsToRail() {
     assert(workspace.workspaceId == 1);
 }
 
+void scaledGlobalPointerMapsToRenderCoordinates() {
+    const auto point = mapGlobalPointToFrame(
+        {.x = 100.0, .y = 50.0, .width = 1280.0, .height = 800.0},
+        {.x = 0.0, .y = 0.0, .width = 1920.0, .height = 1200.0},
+        1100.0,
+        650.0);
+
+    assert(point.x == 1500.0);
+    assert(point.y == 900.0);
+}
+
+void unscaledGlobalPointerOnlyRemovesMonitorOrigin() {
+    const auto point = mapGlobalPointToFrame(
+        {.x = 1920.0, .y = 0.0, .width = 1920.0, .height = 1080.0},
+        {.x = 0.0, .y = 0.0, .width = 1920.0, .height = 1080.0},
+        2880.0,
+        540.0);
+
+    assert(point.x == 960.0);
+    assert(point.y == 540.0);
+}
+
 } // namespace
 
 int main() {
@@ -214,6 +236,8 @@ int main() {
     createCardHasDedicatedTarget();
     focusedStageWindowsAreInteractive();
     focusedNavigationEntersStageAndReturnsToRail();
+    scaledGlobalPointerMapsToRenderCoordinates();
+    unscaledGlobalPointerOnlyRemovesMonitorOrigin();
     std::cout << "HitTesterTest passed\n";
     return 0;
 }

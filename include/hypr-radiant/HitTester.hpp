@@ -27,6 +27,12 @@ enum class NavigationDirection {
     Down,
 };
 
+[[nodiscard]] RadiantPoint mapGlobalPointToFrame(
+    const LayoutRect& globalBounds,
+    const LayoutRect& frameBounds,
+    double globalX,
+    double globalY) noexcept;
+
 class HitTester {
   public:
     [[nodiscard]] OverviewTarget hitTest(const WorkspaceWallFrame& frame, double x, double y) const;

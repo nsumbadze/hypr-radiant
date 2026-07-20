@@ -55,6 +55,19 @@ double centerY(const LayoutRect& rect) { return rect.y + rect.height / 2.0; }
 
 } // namespace
 
+RadiantPoint mapGlobalPointToFrame(
+    const LayoutRect& globalBounds,
+    const LayoutRect& frameBounds,
+    double globalX,
+    double globalY) noexcept {
+    const auto scaleX = globalBounds.width > 0.0 ? frameBounds.width / globalBounds.width : 1.0;
+    const auto scaleY = globalBounds.height > 0.0 ? frameBounds.height / globalBounds.height : 1.0;
+    return {
+        .x = frameBounds.x + (globalX - globalBounds.x) * scaleX,
+        .y = frameBounds.y + (globalY - globalBounds.y) * scaleY,
+    };
+}
+
 OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, double y) const {
     if (frame.focusedStage) {
         for (const auto& window : frame.stage.windows) {
