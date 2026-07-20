@@ -37,8 +37,6 @@ AlignConsecutiveDeclarations:
   Enabled: true
   AcrossEmptyLines: false
   AcrossComments: false
-  AlignFunctionDeclarations: false
-  AlignFunctionPointers: false
 AlignConsecutiveMacros: Consecutive
 AlignOperands: Align
 
