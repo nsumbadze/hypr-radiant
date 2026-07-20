@@ -38,13 +38,13 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         "plugin:radiant:font_family", "Overview interface font family.", "JetBrainsMono Nerd Font");
 
     m_gestureEnabled = makeShared<Config::Values::CIntValue>(
-        "plugin:radiant:gesture_enabled", "Enable interactive overview trackpad gestures.", 0,
+        "plugin:radiant:gesture_enabled", "Enable interactive overview trackpad gestures.", DEFAULT_GESTURE_ENABLED ? 1 : 0,
         Config::Values::SIntValueOptions{.min = 0, .max = 1});
     m_gestureFingers = makeShared<Config::Values::CIntValue>(
-        "plugin:radiant:gesture_fingers", "Trackpad finger count for overview gestures.", 3,
+        "plugin:radiant:gesture_fingers", "Trackpad finger count for overview gestures.", DEFAULT_GESTURE_FINGERS,
         Config::Values::SIntValueOptions{.min = 3, .max = 4});
     m_gestureDistance = makeShared<Config::Values::CFloatValue>(
-        "plugin:radiant:gesture_distance", "Trackpad travel required to fully open the overview.", 300.0F,
+        "plugin:radiant:gesture_distance", "Trackpad travel required to fully open the overview.", static_cast<float>(DEFAULT_GESTURE_DISTANCE),
         Config::Values::SFloatValueOptions{.min = 120.0F, .max = 800.0F});
 
     return HyprlandAPI::addConfigValueV2(handle, m_opacity) && HyprlandAPI::addConfigValueV2(handle, m_animationDurationMs) &&
@@ -56,18 +56,18 @@ bool RadiantConfig::registerValues(HANDLE handle) {
 }
 
 bool RadiantConfig::gestureEnabled() const {
-    return m_gestureEnabled && m_gestureEnabled->value() != 0;
+    return !m_gestureEnabled ? DEFAULT_GESTURE_ENABLED : m_gestureEnabled->value() != 0;
 }
 
 int RadiantConfig::gestureFingers() const {
     if (!m_gestureFingers)
-        return 3;
+        return DEFAULT_GESTURE_FINGERS;
     return static_cast<int>(std::clamp(m_gestureFingers->value(), static_cast<Config::INTEGER>(3), static_cast<Config::INTEGER>(4)));
 }
 
 double RadiantConfig::gestureDistance() const {
     if (!m_gestureDistance)
-        return 300.0;
+        return DEFAULT_GESTURE_DISTANCE;
     return std::clamp(static_cast<double>(m_gestureDistance->value()), 120.0, 800.0);
 }
 

@@ -118,7 +118,7 @@ layout retains the original grid.
 - Click a stage window: switch workspace and focus window
 - `Enter`: activate selection
 - `Esc`: close search and restore its previous selection, or close the overview
-- Optional three/four-finger swipe up/down: interactively open or close
+- Three-finger swipe up/down: interactively open or close by default
 
 ## Configuration
 
@@ -132,7 +132,7 @@ plugin {
         background_color = 111c18
         foreground_color = C1C497
         font_family = JetBrainsMono Nerd Font
-        gesture_enabled = false
+        gesture_enabled = true
         gesture_fingers = 3
         gesture_distance = 300
     }
@@ -146,12 +146,12 @@ plugin {
   `#RRGGBB`, `#RRGGBBAA`, `rgb(RRGGBB)`, and `rgba(RRGGBBAA)` values override it.
 - `background_color` / `foreground_color`: portable RGB/RGBA palette values.
 - `font_family`: interface font; `JetBrainsMono Nerd Font` is the Omarchy default.
-- `gesture_enabled`: opt-in interactive vertical swipe capture.
+- `gesture_enabled`: interactive vertical swipe capture; enabled by default.
 - `gesture_fingers`: `3` or `4` fingers.
 - `gesture_distance`: travel in logical pixels, clamped from `120` to `800`.
 
-Gesture capture is disabled by default so the plugin does not replace an
-existing Hyprland trackpad binding without permission.
+Set `gesture_enabled = false` if another Hyprland binding owns the same
+vertical three-finger gesture.
 
 ## Test
 

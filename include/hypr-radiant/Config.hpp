@@ -10,6 +10,10 @@
 
 namespace hypr_radiant {
 
+inline constexpr bool DEFAULT_GESTURE_ENABLED = true;
+inline constexpr int DEFAULT_GESTURE_FINGERS = 3;
+inline constexpr double DEFAULT_GESTURE_DISTANCE = 300.0;
+
 enum class LayoutMode {
     Stage,
     WorkspaceWall,
