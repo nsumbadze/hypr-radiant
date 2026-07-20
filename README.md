@@ -1,7 +1,7 @@
 # hypr-radiant
 
 `hypr-radiant` is a native workspace overview for Hyprland 0.55.x.
-Its default stage layout combines live spatial previews and translucent glass
+Its default stage layout combines live single-layer previews and translucent glass
 with Omarchy's theme-driven palette, monospace interface language, and
 keyboard-first workflow.
 
@@ -94,9 +94,9 @@ hyprctl dispatch radiant:app
 ```
 
 The command opens or closes the overview. The default `stage` layout shows an
-equal-size workspace rail at the top and reconstructs the highlighted
-workspace spatially below it from live window textures. Moving through the
-rail previews a workspace without switching to it. The `workspace_wall`
+equal-size workspace rail at the top and arranges the highlighted workspace
+as a non-overlapping expose layer below it using live window textures. Moving
+through the rail previews a workspace without switching to it. The `workspace_wall`
 layout retains the original grid.
 
 ## Controls
