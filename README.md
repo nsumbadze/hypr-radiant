@@ -93,23 +93,26 @@ To open App Exposé for the currently focused application:
 hyprctl dispatch radiant:app
 ```
 
-The command opens or closes the overview. The default `stage` layout shows an
-equal-size workspace rail at the top and arranges the highlighted workspace
-as a non-overlapping expose layer below it using live window textures. Moving
-through the rail previews a workspace without switching to it. The `workspace_wall`
-layout retains the original grid.
+The command opens or closes the overview. The default `stage` layout expands the
+window stage across the screen and reveals a lightweight workspace shelf when
+the pointer reaches the top edge. Windows use a stable, organic Exposé layout:
+their aspect ratios and targets remain exact while scale and placement gain a
+subtle spatial variation. The `workspace_wall` layout retains the original grid.
 
 ## Controls
 
 - `hyprctl dispatch radiant:toggle`: open or close overview
 - `hyprctl dispatch radiant:open`: open overview only if it is closed
 - `hyprctl dispatch radiant:close`: close overview only if it is open
+- `hyprctl dispatch radiant:shelf show|hide|toggle`: control the workspace shelf
+- Move the pointer to the top edge or scroll up: reveal the workspace shelf
+- Leave the shelf or scroll down: hide it; scrolling down again closes via gesture
 - Hover a rail workspace or stage window: move selection
 - Drag a stage window onto a rail card: move it to that workspace
-- Drag a stage window onto `NEW [id]`: create a workspace and move it there
-- Click `NEW [id]`: create and enter a workspace
+- Drag a stage window onto the trailing `+`: create a workspace and move it there
+- Click the trailing `+`: create and enter a workspace
 - `Tab`: toggle spatial and application-grouped views
-- Mouse wheel or `Left`/`Right`: move through the workspace rail
+- `Left`/`Right`: move through the workspace shelf
 - `Down`: enter the highlighted workspace's stage windows or move forward
 - `Up`: move backward through stage windows or return to the rail
 - `/`: open the command palette, including all targets for an empty query
@@ -120,7 +123,8 @@ layout retains the original grid.
 - Click a stage window: switch workspace and focus window
 - `Enter`: activate selection
 - `Esc`: close search and restore its previous selection, or close the overview
-- Three-finger swipe up/down: interactively open or close by default
+- Three-finger swipe up/down: open or close the overview; while open, reveal or hide the shelf
+- Three-finger swipe left/right while open: preview the previous or next workspace
 
 ## Configuration
 

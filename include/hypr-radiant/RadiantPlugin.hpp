@@ -26,6 +26,7 @@ class RadiantPlugin {
     SDispatchResult close(const std::string& args);
     SDispatchResult toggle(const std::string& args);
     SDispatchResult showApplication(const std::string& args);
+    SDispatchResult shelf(const std::string& args);
     SDispatchResult status(const std::string& args);
     [[nodiscard]] bool active() const noexcept;
 

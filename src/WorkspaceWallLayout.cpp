@@ -99,13 +99,12 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto edgePad      = std::clamp(renderSize.width * 0.0125, 16.0, 32.0);
         const auto topPad       = std::clamp(renderSize.height * 0.022, 16.0, 32.0);
         const auto cardGap      = std::clamp(renderSize.width * 0.00625, 8.0, 14.0);
-        const auto labelHeight  = std::clamp(renderSize.height * 0.026, 24.0, 30.0);
         const auto cardHeight   = std::clamp(renderSize.height * 0.145, 96.0, 168.0);
         const auto monitorWidth = std::max(1.0, monitor.geometry.size.width);
         const auto monitorHeight = std::max(1.0, monitor.geometry.size.height);
         const auto cardWidth    = cardHeight * monitorWidth / monitorHeight;
         const auto railInset    = 12.0;
-        const auto railHeight   = cardHeight + labelHeight + railInset * 2.0;
+        const auto railHeight   = cardHeight + railInset * 2.0;
         const auto totalWidth   = static_cast<double>(orderedIds.size()) * cardWidth +
             static_cast<double>(orderedIds.empty() ? 0 : orderedIds.size() - 1) * cardGap;
         const auto railWidth    = std::min(std::max(1.0, renderSize.width - edgePad * 2.0), totalWidth + railInset * 2.0);

@@ -18,6 +18,7 @@ constexpr auto DISPATCHER_TOGGLE  = "radiant:toggle";
 constexpr auto DISPATCHER_OPEN    = "radiant:open";
 constexpr auto DISPATCHER_CLOSE   = "radiant:close";
 constexpr auto DISPATCHER_APP     = "radiant:app";
+constexpr auto DISPATCHER_SHELF   = "radiant:shelf";
 constexpr auto DISPATCHER_STATUS  = "radiant:status";
 constexpr auto PLUGIN_DESCRIPTION = "Native workspace overview with live previews and search.";
 constexpr auto PLUGIN_AUTHOR      = "Nika Sumbadze (@nsumbadze)";
@@ -90,6 +91,7 @@ bool RadiantPlugin::initialize() {
         [this](char value) { m_overlay.appendSearchChar(value); },
         [this] { m_overlay.backspaceSearch(); },
         [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
+        [this](bool reveal) { m_overlay.setWorkspaceShelfVisible(reveal); },
         [this] { return m_overlay.searchActive(); },
         [this] { m_overlay.beginSearch(); },
         [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
@@ -107,15 +109,31 @@ bool RadiantPlugin::initialize() {
         [this] { return m_config.gestureFingers(); },
         [this] { return m_config.gestureDistance(); },
         [this] { return m_overlay.active(); },
-        [this](bool opening) {
-            if (!opening)
-                return;
-            m_overlay.beginGestureOpen(m_stateCollector.collect());
-            m_lastOpenedAt = Clock::now();
-            m_input.grabKeyboard(false);
+        [this] { return m_overlay.workspaceShelfVisible(); },
+        [this](SwipeAction action) {
+            if (action == SwipeAction::OpenOverview) {
+                m_overlay.beginGestureOpen(m_stateCollector.collect());
+                m_lastOpenedAt = Clock::now();
+                m_input.grabKeyboard(false);
+            }
         },
-        [this](bool opening, double progress) { m_overlay.setGestureProgress(opening, progress); },
-        [this](bool opening, bool commit) {
+        [this](SwipeAction action, double progress) {
+            if (action == SwipeAction::OpenOverview || action == SwipeAction::CloseOverview)
+                m_overlay.setGestureProgress(action == SwipeAction::OpenOverview, progress);
+            else if (action == SwipeAction::RevealShelf || action == SwipeAction::HideShelf)
+                m_overlay.setWorkspaceShelfGestureProgress(action == SwipeAction::RevealShelf, progress);
+        },
+        [this](SwipeAction action, bool commit) {
+            if (action == SwipeAction::RevealShelf || action == SwipeAction::HideShelf) {
+                m_overlay.finishWorkspaceShelfGesture(action == SwipeAction::RevealShelf, commit);
+                return;
+            }
+            if (action == SwipeAction::PreviousWorkspace || action == SwipeAction::NextWorkspace) {
+                if (commit)
+                    m_overlay.moveSelection(action == SwipeAction::PreviousWorkspace ? NavigationDirection::Left : NavigationDirection::Right);
+                return;
+            }
+            const auto opening = action == SwipeAction::OpenOverview;
             m_overlay.finishGesture(opening, commit);
             const auto remainsVisible = opening ? commit : !commit;
             if (remainsVisible)
@@ -178,6 +196,22 @@ void RadiantPlugin::recordTransition(std::string message, bool notify) {
 SDispatchResult RadiantPlugin::status(const std::string&) {
     const auto message = std::format("active={} | {}", m_overlay.active() ? "true" : "false", m_lastTransition);
     HyprlandAPI::addNotification(m_handle, std::format("[hypr-radiant] {}", message), CHyprColor{0.31F, 0.58F, 0.46F, 1.0F}, 5000);
+    return {.passEvent = false, .success = true, .error = ""};
+}
+
+SDispatchResult RadiantPlugin::shelf(const std::string& args) {
+    if (!m_overlay.active())
+        return {.passEvent = false, .success = false, .error = "overview is not active"};
+
+    if (args.empty() || args == "toggle")
+        m_overlay.toggleWorkspaceShelf();
+    else if (args == "show" || args == "open")
+        m_overlay.setWorkspaceShelfVisible(true);
+    else if (args == "hide" || args == "close")
+        m_overlay.setWorkspaceShelfVisible(false);
+    else
+        return {.passEvent = false, .success = false, .error = "expected show, hide, or toggle"};
+
     return {.passEvent = false, .success = true, .error = ""};
 }
 
@@ -342,6 +376,20 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:app"};
     }
 
+    const auto shelfRegistered = HyprlandAPI::addDispatcherV2(
+        g_pluginHandle,
+        DISPATCHER_SHELF,
+        [](std::string args) -> SDispatchResult {
+            if (!g_plugin)
+                return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
+            return g_plugin->shelf(args);
+        });
+
+    if (!shelfRegistered) {
+        resetPluginState();
+        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:shelf"};
+    }
+
     const auto statusRegistered = HyprlandAPI::addDispatcherV2(
         g_pluginHandle,
         DISPATCHER_STATUS,
@@ -355,7 +403,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:status"};
     }
 
-    hypr_radiant::log::info("loaded; dispatchers radiant:toggle, radiant:open, radiant:close, and radiant:app registered");
+    hypr_radiant::log::info("loaded; overview and shelf dispatchers registered");
 
     return {
         .name        = PLUGIN_NAME,

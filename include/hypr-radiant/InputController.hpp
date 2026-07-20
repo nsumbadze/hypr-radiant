@@ -21,6 +21,7 @@ class InputController {
     using TextInputFn = std::function<void(char)>;
     using BackspaceFn = std::function<void()>;
     using MoveFn     = std::function<void(NavigationDirection)>;
+    using ShelfScrollFn = std::function<void(bool)>;
     using SearchActiveFn = std::function<bool()>;
     using OpenSearchFn = std::function<void()>;
     using JumpFn     = std::function<void(std::int64_t)>;
@@ -28,7 +29,8 @@ class InputController {
     using ToggleModeFn = std::function<void()>;
 
     void install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
-        MoveFn move, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close, ToggleModeFn toggleMode);
+        MoveFn move, ShelfScrollFn shelfScroll, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close,
+        ToggleModeFn toggleMode);
     void uninstall();
 
     void grabKeyboard(bool waitForOpeningRelease = true);
@@ -49,6 +51,7 @@ class InputController {
     TextInputFn         m_textInput;
     BackspaceFn         m_backspace;
     MoveFn              m_move;
+    ShelfScrollFn       m_shelfScroll;
     SearchActiveFn      m_searchActive;
     OpenSearchFn        m_openSearch;
     JumpFn              m_jump;

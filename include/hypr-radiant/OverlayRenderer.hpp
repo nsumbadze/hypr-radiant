@@ -50,6 +50,10 @@ class OverlayRenderer {
     void backspaceSearch();
     void clearSearchOrHide();
     void toggleGroupedMode();
+    void setWorkspaceShelfVisible(bool visible);
+    void toggleWorkspaceShelf();
+    void setWorkspaceShelfGestureProgress(bool revealing, double progress);
+    void finishWorkspaceShelfGesture(bool revealing, bool commit);
     void pointerMoved(double x, double y);
     [[nodiscard]] PointerAction pointerButton(bool pressed, double x, double y);
     void refresh(RadiantState state);
@@ -59,6 +63,7 @@ class OverlayRenderer {
 
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] bool           searchActive() const noexcept;
+    [[nodiscard]] bool           workspaceShelfVisible() const noexcept;
     [[nodiscard]] OverviewMode   mode() const noexcept;
     [[nodiscard]] OverviewTarget selectedTarget() const noexcept;
     [[nodiscard]] OverviewTarget hitTest(double x, double y) const;
@@ -97,6 +102,7 @@ class OverlayRenderer {
     FadeAnimation                                      m_animation;
     FadeAnimation                                      m_stageTransition;
     FadeAnimation                                      m_selectionTransition;
+    FadeAnimation                                      m_shelfTransition;
     CHyprSignalListener                                m_renderStageListener;
     CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;
