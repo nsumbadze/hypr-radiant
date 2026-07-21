@@ -266,8 +266,10 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             const auto sourceWidth = std::max(1.0, window.geometry.size.width);
             const auto sourceHeight = std::max(1.0, window.geometry.size.height);
             const auto sourceAspect = sourceWidth / sourceHeight;
-            const auto availableWidth = std::max(1.0, cell.width * 0.92);
-            const auto availableHeight = std::max(1.0, cell.height * 0.90);
+            // Grouped and Exposé grids get a tighter fit than the spatial stage: these cells are
+            // uniform, so the extra breathing room only read as wasted space.
+            const auto availableWidth = std::max(1.0, cell.width * 0.985);
+            const auto availableHeight = std::max(1.0, cell.height * 0.96);
             auto width = availableWidth;
             auto height = width / sourceAspect;
             if (height > availableHeight) {
