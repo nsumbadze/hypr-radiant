@@ -1270,6 +1270,45 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             renderWindowPreview(window, previousBox, previousAlpha, damage);
         }
     }
+    // Grouped mode draws a titled shelf per application behind its windows. Spatial never draws a
+    // container, so the two modes are distinguishable at a glance rather than by card placement.
+    for (const auto& group : frame.stage.groups) {
+        const auto containerBox = boxFor(remapStageRect(group.rect, frame.stage.bounds, pushedStageBounds));
+        const auto headerBox    = boxFor(remapStageRect(group.headerRect, frame.stage.bounds, pushedStageBounds));
+        const auto signal       = resolvedAppSignalColor(group.appClass, accent);
+        const auto shelfRadius  = Theme::workspaceRadius(false);
+        const auto foreground   = m_config.foregroundColor();
+
+        drawRect(CBox{containerBox.x + 5.0, containerBox.y + 9.0, containerBox.w, containerBox.h},
+            withAlpha(Theme::shadowColor(), stageAlpha * 0.50), damage, shelfRadius);
+        drawRect(containerBox, tintedSurface(surfaceColor(0.07F, stageAlpha * 0.80), signal, 0.10), damage, shelfRadius, true);
+
+        if (g_pHyprRenderer) {
+            CBorderPassElement::SBorderData border;
+            border.box        = containerBox;
+            border.grad1      = Config::CGradientValueData{withAlpha(signal, stageAlpha * 0.34)};
+            border.a          = static_cast<float>(signal.a * stageAlpha * 0.34);
+            border.round      = shelfRadius;
+            border.borderSize = 1;
+            g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+        }
+
+        renderCenteredLabel(appGlyph(group.appClass), CBox{headerBox.x + 12.0, headerBox.y, 24.0, headerBox.h},
+            Theme::hintSize(), signal, stageAlpha * 0.95, damage);
+
+        const auto nameWidth = std::max(1.0, headerBox.w - 100.0);
+        const auto nameSize  = measureLabel(group.appClass, nameWidth, Theme::labelSize(), foreground);
+        renderColoredLabel(group.appClass, headerBox.x + 42.0, headerBox.y + centered(headerBox.h, nameSize.height), nameWidth,
+            Theme::labelSize(), foreground, stageAlpha * 0.92, damage);
+
+        renderRightAlignedLabel(std::format("{}", group.windowCount),
+            CBox{headerBox.x, headerBox.y, std::max(1.0, headerBox.w - 14.0), headerBox.h}, Theme::hintSize(), foreground,
+            stageAlpha * 0.55, damage);
+
+        drawRect(CBox{containerBox.x + 12.0, headerBox.y + headerBox.h - 1.0, std::max(0.0, containerBox.w - 24.0), 1.0},
+            withAlpha(signal, stageAlpha * 0.22), damage);
+    }
+
     if (frame.stage.empty) {
         renderLabel("Empty workspace", pushedStageBounds.x + centered(pushedStageBounds.width, 180.0),
             pushedStageBounds.y + centered(pushedStageBounds.height, 24.0), 180.0, Theme::footerSize(), stageAlpha * 0.42, damage);
@@ -1284,7 +1323,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         const auto windowBox = boxFor(displayRect);
         const auto radius = Theme::windowRadius();
 
-        if (window.appGroupStart) {
+        if (window.appGroupStart && frame.stage.groups.empty()) {
             const auto glyphColor = resolvedAppSignalColor(window.appClass, accent);
             renderColoredLabel(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
                 18.0, Theme::hintSize(), glyphColor, stageAlpha * 0.92, damage);
@@ -1293,11 +1332,16 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         }
 
         const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? stageAlpha * 0.30 : stageAlpha;
-        drawRect(CBox{windowBox.x + 7.0, windowBox.y + 10.0, windowBox.w, windowBox.h},
-            withAlpha(Theme::shadowColor(), windowAlpha * 0.72), damage, radius + 2);
+        const auto lift = selected ? selectionTransition : 0.0;
+        // Two shadow layers: a wide ambient one plus a tighter contact shadow, so cards float
+        // instead of sitting flat on the backdrop.
+        drawRect(CBox{windowBox.x - 4.0, windowBox.y + 6.0 + lift * 8.0, windowBox.w + 8.0, windowBox.h + 8.0},
+            withAlpha(Theme::shadowColor(), windowAlpha * (0.34 + lift * 0.24)), damage, radius + 10);
+        drawRect(CBox{windowBox.x + 5.0, windowBox.y + 9.0 + lift * 5.0, windowBox.w, windowBox.h},
+            withAlpha(Theme::shadowColor(), windowAlpha * (0.62 + lift * 0.20)), damage, radius + 2);
         if (selected) {
             drawRect(CBox{windowBox.x - 8.0, windowBox.y - 8.0, windowBox.w + 16.0, windowBox.h + 16.0},
-                withAlpha(accent, stageAlpha * 0.07), damage, radius + 8);
+                withAlpha(accent, stageAlpha * 0.10 * selectionTransition), damage, radius + 8);
         }
         drawRect(windowBox, withAlpha(stageSurface, windowAlpha), damage, radius);
         renderWindowPreview(window, windowBox, windowAlpha, damage);
