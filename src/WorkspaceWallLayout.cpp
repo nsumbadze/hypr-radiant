@@ -219,6 +219,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             .name        = stageFound != workspaceById.end() && !stageFound->second.name.empty() ? stageFound->second.name : std::to_string(previewId),
             .bounds = stageBounds,
             .windows     = {},
+            .groups      = {},
             .empty       = true,
         };
         auto stageWindows = windowsForWorkspace(previewId);
@@ -284,6 +285,25 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             };
         };
 
+        // Fits a window into a slot without cropping, centred, preserving its aspect ratio.
+        const auto fittedRect = [](const WindowSnapshot& window, const LayoutRect& slot, double fill) {
+            const auto sourceAspect = std::max(1.0, window.geometry.size.width) / std::max(1.0, window.geometry.size.height);
+            const auto availableWidth = std::max(1.0, slot.width * fill);
+            const auto availableHeight = std::max(1.0, slot.height * fill);
+            auto width = availableWidth;
+            auto height = width / sourceAspect;
+            if (height > availableHeight) {
+                height = availableHeight;
+                width = height * sourceAspect;
+            }
+            return LayoutRect{
+                .x = slot.x + centered(slot.width, width),
+                .y = slot.y + centered(slot.height, height),
+                .width = width,
+                .height = height,
+            };
+        };
+
         const auto spatialRect = [&](const WindowSnapshot& window, std::size_t index, std::size_t count) {
             const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
             const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
@@ -343,14 +363,77 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             };
         };
 
-        std::string previousClass;
+        // Grouped mode gives each application its own shelf: a titled container holding that app's
+        // windows. That container is the thing Spatial never draws, so the two modes read apart at
+        // a glance instead of differing only by how the same cards are scattered.
+        if (options.mode == OverviewMode::Grouped && !stageWindows.empty()) {
+            std::vector<std::pair<std::string, std::vector<const WindowSnapshot*>>> groups;
+            for (const auto& window : stageWindows) {
+                if (groups.empty() || groups.back().first != window.className)
+                    groups.emplace_back(window.className, std::vector<const WindowSnapshot*>{});
+                groups.back().second.push_back(&window);
+            }
+
+            const auto groupCount   = groups.size();
+            const auto columns      = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(groupCount)))));
+            const auto rows         = std::max(1, static_cast<int>(std::ceil(static_cast<double>(groupCount) / columns)));
+            const auto gap          = std::clamp(renderSize.width * 0.011, 14.0, 24.0);
+            const auto headerHeight = std::clamp(renderSize.height * 0.026, 28.0, 38.0);
+            const auto padding      = 12.0;
+            const auto cellWidth    = std::max(1.0, (stageBounds.width - gap * (columns - 1)) / columns);
+            const auto cellHeight   = std::max(1.0, (stageBounds.height - gap * (rows - 1)) / rows);
+
+            for (std::size_t groupIndex = 0; groupIndex < groupCount; ++groupIndex) {
+                const auto row = static_cast<int>(groupIndex) / columns;
+                const auto col = static_cast<int>(groupIndex) % columns;
+                const LayoutRect container{
+                    .x      = stageBounds.x + col * (cellWidth + gap),
+                    .y      = stageBounds.y + row * (cellHeight + gap),
+                    .width  = cellWidth,
+                    .height = cellHeight,
+                };
+
+                frame.stage.groups.push_back(AppGroupCard{
+                    .appClass    = groups[groupIndex].first,
+                    .rect        = container,
+                    .headerRect  = {.x = container.x, .y = container.y, .width = container.width, .height = headerHeight},
+                    .windowCount = groups[groupIndex].second.size(),
+                });
+
+                const LayoutRect inner{
+                    .x      = container.x + padding,
+                    .y      = container.y + headerHeight,
+                    .width  = std::max(1.0, container.width - padding * 2.0),
+                    .height = std::max(1.0, container.height - headerHeight - padding),
+                };
+
+                const auto count        = groups[groupIndex].second.size();
+                const auto innerColumns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
+                const auto innerRows    = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / innerColumns)));
+                const auto innerGap     = 8.0;
+                const auto slotWidth    = std::max(1.0, (inner.width - innerGap * (innerColumns - 1)) / innerColumns);
+                const auto slotHeight   = std::max(1.0, (inner.height - innerGap * (innerRows - 1)) / innerRows);
+
+                for (std::size_t i = 0; i < count; ++i) {
+                    const LayoutRect slot{
+                        .x      = inner.x + (static_cast<int>(i) % innerColumns) * (slotWidth + innerGap),
+                        .y      = inner.y + (static_cast<int>(i) / innerColumns) * (slotHeight + innerGap),
+                        .width  = slotWidth,
+                        .height = slotHeight,
+                    };
+                    frame.stage.empty = false;
+                    frame.stage.windows.push_back(cardForWindow(*groups[groupIndex].second[i], fittedRect(*groups[groupIndex].second[i], slot, 0.96), i == 0));
+                }
+            }
+
+            return frame;
+        }
+
         for (std::size_t index = 0; index < stageWindows.size(); ++index) {
             const auto& window = stageWindows[index];
             frame.stage.empty = false;
-            const auto groupStart = options.mode == OverviewMode::Grouped && window.className != previousClass;
             const auto rect = options.mode == OverviewMode::Spatial ? spatialRect(window, index, stageWindows.size()) : gridRect(window, index, stageWindows.size());
-            frame.stage.windows.push_back(cardForWindow(window, rect, groupStart));
-            previousClass = window.className;
+            frame.stage.windows.push_back(cardForWindow(window, rect, false));
         }
 
         return frame;
