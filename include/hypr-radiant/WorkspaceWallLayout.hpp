@@ -49,20 +49,11 @@ struct WorkspaceRail {
     bool       overflowRight = false;
 };
 
-/// Container drawn behind one application's windows in Grouped mode. Empty in every other mode.
-struct AppGroupCard {
-    std::string appClass;
-    LayoutRect  rect;
-    LayoutRect  headerRect;
-    std::size_t windowCount = 0;
-};
-
 struct WorkspaceStage {
     std::int64_t              workspaceId = -1;
     std::string               name;
     LayoutRect                bounds;
     std::vector<WindowCard>   windows;
-    std::vector<AppGroupCard> groups;
     bool                      empty = true;
 };
 

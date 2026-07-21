@@ -219,7 +219,6 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             .name        = stageFound != workspaceById.end() && !stageFound->second.name.empty() ? stageFound->second.name : std::to_string(previewId),
             .bounds = stageBounds,
             .windows     = {},
-            .groups      = {},
             .empty       = true,
         };
         auto stageWindows = windowsForWorkspace(previewId);
@@ -374,14 +373,17 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 groups.back().second.push_back(&window);
             }
 
-            const auto groupCount   = groups.size();
-            const auto columns      = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(groupCount)))));
-            const auto rows         = std::max(1, static_cast<int>(std::ceil(static_cast<double>(groupCount) / columns)));
-            const auto gap          = std::clamp(renderSize.width * 0.011, 14.0, 24.0);
-            const auto headerHeight = std::clamp(renderSize.height * 0.026, 28.0, 38.0);
-            const auto padding      = 12.0;
-            const auto cellWidth    = std::max(1.0, (stageBounds.width - gap * (columns - 1)) / columns);
-            const auto cellHeight   = std::max(1.0, (stageBounds.height - gap * (rows - 1)) / rows);
+            const auto groupCount = groups.size();
+            const auto columns    = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(groupCount)))));
+            const auto rows       = std::max(1, static_cast<int>(std::ceil(static_cast<double>(groupCount) / columns)));
+
+            // Grouping is carried entirely by proximity: the gap between applications is several
+            // times the gap between one application's windows, so the clusters read on their own
+            // without a container, tint, or header.
+            const auto gap        = std::clamp(renderSize.width * 0.030, 52.0, 104.0);
+            const auto innerGap   = std::clamp(renderSize.width * 0.0035, 6.0, 12.0);
+            const auto cellWidth  = std::max(1.0, (stageBounds.width - gap * (columns - 1)) / columns);
+            const auto cellHeight = std::max(1.0, (stageBounds.height - gap * (rows - 1)) / rows);
 
             for (std::size_t groupIndex = 0; groupIndex < groupCount; ++groupIndex) {
                 const auto row = static_cast<int>(groupIndex) / columns;
@@ -393,24 +395,11 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                     .height = cellHeight,
                 };
 
-                frame.stage.groups.push_back(AppGroupCard{
-                    .appClass    = groups[groupIndex].first,
-                    .rect        = container,
-                    .headerRect  = {.x = container.x, .y = container.y, .width = container.width, .height = headerHeight},
-                    .windowCount = groups[groupIndex].second.size(),
-                });
-
-                const LayoutRect inner{
-                    .x      = container.x + padding,
-                    .y      = container.y + headerHeight,
-                    .width  = std::max(1.0, container.width - padding * 2.0),
-                    .height = std::max(1.0, container.height - headerHeight - padding),
-                };
+                const auto& inner = container;
 
                 const auto count        = groups[groupIndex].second.size();
                 const auto innerColumns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
                 const auto innerRows    = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / innerColumns)));
-                const auto innerGap     = 8.0;
                 const auto slotWidth    = std::max(1.0, (inner.width - innerGap * (innerColumns - 1)) / innerColumns);
                 const auto slotHeight   = std::max(1.0, (inner.height - innerGap * (innerRows - 1)) / innerRows);
 
