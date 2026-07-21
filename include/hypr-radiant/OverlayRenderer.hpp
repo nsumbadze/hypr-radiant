@@ -85,6 +85,10 @@ class OverlayRenderer {
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
     void renderColoredLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha,
         const CRegion& damage);
+    void renderCenteredLabel(const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage);
+    void renderRightAlignedLabel(const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage);
+    [[nodiscard]] SP<Render::ITexture> labelTexture(const std::string& text, double maxWidth, int pointSize, CHyprColor color);
+    [[nodiscard]] RadiantSize            measureLabel(const std::string& text, double maxWidth, int pointSize, CHyprColor color);
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
     [[nodiscard]] OverviewTarget searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const;

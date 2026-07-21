@@ -1158,14 +1158,24 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         }
 
         if (workspace.createTarget) {
-            const auto addSize = 38.0;
-            const auto addBox = CBox{cardBox.x + centered(cardBox.w, addSize), cardBox.y + centered(cardBox.h, addSize), addSize, addSize};
+            const auto addSize   = 38.0;
+            const auto addBox    = CBox{cardBox.x + centered(cardBox.w, addSize), cardBox.y + centered(cardBox.h, addSize), addSize, addSize};
+            const auto addRadius = static_cast<int>(addSize / 2.0);
             if (selected)
                 drawRect(CBox{addBox.x - 7.0, addBox.y - 7.0, addBox.w + 14.0, addBox.h + 14.0},
-                    withAlpha(accent, railAlpha * 0.07), damage, 26);
-            drawRect(addBox, withAlpha(accent, railAlpha * (selected ? 0.14 : 0.075)), damage, 19, true);
-            renderColoredLabel("+", addBox.x + 11.0, addBox.y + 7.0, 18.0, Theme::titleSize(), accent,
-                railAlpha * (selected ? 0.92 : 0.56), damage);
+                    withAlpha(accent, railAlpha * 0.07), damage, addRadius + 7);
+            drawRect(addBox, withAlpha(accent, railAlpha * (selected ? 0.14 : 0.075)), damage, addRadius, true);
+            if (g_pHyprRenderer) {
+                CBorderPassElement::SBorderData border;
+                border.box              = addBox;
+                const auto ringStrength = selected ? 0.58 : 0.20;
+                border.grad1            = Config::CGradientValueData{withAlpha(accent, railAlpha * ringStrength)};
+                border.a                = static_cast<float>(accent.a * railAlpha * ringStrength);
+                border.round            = addRadius;
+                border.borderSize       = 1;
+                g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+            }
+            renderCenteredLabel("+", addBox, Theme::titleSize(), accent, railAlpha * (selected ? 0.92 : 0.56), damage);
         }
 
         for (const auto& window : workspace.windows) {
@@ -1303,8 +1313,20 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
     if (!m_searchActive) {
         const auto modeLabel = m_mode == OverviewMode::Grouped ? "Apps" : m_mode == OverviewMode::AppExpose ? "App Exposé" : "Spatial";
-        const auto deckWidth = std::min(920.0, std::max(1.0, frame.bounds.width - 64.0));
-        const auto deck = CBox{centered(frame.bounds.width, deckWidth), frame.bounds.height - 52.0, deckWidth, 34.0};
+        const auto hintText  = "← → navigate  ·  Tab view  ·  Enter open  ·  / search  ·  Esc close";
+
+        constexpr auto deckPaddingX = 20.0;
+        constexpr auto deckGap      = 28.0;
+        constexpr auto deckHeight   = 34.0;
+
+        // Size the pill to its measured content instead of a fixed width, so the hint text and the
+        // mode label stay visually paired rather than pinned to opposite ends of dead space.
+        const auto maxDeckWidth = std::max(1.0, frame.bounds.width - 64.0);
+        const auto foreground   = m_config.foregroundColor();
+        const auto hintSize     = measureLabel(hintText, maxDeckWidth, Theme::hintSize(), foreground);
+        const auto modeSize     = measureLabel(modeLabel, maxDeckWidth, Theme::hintSize(), foreground);
+        const auto deckWidth    = std::min(maxDeckWidth, hintSize.width + modeSize.width + deckGap + deckPaddingX * 2.0);
+        const auto deck = CBox{centered(frame.bounds.width, deckWidth), frame.bounds.height - 52.0, deckWidth, deckHeight};
         drawRect(CBox{deck.x + 5.0, deck.y + 7.0, deck.w, deck.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.58), damage, 14);
         drawRect(deck, withAlpha(railSurface, contentAlpha * 0.84), damage, 14, true);
         if (g_pHyprRenderer) {
@@ -1316,10 +1338,17 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             border.borderSize = 1;
             g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
         }
-        renderLabel("← → navigate  ·  Tab view  ·  Enter open  ·  / search  ·  Esc close",
-            deck.x + 18.0, deck.y + 9.0, std::max(1.0, deck.w - 138.0), Theme::hintSize(), contentAlpha * 0.66, damage);
-        renderLabel(modeLabel, deck.x + deck.w - 104.0, deck.y + 9.0,
-            88.0, Theme::hintSize(), contentAlpha * 0.84, damage);
+        // Divider keeps the mode label from reading as one more entry in the hint list.
+        if (modeSize.width > 0.0 && deckWidth >= hintSize.width + modeSize.width + deckGap + deckPaddingX * 2.0) {
+            const auto dividerX = deck.x + deck.w - deckPaddingX - modeSize.width - deckGap / 2.0;
+            drawRect(CBox{dividerX, deck.y + deck.h * 0.30, 1.0, deck.h * 0.40}, withAlpha(foreground, contentAlpha * 0.20), damage);
+        }
+
+        renderColoredLabel(hintText, deck.x + deckPaddingX, deck.y + centered(deck.h, hintSize.height),
+            std::max(1.0, deck.w - deckPaddingX * 2.0 - modeSize.width - deckGap), Theme::hintSize(), foreground,
+            contentAlpha * 0.66, damage);
+        renderRightAlignedLabel(modeLabel, CBox{deck.x, deck.y, std::max(1.0, deck.w - deckPaddingX), deck.h},
+            Theme::hintSize(), foreground, contentAlpha * 0.84, damage);
     } else {
         auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
@@ -1525,10 +1554,9 @@ void OverlayRenderer::renderLabel(const std::string& text, double x, double y, d
     renderColoredLabel(text, x, y, maxWidth, pointSize, m_config.foregroundColor(), alpha, damage);
 }
 
-void OverlayRenderer::renderColoredLabel(
-    const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha, const CRegion& damage) {
-    if (!g_pHyprRenderer || text.empty() || maxWidth <= 0.0 || alpha <= 0.001)
-        return;
+SP<Render::ITexture> OverlayRenderer::labelTexture(const std::string& text, double maxWidth, int pointSize, CHyprColor color) {
+    if (!g_pHyprRenderer || text.empty() || maxWidth <= 0.0)
+        return {};
 
     // m_textures is an open-session text cache keyed by (pointSize, ceil(maxWidth), color, text).
     // It is cleared in show() and hideImmediate(), so repeated frames reuse the same labels
@@ -1557,6 +1585,26 @@ void OverlayRenderer::renderColoredLabel(
 
     const auto& texture = it->second;
     if (!texture || !texture->ok() || texture->m_size.x <= 0.0 || texture->m_size.y <= 0.0)
+        return {};
+
+    return texture;
+}
+
+RadiantSize OverlayRenderer::measureLabel(const std::string& text, double maxWidth, int pointSize, CHyprColor color) {
+    const auto texture = labelTexture(text, maxWidth, pointSize, color);
+    if (!texture)
+        return {.width = 0.0, .height = 0.0};
+
+    return {.width = std::min(texture->m_size.x, maxWidth), .height = texture->m_size.y};
+}
+
+void OverlayRenderer::renderColoredLabel(
+    const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha, const CRegion& damage) {
+    if (alpha <= 0.001)
+        return;
+
+    const auto texture = labelTexture(text, maxWidth, pointSize, color);
+    if (!texture)
         return;
 
     CTexPassElement::SRenderData data;
@@ -1566,6 +1614,34 @@ void OverlayRenderer::renderColoredLabel(
     data.damage   = damage;
 
     g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
+}
+
+// Places text using its measured size instead of a hand-tuned offset, so glyphs stay optically
+// centered when the interface font or point size changes.
+void OverlayRenderer::renderCenteredLabel(
+    const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage) {
+    if (alpha <= 0.001 || within.w <= 0.0)
+        return;
+
+    const auto size = measureLabel(text, within.w, pointSize, color);
+    if (size.width <= 0.0)
+        return;
+
+    renderColoredLabel(text, within.x + centered(within.w, size.width), within.y + centered(within.h, size.height),
+        within.w, pointSize, color, alpha, damage);
+}
+
+void OverlayRenderer::renderRightAlignedLabel(
+    const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage) {
+    if (alpha <= 0.001 || within.w <= 0.0)
+        return;
+
+    const auto size = measureLabel(text, within.w, pointSize, color);
+    if (size.width <= 0.0)
+        return;
+
+    renderColoredLabel(text, within.x + within.w - size.width, within.y + centered(within.h, size.height),
+        within.w, pointSize, color, alpha, damage);
 }
 
 const WorkspaceWallFrame* OverlayRenderer::frameForMonitor(std::int64_t monitorId) const noexcept {
