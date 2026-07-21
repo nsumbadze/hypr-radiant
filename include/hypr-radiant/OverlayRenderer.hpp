@@ -101,6 +101,9 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* frameForSelectedTarget() const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
+    /// Surface derived from the active theme background, stepped `lift` toward its contrasting
+    /// end. Lightens on dark themes and darkens on light ones.
+    [[nodiscard]] CHyprColor surfaceColor(float lift, double alpha) const;
     void resetPointerInteraction();
     void animateSelection();
 

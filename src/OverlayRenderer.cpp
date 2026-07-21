@@ -18,6 +18,7 @@
 #include <hyprland/src/render/Texture.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <format>
@@ -27,6 +28,9 @@
 
 namespace hypr_radiant {
 namespace {
+
+// Multiplier applied to the configured animation duration for the workspace depth push.
+constexpr auto WORKSPACE_PUSH_SCALE = 1.3;
 
 bool sameTarget(OverviewTarget lhs, OverviewTarget rhs) {
     return lhs.type == rhs.type && lhs.workspaceId == rhs.workspaceId && lhs.windowId == rhs.windowId;
@@ -399,7 +403,8 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
         rebuildFrames();
         m_stageTransitionMonitorId = frame->monitorId;
         m_stageTransition.hideImmediate();
-        m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
+        // Longer than the open animation: the depth push needs room to read as movement.
+        m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * WORKSPACE_PUSH_SCALE))));
     }
     damageMonitorById(frame->monitorId);
 }
@@ -435,7 +440,8 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
         rebuildFrames();
         m_stageTransitionMonitorId = frame->monitorId;
         m_stageTransition.hideImmediate();
-        m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
+        // Longer than the open animation: the depth push needs room to read as movement.
+        m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * WORKSPACE_PUSH_SCALE))));
     }
     // Hovering only repaints the monitor under the pointer, plus whichever monitor lost the
     // selection highlight; damaging every monitor made unrelated screens visibly re-render.
@@ -756,9 +762,9 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
     const auto& damage = g_pHyprRenderer->renderData().damage;
     const auto backdropAlpha = alpha * m_config.opacity();
 
-    auto backdrop = m_config.layoutMode() == LayoutMode::Stage ? m_config.backgroundColor() : Theme::backdropColor();
-    if (m_config.layoutMode() == LayoutMode::Stage)
-        backdrop.a = Theme::stageBackdropColor().a;
+    // Frosted glass: a lifted step off the theme background rather than the background itself,
+    // so the desktop stays faintly legible behind the overview instead of being crushed to black.
+    auto backdrop = m_config.layoutMode() == LayoutMode::Stage ? surfaceColor(0.06F, 0.70) : Theme::backdropColor();
     backdrop.a *= backdropAlpha;
     drawRect(box, backdrop, damage, 0, true);
 
@@ -1105,9 +1111,8 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     // workspaces, so re-shading them on a pointer move reads as an unrelated screen flickering.
     const auto contentAlpha = alpha * searchMultiplier;
     const auto accent       = resolvedAccentColor();
-    const auto background   = m_config.backgroundColor();
-    const auto railSurface  = tintedSurface(Theme::railColor(), background, 0.46);
-    const auto stageSurface = tintedSurface(Theme::stageWindowFill(1.0F), background, 0.34);
+    const auto railSurface  = surfaceColor(0.10F, 0.72);
+    const auto stageSurface = surfaceColor(0.12F, 1.0);
     auto railBox            = boxFor(frame.rail.bounds);
     // A hover only changes the previewed workspace on the monitor under the pointer. Scoping the
     // stage transition to that monitor stops the others from replaying their entrance animation.
@@ -1151,15 +1156,19 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             continue;
 
         const auto selected = workspace.workspaceId == m_selectedTarget.workspaceId && frame.monitorId == m_selectedFrameMonitorId;
+        // Selection lifts the card, brightens it, and wraps it in an accent ring with a soft glow.
         if (selected)
-            displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.015, selectionTransition), -2.0 * selectionTransition);
+            displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.032, selectionTransition), -5.0 * selectionTransition);
         const auto cardBox  = boxFor(displayRect);
         const auto radius   = Theme::workspaceRadius(true);
 
         if (selected) {
-            if (!workspace.createTarget)
+            if (!workspace.createTarget) {
+                drawRect(CBox{cardBox.x - 16.0, cardBox.y - 16.0, cardBox.w + 32.0, cardBox.h + 32.0},
+                    withAlpha(accent, railAlpha * 0.07 * selectionTransition), damage, radius + 16);
                 drawRect(CBox{cardBox.x - 8.0, cardBox.y - 8.0, cardBox.w + 16.0, cardBox.h + 16.0},
-                    withAlpha(accent, railAlpha * 0.065), damage, radius + 8);
+                    withAlpha(accent, railAlpha * 0.15 * selectionTransition), damage, radius + 8);
+            }
             const auto tracerX = cardBox.x + 16.0;
             const auto tracerWidth = std::max(12.0, cardBox.w - 32.0);
             drawRect(CBox{tracerX - 5.0, spineY - 3.0, tracerWidth + 10.0, 7.0},
@@ -1170,34 +1179,46 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 withAlpha(Theme::signalColor(), railAlpha * 0.62), damage, 1);
         }
 
+        const auto lift = selected ? selectionTransition : 0.0;
+
         if (!workspace.createTarget) {
-            drawRect(CBox{cardBox.x + 3.0, cardBox.y + 6.0, cardBox.w, cardBox.h},
-                withAlpha(Theme::shadowColor(), railAlpha * 0.44), damage, radius);
-            auto cardFill = tintedSurface(Theme::railCardFill(selected, workspace.empty, static_cast<float>(railAlpha)), background, 0.30);
+            drawRect(CBox{cardBox.x + 3.0, cardBox.y + 6.0 + lift * 5.0, cardBox.w, cardBox.h},
+                withAlpha(Theme::shadowColor(), railAlpha * (0.44 + lift * 0.36)), damage, radius);
+            // Selection carries roughly twice the lift of an idle card so the highlight is
+            // legible at a glance rather than a few percent apart.
+            const auto cardLift = workspace.empty ? 0.07F : selected ? 0.26F : 0.13F;
+            const auto cardOpacity = workspace.empty ? 0.52 : selected ? 0.97 : 0.82;
+            auto cardFill = surfaceColor(cardLift, railAlpha * cardOpacity);
             if (selected)
                 cardFill = tintedSurface(cardFill, accent, 0.12);
             drawRect(cardBox, cardFill, damage, radius);
         }
 
         if (workspace.createTarget) {
-            const auto addSize   = 38.0;
-            const auto addBox    = CBox{cardBox.x + centered(cardBox.w, addSize), cardBox.y + centered(cardBox.h, addSize), addSize, addSize};
-            const auto addRadius = static_cast<int>(addSize / 2.0);
-            if (selected)
-                drawRect(CBox{addBox.x - 7.0, addBox.y - 7.0, addBox.w + 14.0, addBox.h + 14.0},
-                    withAlpha(accent, railAlpha * 0.07), damage, addRadius + 7);
-            drawRect(addBox, withAlpha(accent, railAlpha * (selected ? 0.14 : 0.075)), damage, addRadius, true);
+            // A full-size outlined card rather than a small floating circle, so the create target
+            // sits in the workspace row instead of orbiting beside it.
+            drawRect(CBox{cardBox.x + 3.0, cardBox.y + 6.0 + lift * 5.0, cardBox.w, cardBox.h},
+                withAlpha(Theme::shadowColor(), railAlpha * (0.22 + lift * 0.30)), damage, radius);
+            // Needs a real surface, not just an accent wash: a translucent tint let the desktop
+            // read straight through the card and made it look like a rendering artefact.
+            auto createFill = surfaceColor(selected ? 0.20F : 0.11F, railAlpha * (selected ? 0.93 : 0.76));
+            createFill      = tintedSurface(createFill, accent, selected ? 0.18 : 0.10);
+            drawRect(cardBox, createFill, damage, radius, true);
             if (g_pHyprRenderer) {
                 CBorderPassElement::SBorderData border;
-                border.box              = addBox;
-                const auto ringStrength = selected ? 0.58 : 0.20;
+                border.box              = cardBox;
+                const auto ringStrength = selected ? 0.88 : 0.46;
                 border.grad1            = Config::CGradientValueData{withAlpha(accent, railAlpha * ringStrength)};
                 border.a                = static_cast<float>(accent.a * railAlpha * ringStrength);
-                border.round            = addRadius;
-                border.borderSize       = 1;
+                border.round            = radius;
+                border.borderSize       = selected ? 2 : 1;
                 g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
             }
-            renderCenteredLabel("+", addBox, Theme::titleSize(), accent, railAlpha * (selected ? 0.92 : 0.56), damage);
+            const auto glyphBox = CBox{cardBox.x, cardBox.y + centered(cardBox.h, 36.0) - 7.0, cardBox.w, 36.0};
+            renderCenteredLabel("+", glyphBox, Theme::titleSize() + 14, accent, railAlpha * (selected ? 1.0 : 0.78), damage);
+            const auto captionBox = CBox{cardBox.x, cardBox.y + cardBox.h - 27.0, cardBox.w, 16.0};
+            renderCenteredLabel("New", captionBox, Theme::badgeSize(), m_config.foregroundColor(),
+                railAlpha * (selected ? 0.82 : 0.56), damage);
         }
 
         for (const auto& window : workspace.windows) {
@@ -1208,11 +1229,11 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         if (g_pHyprRenderer && !workspace.createTarget) {
             CBorderPassElement::SBorderData border;
             border.box        = cardBox;
-            const auto borderStrength = selected ? 0.76 : workspace.active ? 0.22 : 0.075;
+            const auto borderStrength = selected ? 0.95 : workspace.active ? 0.30 : 0.10;
             border.grad1      = Config::CGradientValueData{withAlpha(accent, railAlpha * borderStrength)};
             border.a          = static_cast<float>(accent.a * railAlpha * borderStrength);
             border.round      = radius;
-            border.borderSize = 1;
+            border.borderSize = selected ? 2 : 1;
             g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
         }
 
@@ -1230,33 +1251,34 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         renderLabel("\xe2\x80\xba", frame.rail.bounds.x + frame.rail.bounds.width - 20.0,
             frame.rail.bounds.y + railEntranceOffset + frame.rail.bounds.height / 2.0 - 10.0, 16.0, Theme::titleSize(), railAlpha * 0.72, damage);
 
-    const auto stageAlpha = contentAlpha * transition;
-    const auto stageOffset = (1.0 - transition) * 10.0;
+    // Depth push: the outgoing workspace recedes and fades out while the incoming one settles
+    // forward from a slightly larger scale. No lateral travel, so the change reads as depth.
+    const auto stageAlpha        = contentAlpha * transition;
+    const auto pushedStageBounds = scaledAroundCenter(displayedStageBounds, std::lerp(1.08, 1.0, transition));
 
     if (previousFrame && previousFrame->stage.workspaceId != frame.stage.workspaceId && transition < 1.0) {
         const auto previousAlpha = contentAlpha * (1.0 - transition);
-        const auto previousOffset = -transition * 6.0;
+        const auto previousScale = std::lerp(1.0, 0.92, transition);
         for (const auto& window : previousFrame->stage.windows) {
-            const auto previousDisplayedStage = interpolatedRect(collapsedStageBounds(*previousFrame), previousFrame->stage.bounds, shelfProgress);
-            auto previousBox = boxFor(remapStageRect(window.rect, previousFrame->stage.bounds, previousDisplayedStage));
-            previousBox.y += previousOffset;
+            const auto previousDisplayedStage = scaledAroundCenter(
+                interpolatedRect(collapsedStageBounds(*previousFrame), previousFrame->stage.bounds, shelfProgress), previousScale);
+            const auto previousBox = boxFor(remapStageRect(window.rect, previousFrame->stage.bounds, previousDisplayedStage));
             const auto radius = Theme::windowRadius();
             drawRect(CBox{previousBox.x + 7.0, previousBox.y + 10.0, previousBox.w, previousBox.h},
                 withAlpha(Theme::shadowColor(), previousAlpha * 0.72), damage, radius + 2);
-            drawRect(previousBox, Theme::stageWindowFill(static_cast<float>(previousAlpha)), damage, radius);
+            drawRect(previousBox, surfaceColor(0.12F, previousAlpha), damage, radius);
             renderWindowPreview(window, previousBox, previousAlpha, damage);
         }
     }
     if (frame.stage.empty) {
-        renderLabel("Empty workspace", displayedStageBounds.x + centered(displayedStageBounds.width, 180.0),
-            displayedStageBounds.y + centered(displayedStageBounds.height, 24.0) + stageOffset, 180.0, Theme::footerSize(), stageAlpha * 0.42, damage);
+        renderLabel("Empty workspace", pushedStageBounds.x + centered(pushedStageBounds.width, 180.0),
+            pushedStageBounds.y + centered(pushedStageBounds.height, 24.0), 180.0, Theme::footerSize(), stageAlpha * 0.42, damage);
     }
 
     for (const auto& window : frame.stage.windows) {
         const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
             m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-        auto displayRect = remapStageRect(window.rect, frame.stage.bounds, displayedStageBounds);
-        displayRect.y += stageOffset;
+        auto displayRect = remapStageRect(window.rect, frame.stage.bounds, pushedStageBounds);
         if (selected)
             displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.014, selectionTransition), -3.0 * selectionTransition);
         const auto windowBox = boxFor(displayRect);
@@ -1279,6 +1301,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         }
         drawRect(windowBox, withAlpha(stageSurface, windowAlpha), damage, radius);
         renderWindowPreview(window, windowBox, windowAlpha, damage);
+        // Glass top edge: a hairline highlight along the upper border, the glass card cue that
+        // separates a floating surface from a flat rectangle.
+        drawRect(CBox{windowBox.x + radius * 0.6, windowBox.y, std::max(0.0, windowBox.w - radius * 1.2), 1.0},
+            surfaceColor(0.60F, windowAlpha * 0.20), damage);
 
         if (selected) {
             CBorderPassElement::SBorderData border;
@@ -1328,49 +1354,98 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             const auto ghostHeight = std::clamp(ghostWidth / std::max(0.2, aspect), 100.0, 220.0);
             const auto ghost = CBox{localX - ghostWidth / 2.0, localY - ghostHeight / 2.0, ghostWidth, ghostHeight};
             drawRect(CBox{ghost.x + 9.0, ghost.y + 12.0, ghost.w, ghost.h}, withAlpha(Theme::shadowColor(), contentAlpha), damage, Theme::windowRadius() + 3);
-            drawRect(ghost, Theme::stageWindowFill(static_cast<float>(contentAlpha * 0.96)), damage, Theme::windowRadius());
+            drawRect(ghost, surfaceColor(0.12F, contentAlpha * 0.96), damage, Theme::windowRadius());
             renderWindowPreview(*source, ghost, contentAlpha * 0.96, damage);
         }
     }
 
     if (!m_searchActive) {
         const auto modeLabel = m_mode == OverviewMode::Grouped ? "Apps" : m_mode == OverviewMode::AppExpose ? "App Exposé" : "Spatial";
-        const auto hintText  = "← → navigate  ·  Tab view  ·  Enter open  ·  / search  ·  Esc close";
 
-        constexpr auto deckPaddingX = 20.0;
-        constexpr auto deckGap      = 28.0;
-        constexpr auto deckHeight   = 34.0;
+        // Each shortcut is a raised keycap chip followed by its action, so the deck reads as
+        // deliberate chrome rather than a run-on line of text.
+        struct DeckHint {
+            const char* cap;
+            const char* label;
+        };
+        static constexpr std::array<DeckHint, 5> HINTS{{
+            {"\xe2\x86\x90\xe2\x86\x92", "navigate"},
+            {"\xe2\x87\xa5", "view"},
+            {"\xe2\x86\xb5", "open"},
+            {"/", "search"},
+            {"esc", "close"},
+        }};
 
-        // Size the pill to its measured content instead of a fixed width, so the hint text and the
-        // mode label stay visually paired rather than pinned to opposite ends of dead space.
+        constexpr auto deckPaddingX = 18.0;
+        constexpr auto deckHeight   = 40.0;
+        constexpr auto capHeight    = 22.0;
+        constexpr auto capPadX      = 9.0;
+        constexpr auto capMinWidth  = 26.0;
+        constexpr auto capGap       = 7.0;
+        constexpr auto groupGap     = 18.0;
+        constexpr auto dividerGap   = 18.0;
+        constexpr auto measureWidth = 240.0;
+
+        const auto foreground = m_config.foregroundColor();
+
+        std::array<double, HINTS.size()> capWidths{};
+        std::array<double, HINTS.size()> labelWidths{};
+        std::array<double, HINTS.size()> labelHeights{};
+        auto contentWidth = 0.0;
+        for (std::size_t i = 0; i < HINTS.size(); ++i) {
+            const auto capSize   = measureLabel(HINTS[i].cap, measureWidth, Theme::hintSize(), foreground);
+            const auto labelSize = measureLabel(HINTS[i].label, measureWidth, Theme::hintSize(), foreground);
+            capWidths[i]    = std::max(capMinWidth, capSize.width + capPadX * 2.0);
+            labelWidths[i]  = labelSize.width;
+            labelHeights[i] = labelSize.height;
+            contentWidth += capWidths[i] + capGap + labelWidths[i] + (i + 1 < HINTS.size() ? groupGap : 0.0);
+        }
+        const auto modeSize = measureLabel(modeLabel, measureWidth, Theme::hintSize(), foreground);
+        contentWidth += dividerGap * 2.0 + 1.0 + modeSize.width;
+
         const auto maxDeckWidth = std::max(1.0, frame.bounds.width - 64.0);
-        const auto foreground   = m_config.foregroundColor();
-        const auto hintSize     = measureLabel(hintText, maxDeckWidth, Theme::hintSize(), foreground);
-        const auto modeSize     = measureLabel(modeLabel, maxDeckWidth, Theme::hintSize(), foreground);
-        const auto deckWidth    = std::min(maxDeckWidth, hintSize.width + modeSize.width + deckGap + deckPaddingX * 2.0);
-        const auto deck = CBox{centered(frame.bounds.width, deckWidth), frame.bounds.height - 52.0, deckWidth, deckHeight};
-        drawRect(CBox{deck.x + 5.0, deck.y + 7.0, deck.w, deck.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.58), damage, 14);
-        drawRect(deck, withAlpha(railSurface, contentAlpha * 0.84), damage, 14, true);
+        const auto deckWidth    = std::min(maxDeckWidth, contentWidth + deckPaddingX * 2.0);
+        const auto deck = CBox{centered(frame.bounds.width, deckWidth), frame.bounds.height - 58.0, deckWidth, deckHeight};
+
+        drawRect(CBox{deck.x + 5.0, deck.y + 8.0, deck.w, deck.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.60), damage, 16);
+        drawRect(deck, withAlpha(railSurface, contentAlpha * 0.88), damage, 16, true);
         if (g_pHyprRenderer) {
             CBorderPassElement::SBorderData border;
             border.box        = deck;
-            border.grad1 = Config::CGradientValueData{withAlpha(accent, contentAlpha * 0.16)};
-            border.a = static_cast<float>(accent.a * contentAlpha * 0.16);
-            border.round      = 14;
+            border.grad1      = Config::CGradientValueData{withAlpha(accent, contentAlpha * 0.20)};
+            border.a          = static_cast<float>(accent.a * contentAlpha * 0.20);
+            border.round      = 16;
             border.borderSize = 1;
             g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
         }
-        // Divider keeps the mode label from reading as one more entry in the hint list.
-        if (modeSize.width > 0.0 && deckWidth >= hintSize.width + modeSize.width + deckGap + deckPaddingX * 2.0) {
-            const auto dividerX = deck.x + deck.w - deckPaddingX - modeSize.width - deckGap / 2.0;
-            drawRect(CBox{dividerX, deck.y + deck.h * 0.30, 1.0, deck.h * 0.40}, withAlpha(foreground, contentAlpha * 0.20), damage);
+
+        auto       cursorX = deck.x + deckPaddingX;
+        const auto capY    = deck.y + centered(deck.h, capHeight);
+        for (std::size_t i = 0; i < HINTS.size(); ++i) {
+            const auto capBox = CBox{cursorX, capY, capWidths[i], capHeight};
+            drawRect(capBox, surfaceColor(0.22F, contentAlpha * 0.92), damage, Theme::keycapRadius());
+            if (g_pHyprRenderer) {
+                CBorderPassElement::SBorderData capBorder;
+                const auto                     capEdge = surfaceColor(0.40F, contentAlpha * 0.55);
+                capBorder.box        = capBox;
+                capBorder.grad1      = Config::CGradientValueData{capEdge};
+                capBorder.a          = capEdge.a;
+                capBorder.round      = Theme::keycapRadius();
+                capBorder.borderSize = 1;
+                g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(capBorder));
+            }
+            renderCenteredLabel(HINTS[i].cap, capBox, Theme::hintSize(), foreground, contentAlpha * 0.96, damage);
+            cursorX += capWidths[i] + capGap;
+            renderColoredLabel(HINTS[i].label, cursorX, deck.y + centered(deck.h, labelHeights[i]), measureWidth,
+                Theme::hintSize(), foreground, contentAlpha * 0.62, damage);
+            cursorX += labelWidths[i] + (i + 1 < HINTS.size() ? groupGap : 0.0);
         }
 
-        renderColoredLabel(hintText, deck.x + deckPaddingX, deck.y + centered(deck.h, hintSize.height),
-            std::max(1.0, deck.w - deckPaddingX * 2.0 - modeSize.width - deckGap), Theme::hintSize(), foreground,
-            contentAlpha * 0.66, damage);
-        renderRightAlignedLabel(modeLabel, CBox{deck.x, deck.y, std::max(1.0, deck.w - deckPaddingX), deck.h},
-            Theme::hintSize(), foreground, contentAlpha * 0.84, damage);
+        cursorX += dividerGap;
+        drawRect(CBox{cursorX, deck.y + deck.h * 0.28, 1.0, deck.h * 0.44}, withAlpha(foreground, contentAlpha * 0.22), damage);
+        cursorX += 1.0 + dividerGap;
+        renderColoredLabel(modeLabel, cursorX, deck.y + centered(deck.h, modeSize.height), measureWidth, Theme::hintSize(),
+            foreground, contentAlpha * 0.90, damage);
     } else {
         auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
@@ -1752,7 +1827,16 @@ CHyprColor OverlayRenderer::resolvedAccentColor() const {
         }
     }
 
-    return Theme::accentColor();
+    // Omarchy drives col.active_border from the same theme accent, so this fallback agrees with
+    // the border on Omarchy and still resolves sensibly elsewhere.
+    const auto& accent = m_config.palette().accent;
+    return {accent.red, accent.green, accent.blue, accent.alpha};
+}
+
+CHyprColor OverlayRenderer::surfaceColor(float lift, double alpha) const {
+    const auto& palette = m_config.palette();
+    const auto  lifted  = liftedSurface(palette, palette.background, lift);
+    return {lifted.red, lifted.green, lifted.blue, static_cast<float>(std::clamp(alpha, 0.0, 1.0))};
 }
 
 void OverlayRenderer::damageMonitorById(std::int64_t monitorId) const {
