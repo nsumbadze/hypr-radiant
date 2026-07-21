@@ -329,6 +329,7 @@ void OverlayRenderer::show(RadiantState state) {
     m_textures.clear();
     m_shelfTransition.hideImmediate();
     m_animation.animateTo(true, m_config.animationDurationMs());
+    m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
     animateSelection();
@@ -357,6 +358,7 @@ void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationC
     m_textures.clear();
     m_shelfTransition.hideImmediate();
     m_animation.animateTo(true, m_config.animationDurationMs());
+    m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, m_config.animationDurationMs());
     animateSelection();
@@ -395,10 +397,11 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
     if (m_config.layoutMode() == LayoutMode::Stage && m_selectedTarget.workspaceId != previousWorkspace) {
         m_previousFrames = m_frames;
         rebuildFrames();
+        m_stageTransitionMonitorId = frame->monitorId;
         m_stageTransition.hideImmediate();
         m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
     }
-    damageAllMonitors();
+    damageMonitorById(frame->monitorId);
 }
 
 void OverlayRenderer::selectTargetAt(double x, double y) {
@@ -422,17 +425,23 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     if (frame->monitorId == m_selectedFrameMonitorId && sameTarget(m_selectedTarget, target))
         return;
 
-    const auto previousWorkspace = m_selectedTarget.workspaceId;
+    const auto previousWorkspace  = m_selectedTarget.workspaceId;
+    const auto previousMonitorId  = m_selectedFrameMonitorId;
     m_selectedTarget = target;
     m_selectedFrameMonitorId = frame->monitorId;
     animateSelection();
     if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage && target.workspaceId != previousWorkspace) {
         m_previousFrames = m_frames;
         rebuildFrames();
+        m_stageTransitionMonitorId = frame->monitorId;
         m_stageTransition.hideImmediate();
         m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
     }
-    damageAllMonitors();
+    // Hovering only repaints the monitor under the pointer, plus whichever monitor lost the
+    // selection highlight; damaging every monitor made unrelated screens visibly re-render.
+    damageMonitorById(frame->monitorId);
+    if (previousMonitorId != -1 && previousMonitorId != frame->monitorId)
+        damageMonitorById(previousMonitorId);
 }
 
 void OverlayRenderer::pointerMoved(double x, double y) {
@@ -442,11 +451,16 @@ void OverlayRenderer::pointerMoved(double x, double y) {
         double localY = y;
         if (const auto* frame = frameForPoint(x, y, localX, localY)) {
             constexpr auto revealEdge = 12.0;
-            const auto shelfBottom = frame->rail.bounds.y + frame->rail.bounds.height + 20.0;
+            const auto shelfBottom     = frame->rail.bounds.y + frame->rail.bounds.height + 20.0;
+            const auto insideShelfBand = localY <= shelfBottom;
             if (localY <= frame->bounds.y + revealEdge)
                 setWorkspaceShelfVisible(true);
-            else if (!m_pointerDown && localY > shelfBottom)
+            // Retract only when the pointer actually leaves the shelf. Hiding on any move below it
+            // made a scroll-revealed shelf vanish the moment the pointer twitched, then reappear
+            // once it reached the top edge.
+            else if (!m_pointerDown && m_pointerInsideShelfBand && !insideShelfBand)
                 setWorkspaceShelfVisible(false);
+            m_pointerInsideShelfBand = insideShelfBand;
         }
     }
     if (!m_pointerDown) {
@@ -511,6 +525,7 @@ void OverlayRenderer::refresh(RadiantState state) {
     m_state = std::move(state);
     m_previousFrames = m_frames;
     rebuildFrames();
+    m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, m_config.animationDurationMs());
     animateSelection();
@@ -603,6 +618,7 @@ void OverlayRenderer::toggleGroupedMode() {
         if (!targetInFrame(*frame, m_selectedTarget))
             m_selectedTarget = m_hitTester.initialSelection(*frame);
     }
+    m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, m_config.animationDurationMs());
     animateSelection();
@@ -648,6 +664,7 @@ void OverlayRenderer::hideImmediate() {
     m_textures.clear();
     m_selectedTarget = {};
     m_selectedFrameMonitorId = -1;
+    m_stageTransitionMonitorId = -1;
     clearSearch();
     resetPointerInteraction();
 
@@ -1084,14 +1101,19 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     };
 
     const auto searchMultiplier = m_searchActive ? 0.16 : 1.0;
-    const auto monitorMultiplier = m_selectedFrameMonitorId == -1 || frame.monitorId == m_selectedFrameMonitorId ? 1.0 : 0.72;
-    const auto contentAlpha = alpha * searchMultiplier * monitorMultiplier;
+    // Monitors are not dimmed by which one holds the selection: every monitor shows its own
+    // workspaces, so re-shading them on a pointer move reads as an unrelated screen flickering.
+    const auto contentAlpha = alpha * searchMultiplier;
     const auto accent       = resolvedAccentColor();
     const auto background   = m_config.backgroundColor();
     const auto railSurface  = tintedSurface(Theme::railColor(), background, 0.46);
     const auto stageSurface = tintedSurface(Theme::stageWindowFill(1.0F), background, 0.34);
     auto railBox            = boxFor(frame.rail.bounds);
-    const auto transition   = std::clamp(m_stageTransition.value(), 0.0, 1.0);
+    // A hover only changes the previewed workspace on the monitor under the pointer. Scoping the
+    // stage transition to that monitor stops the others from replaying their entrance animation.
+    const auto transition = m_stageTransitionMonitorId == -1 || m_stageTransitionMonitorId == frame.monitorId
+        ? std::clamp(m_stageTransition.value(), 0.0, 1.0)
+        : 1.0;
     const auto shelfProgress = std::clamp(m_shelfTransition.value(), 0.0, 1.0);
     const auto displayedStageBounds = interpolatedRect(collapsedStageBounds(frame), frame.stage.bounds, shelfProgress);
     const auto selectionTransition = std::clamp(m_selectionTransition.value(), 0.0, 1.0);
@@ -1731,6 +1753,20 @@ CHyprColor OverlayRenderer::resolvedAccentColor() const {
     }
 
     return Theme::accentColor();
+}
+
+void OverlayRenderer::damageMonitorById(std::int64_t monitorId) const {
+    if (!g_pCompositor || !g_pHyprRenderer)
+        return;
+
+    for (const auto& monitor : g_pCompositor->m_monitors) {
+        if (!monitor || monitor->m_id != monitorId || !g_pCompositor->monitorExists(monitor))
+            continue;
+
+        g_pHyprRenderer->damageMonitor(monitor);
+        g_pCompositor->scheduleFrameForMonitor(monitor);
+        return;
+    }
 }
 
 void OverlayRenderer::damageAllMonitors() const {

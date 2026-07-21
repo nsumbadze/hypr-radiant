@@ -73,6 +73,7 @@ class OverlayRenderer {
     void onRenderStage(eRenderStage stage);
     void renderCurrentMonitor(double alpha);
     void damageAllMonitors() const;
+    void damageMonitorById(std::int64_t monitorId) const;
     void rebuildFrames();
     void rebuildSearchMatches();
     void selectFirstSearchMatch();
@@ -119,6 +120,10 @@ class OverlayRenderer {
     std::unordered_map<std::int64_t, LayoutRect>          m_frameBoundsByMonitor;
     OverviewTarget                                        m_selectedTarget;
     std::int64_t                                          m_selectedFrameMonitorId = -1;
+    // -1 animates the stage on every monitor (open/refresh); otherwise only this monitor animates,
+    // so a hover-driven preview change stays local to the screen under the pointer.
+    std::int64_t                                          m_stageTransitionMonitorId = -1;
+    bool                                                  m_pointerInsideShelfBand = false;
     std::string                                           m_searchQuery;
     bool                                                  m_searchActive = false;
     OverviewMode                                          m_mode = OverviewMode::Spatial;
