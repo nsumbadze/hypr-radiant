@@ -53,8 +53,10 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
     add_library(hypr-radiant MODULE
         src/ActivationController.cpp
         src/AppIdentity.cpp
+        src/Color.cpp
         src/Config.cpp
         src/FadeAnimation.cpp
+        src/OmarchyPalette.cpp
         src/GestureController.cpp
         src/SwipeTracker.cpp
         src/HitTester.cpp
@@ -154,7 +156,9 @@ if(BUILD_TESTING)
         add_executable(hypr-radiant-config-tests
             tests/ConfigParserTest.cpp
             tests/stubs/HyprlandConfigStub.cpp
+            src/Color.cpp
             src/Config.cpp
+            src/OmarchyPalette.cpp
         )
 
         target_include_directories(hypr-radiant-config-tests
@@ -212,6 +216,18 @@ if(BUILD_TESTING)
     hypr_radiant_enable_warnings(hypr-radiant-input-guard-tests)
     hypr_radiant_enable_sanitizers(hypr-radiant-input-guard-tests)
     add_test(NAME hypr-radiant-input-guard-tests COMMAND hypr-radiant-input-guard-tests)
+
+    add_executable(hypr-radiant-omarchy-palette-tests
+        tests/OmarchyPaletteTest.cpp
+        src/Color.cpp
+        src/OmarchyPalette.cpp
+    )
+    target_include_directories(hypr-radiant-omarchy-palette-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-omarchy-palette-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-omarchy-palette-tests PRIVATE -UNDEBUG)
+    hypr_radiant_enable_warnings(hypr-radiant-omarchy-palette-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-omarchy-palette-tests)
+    add_test(NAME hypr-radiant-omarchy-palette-tests COMMAND hypr-radiant-omarchy-palette-tests)
 
     add_executable(hypr-radiant-app-identity-tests
         tests/AppIdentityTest.cpp
