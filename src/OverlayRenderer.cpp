@@ -34,6 +34,9 @@ constexpr auto WORKSPACE_PUSH_SCALE = 1.3;
 // Band along the bottom edge the hint dock counts as its own. The pointer has to leave this
 // entirely before the dock retracts, so a small twitch over the dock does not dismiss it.
 constexpr auto DOCK_BAND_HEIGHT = 92.0;
+// Short enough to feel attached to the pointer rather than played back at it.
+constexpr auto CLOSE_REVEAL_MS = 140;
+constexpr auto CLOSE_HOT_MS    = 110;
 
 bool sameTarget(OverviewTarget lhs, OverviewTarget rhs) {
     return lhs.type == rhs.type && lhs.workspaceId == rhs.workspaceId && lhs.windowId == rhs.windowId;
@@ -326,6 +329,11 @@ void OverlayRenderer::show(RadiantState state) {
     m_textures.clear();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
+    m_closeButtonTransition.hideImmediate();
+    m_closeButtonHotTransition.hideImmediate();
+    m_closeButtonWindowId = 0;
+    m_closeButtonHot = false;
+    setPointerCursorOverride(false);
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
@@ -356,6 +364,11 @@ void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationC
     m_textures.clear();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
+    m_closeButtonTransition.hideImmediate();
+    m_closeButtonHotTransition.hideImmediate();
+    m_closeButtonWindowId = 0;
+    m_closeButtonHot = false;
+    setPointerCursorOverride(false);
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
@@ -491,6 +504,7 @@ void OverlayRenderer::pointerMoved(double x, double y) {
             m_pointerInsideDockBand = insideDockBand;
         }
     }
+    updateCloseAffordance(x, y);
     if (!m_pointerDown) {
         selectTargetAt(x, y);
         return;
@@ -667,6 +681,50 @@ void OverlayRenderer::setWorkspaceShelfVisible(bool visible) {
     damageAllMonitors();
 }
 
+void OverlayRenderer::updateCloseAffordance(double x, double y) {
+    std::uint64_t windowId = 0;
+    auto          hot      = false;
+    if (!m_dragging && !m_searchActive && m_config.layoutMode() == LayoutMode::Stage && active()) {
+        const auto target = hitTest(x, y);
+        if (target.type == OverviewTargetType::Window || target.type == OverviewTargetType::CloseWindow) {
+            windowId = target.windowId;
+            hot      = target.type == OverviewTargetType::CloseWindow;
+        }
+    }
+
+    if (windowId != m_closeButtonWindowId) {
+        const auto hadButton = m_closeButtonWindowId != 0;
+        m_closeButtonWindowId = windowId;
+        if (windowId == 0)
+            m_closeButtonTransition.animateTo(false, CLOSE_REVEAL_MS);
+        else if (!hadButton)
+            m_closeButtonTransition.animateTo(true, CLOSE_REVEAL_MS);
+        else
+            // Card to card the affordance is already established, so it tracks the pointer at full
+            // size rather than replaying its entrance on every neighbour.
+            m_closeButtonTransition.setProgress(1.0, true);
+        damageAllMonitors();
+    }
+
+    if (hot != m_closeButtonHot) {
+        m_closeButtonHot = hot;
+        m_closeButtonHotTransition.animateTo(hot, CLOSE_HOT_MS);
+        setPointerCursorOverride(hot);
+        damageAllMonitors();
+    }
+}
+
+void OverlayRenderer::setPointerCursorOverride(bool pointerCursor) {
+    if (m_pointerCursorActive == pointerCursor || !g_pHyprRenderer)
+        return;
+
+    m_pointerCursorActive = pointerCursor;
+    // Restoring by name rather than remembering the previous shape: the overlay owns the pointer
+    // while it is up, and "left_ptr" is the default Hyprland itself falls back to, so closing while
+    // hovering a button cannot strand the hand cursor on the desktop.
+    g_pHyprRenderer->setCursorFromName(pointerCursor ? "pointer" : "left_ptr");
+}
+
 void OverlayRenderer::setHintDockVisible(bool visible) {
     if (m_config.layoutMode() != LayoutMode::Stage || !active() || m_dockTransition.targetVisible() == visible)
         return;
@@ -700,6 +758,11 @@ void OverlayRenderer::hideImmediate() {
     m_selectionTransition.hideImmediate();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
+    m_closeButtonTransition.hideImmediate();
+    m_closeButtonHotTransition.hideImmediate();
+    m_closeButtonWindowId = 0;
+    m_closeButtonHot = false;
+    setPointerCursorOverride(false);
     m_frames.clear();
     m_previousFrames.clear();
     m_frameBoundsByMonitor.clear();
@@ -780,7 +843,7 @@ void OverlayRenderer::onRenderStage(eRenderStage stage) {
         renderCurrentMonitor(alpha);
 
     if (m_animation.running() || m_stageTransition.running() || m_selectionTransition.running() || m_shelfTransition.running() ||
-        m_dockTransition.running())
+        m_dockTransition.running() || m_closeButtonTransition.running() || m_closeButtonHotTransition.running())
         damageAllMonitors();
 }
 
@@ -1304,21 +1367,6 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             pushedStageBounds.y + centered(pushedStageBounds.height, 24.0), 180.0, Theme::footerSize(), stageAlpha * 0.42, damage);
     }
 
-    // The close affordance follows the pointer, not the selection: the keyboard drives selection
-    // too, and a button that appeared under arrow-key navigation would be unreachable anyway.
-    std::uint64_t hoveredWindowId = 0;
-    auto          closeButtonHot  = false;
-    if (!m_dragging) {
-        const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
-        if (bounds != m_frameBoundsByMonitor.end() && contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y)) {
-            const auto pointerTarget = hitTest(m_pointerPosition.x, m_pointerPosition.y);
-            if (pointerTarget.type == OverviewTargetType::Window || pointerTarget.type == OverviewTargetType::CloseWindow) {
-                hoveredWindowId = pointerTarget.windowId;
-                closeButtonHot  = pointerTarget.type == OverviewTargetType::CloseWindow;
-            }
-        }
-    }
-
     for (const auto& window : frame.stage.windows) {
         const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
             m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
@@ -1374,16 +1422,46 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
         // Top-right corner, opposite the state badge so the two never collide. Drawn after the
         // preview so it sits over the thumbnail rather than under it.
-        if (window.stableId == hoveredWindowId) {
-            const auto closeRect = closeButtonRect(displayRect);
+        const auto closeProgress = window.stableId == m_closeButtonWindowId ? std::clamp(m_closeButtonTransition.value(), 0.0, 1.0) : 0.0;
+        if (closeProgress > 0.001) {
+            // Built from the layout-space card and mapped through the same stage remap the hit test
+            // inverts, so the drawn button and its hotspot are the same rectangle. Deriving it from
+            // displayRect instead put it inside the selection scale, which only applies while the
+            // card is hovered: the button drifted off its hotspot exactly when it was being used,
+            // and along the edge that turned into a hover/unhover loop.
+            const auto closeRect = closeButtonRect(window.rect);
             if (closeRect.width > 0.0) {
-                const auto closeBox = boxFor(closeRect);
+                constexpr auto CLOSE_GLYPH = "\xe2\x9c\x95";
+                // Measured against a box far wider than the button. Handing the 22px button width
+                // to the text layout made the glyph lay out inside a 22px line, and centring it
+                // against that constrained box left it sitting off to one side.
+                constexpr auto GLYPH_MEASURE_WIDTH = 64.0;
+
+                const auto hotProgress = std::clamp(m_closeButtonHotTransition.value(), 0.0, 1.0);
+                // Grows into place on reveal but never past its hotspot. Swelling under the pointer
+                // put the button's edge outside the area that reports it hot, so resting there
+                // toggled hot off and on and the button flickered.
+                const auto scaled   = scaledAroundCenter(closeRect, std::lerp(0.82, 1.0, closeProgress), 0.0);
+                const auto closeBox = boxFor(remapStageRect(scaled, frame.stage.bounds, pushedStageBounds));
                 const auto dot      = static_cast<int>(std::round(closeBox.w / 2.0));
+                const auto reveal   = stageAlpha * closeProgress;
+
+                // Hot reads as a halo outside the button instead of extra size: decoration can
+                // safely overhang the hotspot, geometry cannot.
+                if (hotProgress > 0.001)
+                    drawRect(CBox{closeBox.x - 5.0, closeBox.y - 5.0, closeBox.w + 10.0, closeBox.h + 10.0},
+                        withAlpha(accent, reveal * 0.24 * hotProgress), damage, dot + 5);
                 drawRect(CBox{closeBox.x + 1.0, closeBox.y + 2.0, closeBox.w, closeBox.h},
-                    withAlpha(Theme::shadowColor(), stageAlpha * 0.45), damage, dot);
-                drawRect(closeBox, closeButtonHot ? withAlpha(accent, stageAlpha * 0.96) : surfaceColor(0.34F, stageAlpha * 0.92), damage, dot, true);
-                renderCenteredLabel("\xe2\x9c\x95", closeBox, Theme::badgeSize(),
-                    closeButtonHot ? m_config.backgroundColor() : m_config.foregroundColor(), stageAlpha * 0.95, damage);
+                    withAlpha(Theme::shadowColor(), reveal * 0.42), damage, dot);
+                // Rests as a neutral surface and crossfades into the accent under the pointer.
+                const auto fill = tintedSurface(surfaceColor(0.34F, 1.0), accent, hotProgress * 0.94);
+                drawRect(closeBox, withAlpha(fill, reveal * 0.94), damage, dot, true);
+
+                const auto glyphColor = tintedSurface(m_config.foregroundColor(), m_config.backgroundColor(), hotProgress);
+                const auto glyphSize  = measureLabel(CLOSE_GLYPH, GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor);
+                renderColoredLabel(CLOSE_GLYPH, closeBox.x + centered(closeBox.w, glyphSize.width),
+                    closeBox.y + centered(closeBox.h, glyphSize.height), GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor,
+                    reveal * 0.96, damage);
             }
         }
 

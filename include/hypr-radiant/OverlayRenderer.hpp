@@ -109,6 +109,10 @@ class OverlayRenderer {
     [[nodiscard]] CHyprColor surfaceColor(float lift, double alpha) const;
     void resetPointerInteraction();
     void animateSelection();
+    /// Tracks which card owns the close button and whether the pointer is on it, so the button can
+    /// animate instead of popping in and out as the pointer crosses cards.
+    void updateCloseAffordance(double x, double y);
+    void setPointerCursorOverride(bool pointerCursor);
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;
@@ -116,6 +120,8 @@ class OverlayRenderer {
     FadeAnimation                                      m_selectionTransition;
     FadeAnimation                                      m_shelfTransition;
     FadeAnimation                                      m_dockTransition;
+    FadeAnimation                                      m_closeButtonTransition;
+    FadeAnimation                                      m_closeButtonHotTransition;
     CHyprSignalListener                                m_renderStageListener;
     CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;
@@ -132,6 +138,9 @@ class OverlayRenderer {
     std::int64_t                                          m_stageTransitionMonitorId = -1;
     bool                                                  m_pointerInsideShelfBand = false;
     bool                                                  m_pointerInsideDockBand = false;
+    std::uint64_t                                         m_closeButtonWindowId = 0;
+    bool                                                  m_closeButtonHot = false;
+    bool                                                  m_pointerCursorActive = false;
     std::string                                           m_searchQuery;
     bool                                                  m_searchActive = false;
     OverviewMode                                          m_mode = OverviewMode::Spatial;
