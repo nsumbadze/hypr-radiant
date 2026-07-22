@@ -78,11 +78,10 @@ void focusedStageUsesRealWorkspacesPlusEmptyNext() {
     assert(frame.workspaces.at(1).active);
 }
 
-void focusedStageDoesNotGeneratePhantomWorkspacesForGaps() {
-    // Regression for B3: the old minimumWorkspaceSlots logic generated cards
-    // for every ID from 1..maxWorkspaceId, producing phantom workspaces when
-    // real IDs had gaps. The focused-stage branch must emit only real
-    // workspaces for the monitor plus one empty "next" workspace.
+void focusedStageFillsGapsWithEmptyWorkspaces() {
+    // Supersedes the old B3 regression, which asserted gaps stayed collapsed. A hole in the
+    // numbering is still reachable by keybind, so the rail renders it as an empty slot: hiding it
+    // both made those workspaces look unavailable and shifted every card sideways as they emptied.
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5, .activeWorkspaceName = "5"});
     state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1, .monitorName = "DP-1"});
@@ -90,15 +89,19 @@ void focusedStageDoesNotGeneratePhantomWorkspacesForGaps() {
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
-    assert(frame.workspaces.size() == 3);
-    assert(frame.workspaces.at(0).workspaceId == 1);
-    assert(frame.workspaces.at(1).workspaceId == 5);
-    assert(frame.workspaces.at(2).workspaceId == 6);
-    assert(frame.workspaces.at(2).createTarget);
-    assert(frame.workspaces.at(0).empty);
-    assert(frame.workspaces.at(1).empty);
-    assert(frame.workspaces.at(2).empty);
-    assert(frame.workspaces.at(1).active);
+    // 1 and 5 are real, 2-4 are filled gaps, 6 is the trailing create target.
+    assert(frame.workspaces.size() == 6);
+    for (std::size_t index = 0; index < frame.workspaces.size(); ++index)
+        assert(frame.workspaces.at(index).workspaceId == static_cast<std::int64_t>(index) + 1);
+    assert(frame.workspaces.at(5).createTarget);
+    assert(!frame.workspaces.at(3).createTarget);
+    for (const auto& card : frame.workspaces)
+        assert(card.empty);
+    assert(frame.workspaces.at(4).active);
+
+    // Filled slots stay in the rail's left-to-right run rather than stacking.
+    for (std::size_t index = 1; index < frame.workspaces.size(); ++index)
+        assert(frame.workspaces.at(index).rect.x > frame.workspaces.at(index - 1).rect.x);
 }
 
 void focusedStageCardSpacingMatchesSpec() {
@@ -222,13 +225,16 @@ void multiMonitorPerFrameBounds() {
     assert(frame1.workspaces.at(2).workspaceId == 6);
     assert(frame1.workspaces.at(2).createTarget);
 
+    // 3 is unclaimed so it fills in here, but 1 and 2 live on DP-1 and must not be offered on this
+    // rail: activating them would drag the workspace off the monitor it currently occupies.
     assert(frame2.monitorId == 2);
-    assert(frame2.workspaces.size() == 3);
-    assert(frame2.workspaces.at(0).workspaceId == 4);
-    assert(frame2.workspaces.at(1).workspaceId == 5);
-    assert(frame2.workspaces.at(2).workspaceId == 6);
-    assert(frame2.workspaces.at(2).createTarget);
-    assert(frame2.workspaces.at(2).empty);
+    assert(frame2.workspaces.size() == 4);
+    assert(frame2.workspaces.at(0).workspaceId == 3);
+    assert(frame2.workspaces.at(1).workspaceId == 4);
+    assert(frame2.workspaces.at(2).workspaceId == 5);
+    assert(frame2.workspaces.at(3).workspaceId == 6);
+    assert(frame2.workspaces.at(3).createTarget);
+    assert(frame2.workspaces.at(3).empty);
 }
 
 void searchPanelGeometryMatchesSpec() {
@@ -375,7 +381,7 @@ int main() {
     gridLayoutFillsMinimumSlots();
     polishedDefaultsLeaveBreathingRoom();
     focusedStageUsesRealWorkspacesPlusEmptyNext();
-    focusedStageDoesNotGeneratePhantomWorkspacesForGaps();
+    focusedStageFillsGapsWithEmptyWorkspaces();
     focusedStageCardSpacingMatchesSpec();
     focusedStageEmptyNextWorkspaceGeometry();
     focusedStageArrangesWindowsAsANonOverlappingLayer();

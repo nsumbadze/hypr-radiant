@@ -82,6 +82,21 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         }
         if (!ids.contains(activeId))
             ids.insert(activeId);
+        // A hole in the numbering is still a workspace the user can switch to, so give it an empty
+        // slot rather than closing the gap. Collapsing 1/2/4 into three adjacent cards both hid
+        // that 3 was reachable and shifted every card sideways as workspaces emptied out.
+        // Skip any slot another monitor already owns: that workspace is reachable on its own rail,
+        // and offering it here would drag it off the screen it currently lives on.
+        std::set<std::int64_t> ownedElsewhere;
+        for (const auto& workspace : state.workspaces) {
+            if (containsPositiveWorkspaceId(workspace) && workspace.monitorId != monitor.id && workspace.monitorId != -1)
+                ownedElsewhere.insert(workspace.id);
+        }
+        const auto highestSlot = *ids.rbegin();
+        for (std::int64_t id = 1; id <= highestSlot; ++id) {
+            if (!ownedElsewhere.contains(id))
+                ids.insert(id);
+        }
         std::int64_t globalMaxId = 0;
         for (const auto& workspace : state.workspaces) {
             if (containsPositiveWorkspaceId(workspace))
