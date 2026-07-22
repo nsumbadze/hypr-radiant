@@ -1150,8 +1150,6 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     for (double y = displayedStageBounds.y; y < displayedStageBounds.y + displayedStageBounds.height; y += 120.0)
         drawRect(CBox{0.0, y, frame.bounds.width, 1.0}, gridColor, damage);
 
-    const auto spineY = railBox.y + railBox.h - 7.0;
-
     for (const auto& workspace : frame.workspaces) {
         auto displayRect = workspace.rect;
         displayRect.y += railEntranceOffset;
@@ -1175,21 +1173,11 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         const auto cardBox  = boxFor(displayRect);
         const auto radius   = Theme::workspaceRadius(true);
 
-        if (selected) {
-            if (!workspace.createTarget) {
-                drawRect(CBox{cardBox.x - 16.0, cardBox.y - 16.0, cardBox.w + 32.0, cardBox.h + 32.0},
-                    withAlpha(accent, railAlpha * 0.07 * selectionTransition), damage, radius + 16);
-                drawRect(CBox{cardBox.x - 8.0, cardBox.y - 8.0, cardBox.w + 16.0, cardBox.h + 16.0},
-                    withAlpha(accent, railAlpha * 0.15 * selectionTransition), damage, radius + 8);
-            }
-            const auto tracerX = cardBox.x + 16.0;
-            const auto tracerWidth = std::max(12.0, cardBox.w - 32.0);
-            drawRect(CBox{tracerX - 5.0, spineY - 3.0, tracerWidth + 10.0, 7.0},
-                withAlpha(accent, railAlpha * 0.045), damage, 4);
-            drawRect(CBox{tracerX, spineY, tracerWidth, 2.0}, withAlpha(accent, railAlpha * 0.56), damage, 1);
-            const auto signalWidth = std::min(24.0, tracerWidth);
-            drawRect(CBox{tracerX + tracerWidth - signalWidth, spineY, signalWidth, 2.0},
-                withAlpha(Theme::signalColor(), railAlpha * 0.62), damage, 1);
+        if (selected && !workspace.createTarget) {
+            drawRect(CBox{cardBox.x - 16.0, cardBox.y - 16.0, cardBox.w + 32.0, cardBox.h + 32.0},
+                withAlpha(accent, railAlpha * 0.07 * selectionTransition), damage, radius + 16);
+            drawRect(CBox{cardBox.x - 8.0, cardBox.y - 8.0, cardBox.w + 16.0, cardBox.h + 16.0},
+                withAlpha(accent, railAlpha * 0.15 * selectionTransition), damage, radius + 8);
         }
 
         const auto lift = selected ? selectionTransition : 0.0;
