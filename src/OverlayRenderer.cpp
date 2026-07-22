@@ -1118,7 +1118,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     // stage transition to that monitor stops the others from replaying their entrance animation.
     const auto transition = m_stageTransitionMonitorId == -1 || m_stageTransitionMonitorId == frame.monitorId
         ? std::clamp(m_stageTransition.value(), 0.0, 1.0)
-        : 1.0;
+                            : 1.0;
     const auto shelfProgress = std::clamp(m_shelfTransition.value(), 0.0, 1.0);
     const auto displayedStageBounds = interpolatedRect(collapsedStageBounds(frame), frame.stage.bounds, shelfProgress);
     const auto selectionTransition = std::clamp(m_selectionTransition.value(), 0.0, 1.0);
@@ -1202,16 +1202,16 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             // Needs a real surface, not just an accent wash: a translucent tint let the desktop
             // read straight through the card and made it look like a rendering artefact.
             auto createFill = surfaceColor(selected ? 0.20F : 0.11F, railAlpha * (selected ? 0.93 : 0.76));
-            createFill      = tintedSurface(createFill, accent, selected ? 0.18 : 0.10);
+            createFill = tintedSurface(createFill, accent, selected ? 0.18 : 0.10);
             drawRect(cardBox, createFill, damage, radius, true);
             if (g_pHyprRenderer) {
                 CBorderPassElement::SBorderData border;
-                border.box              = cardBox;
+                border.box        = cardBox;
                 const auto ringStrength = selected ? 0.88 : 0.46;
-                border.grad1            = Config::CGradientValueData{withAlpha(accent, railAlpha * ringStrength)};
-                border.a                = static_cast<float>(accent.a * railAlpha * ringStrength);
-                border.round            = radius;
-                border.borderSize       = selected ? 2 : 1;
+                border.grad1      = Config::CGradientValueData{withAlpha(accent, railAlpha * ringStrength)};
+                border.a          = static_cast<float>(accent.a * railAlpha * ringStrength);
+                border.round      = radius;
+                border.borderSize = selected ? 2 : 1;
                 g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
             }
             const auto glyphBox = CBox{cardBox.x, cardBox.y + centered(cardBox.h, 36.0) - 7.0, cardBox.w, 36.0};
@@ -1374,12 +1374,12 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             const char* label;
         };
         static constexpr std::array<DeckHint, 5> HINTS{{
-            {"\xe2\x86\x90\xe2\x86\x92", "navigate"},
-            {"\xe2\x87\xa5", "view"},
-            {"\xe2\x86\xb5", "open"},
-            {"/", "search"},
-            {"esc", "close"},
-        }};
+                {"\xe2\x86\x90\xe2\x86\x92", "navigate"},
+                {"\xe2\x87\xa5", "view"},
+                {"\xe2\x86\xb5", "open"},
+                {"/", "search"},
+                {"esc", "close"},
+            }};
 
         constexpr auto deckPaddingX = 18.0;
         constexpr auto deckHeight   = 40.0;

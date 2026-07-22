@@ -404,9 +404,14 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 const auto slotHeight   = std::max(1.0, (inner.height - innerGap * (innerRows - 1)) / innerRows);
 
                 for (std::size_t i = 0; i < count; ++i) {
+                    // Row/column are deliberately truncating integer division; keep them in int
+                    // variables so the intent is explicit rather than buried in a float expression.
+                    const auto index       = static_cast<int>(i);
+                    const auto innerColumn = index % innerColumns;
+                    const auto innerRow    = index / innerColumns;
                     const LayoutRect slot{
-                        .x      = inner.x + (static_cast<int>(i) % innerColumns) * (slotWidth + innerGap),
-                        .y      = inner.y + (static_cast<int>(i) / innerColumns) * (slotHeight + innerGap),
+                        .x      = inner.x + innerColumn * (slotWidth + innerGap),
+                        .y      = inner.y + innerRow * (slotHeight + innerGap),
                         .width  = slotWidth,
                         .height = slotHeight,
                     };
