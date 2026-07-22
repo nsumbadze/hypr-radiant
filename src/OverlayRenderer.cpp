@@ -437,12 +437,19 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     m_selectedFrameMonitorId = frame->monitorId;
     animateSelection();
     if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage && target.workspaceId != previousWorkspace) {
-        m_previousFrames = m_frames;
+        // A push still in flight on this monitor means the pointer is skimming the rail rather than
+        // settling on a card. Restarting from zero for every card it crosses meant a fast sweep
+        // across a long rail cancelled each push before it was visible, so the depth move played
+        // far too fast or never appeared. Let the in-flight push run on toward the new selection
+        // and keep the frames it started from, so the sweep reads as one continuous move.
+        const auto pushInFlight = m_stageTransition.running() && m_stageTransitionMonitorId == frame->monitorId;
+        if (!pushInFlight)
+            m_previousFrames = m_frames;
         rebuildFrames();
         // Landing on another monitor always reports a different workspace, but that is the pointer
         // crossing screens, not a deliberate step through the rail. Replaying the push there made
         // every monitor hop look like the overlay reopening.
-        if (!crossedMonitor) {
+        if (!crossedMonitor && !pushInFlight) {
             m_stageTransitionMonitorId = frame->monitorId;
             m_stageTransition.hideImmediate();
             // Longer than the open animation: the depth push needs room to read as movement.
