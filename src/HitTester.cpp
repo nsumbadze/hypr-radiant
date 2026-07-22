@@ -77,7 +77,7 @@ LayoutRect closeButtonRect(const LayoutRect& windowRect) noexcept {
     if (windowRect.width < minCard || windowRect.height < minCard)
         return {};
 
-    return {.x = windowRect.x + inset, .y = windowRect.y + inset, .width = size, .height = size};
+    return {.x = windowRect.x + windowRect.width - inset - size, .y = windowRect.y + inset, .width = size, .height = size};
 }
 
 OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, double y) const {

@@ -34,7 +34,7 @@ enum class NavigationDirection {
     double globalX,
     double globalY) noexcept;
 
-/// Hotspot for the close affordance in a stage window card's top-left corner. Returns an empty
+/// Hotspot for the close affordance in a stage window card's top-right corner. Returns an empty
 /// rect when the card is too small to carry one without burying the preview underneath it.
 /// Hit testing and rendering both derive the button from this, so they cannot drift apart.
 [[nodiscard]] LayoutRect closeButtonRect(const LayoutRect& windowRect) noexcept;

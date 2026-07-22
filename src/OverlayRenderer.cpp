@@ -1365,15 +1365,15 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
             const std::string state = window.fullscreen ? "Full" : window.floating ? "Float" : "";
             if (!state.empty() && windowBox.w >= 112.0 && windowBox.h >= 56.0) {
-                const auto badge = CBox{windowBox.x + windowBox.w - 74.0, windowBox.y + 10.0, 64.0, 22.0};
+                const auto badge = CBox{windowBox.x + 10.0, windowBox.y + 10.0, 64.0, 22.0};
                 drawRect(badge, withAlpha(railSurface, stageAlpha * 0.88), damage, 7, true);
                 drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(accent, stageAlpha), damage, 2);
                 renderLabel(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), stageAlpha * 0.92, damage);
             }
         }
 
-        // Top-left corner, where a desktop switcher puts it, and opposite the state badge so the two
-        // never collide. Drawn after the preview so it sits over the thumbnail.
+        // Top-right corner, opposite the state badge so the two never collide. Drawn after the
+        // preview so it sits over the thumbnail rather than under it.
         if (window.stableId == hoveredWindowId) {
             const auto closeRect = closeButtonRect(displayRect);
             if (closeRect.width > 0.0) {

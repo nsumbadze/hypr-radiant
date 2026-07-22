@@ -257,8 +257,8 @@ void closeButtonHotspotWinsOverTheWindowBeneathIt() {
     assert(onButton.type == OverviewTargetType::CloseWindow);
     assert(onButton.windowId == card.stableId);
 
-    // A few pixels clear of it and the card takes the hit again.
-    const auto offButton = HitTester{}.hitTest(testFrame, button.x + button.width + 12.0, button.y + button.height + 12.0);
+    // Clear of the corner and the card takes the hit again.
+    const auto offButton = HitTester{}.hitTest(testFrame, card.rect.x + card.rect.width / 2.0, card.rect.y + card.rect.height / 2.0);
     assert(offButton.type == OverviewTargetType::Window);
     assert(offButton.windowId == card.stableId);
 }
