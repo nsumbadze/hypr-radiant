@@ -419,6 +419,10 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     auto target = !m_searchActive ? m_hitTester.hitTest(*frame, localX, localY) : searchTargetAt(*frame, localX, localY);
     if (!workspaceShelfVisible() && !m_searchActive && target.type == OverviewTargetType::Workspace && localY < frame->stage.bounds.y)
         target = {};
+    // The close button is part of its window as far as selection goes: crossing onto it must not
+    // drop the card's highlight, or the button would blink out from under the pointer.
+    if (target.type == OverviewTargetType::CloseWindow)
+        target.type = OverviewTargetType::Window;
     if (target.type == OverviewTargetType::None)
         return;
 
@@ -536,8 +540,13 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
         };
     } else if (!m_dragging) {
         const auto releasedTarget = hitTest(x, y);
-        if (sameTarget(releasedTarget, m_pointerDownTarget))
-            action = {.type = PointerActionType::Activate, .target = releasedTarget};
+        if (sameTarget(releasedTarget, m_pointerDownTarget)) {
+            // Press and release both landed on the same close button, so this is a close rather
+            // than an activation. Anything else falls through to focusing the target.
+            action = releasedTarget.type == OverviewTargetType::CloseWindow
+                ? PointerAction{.type = PointerActionType::CloseWindow, .target = releasedTarget, .windowId = releasedTarget.windowId}
+                       : PointerAction{.type = PointerActionType::Activate, .target = releasedTarget};
+        }
     }
 
     resetPointerInteraction();
@@ -1295,6 +1304,21 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             pushedStageBounds.y + centered(pushedStageBounds.height, 24.0), 180.0, Theme::footerSize(), stageAlpha * 0.42, damage);
     }
 
+    // The close affordance follows the pointer, not the selection: the keyboard drives selection
+    // too, and a button that appeared under arrow-key navigation would be unreachable anyway.
+    std::uint64_t hoveredWindowId = 0;
+    auto          closeButtonHot  = false;
+    if (!m_dragging) {
+        const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
+        if (bounds != m_frameBoundsByMonitor.end() && contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y)) {
+            const auto pointerTarget = hitTest(m_pointerPosition.x, m_pointerPosition.y);
+            if (pointerTarget.type == OverviewTargetType::Window || pointerTarget.type == OverviewTargetType::CloseWindow) {
+                hoveredWindowId = pointerTarget.windowId;
+                closeButtonHot  = pointerTarget.type == OverviewTargetType::CloseWindow;
+            }
+        }
+    }
+
     for (const auto& window : frame.stage.windows) {
         const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
             m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
@@ -1345,6 +1369,21 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 drawRect(badge, withAlpha(railSurface, stageAlpha * 0.88), damage, 7, true);
                 drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(accent, stageAlpha), damage, 2);
                 renderLabel(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), stageAlpha * 0.92, damage);
+            }
+        }
+
+        // Top-left corner, where a desktop switcher puts it, and opposite the state badge so the two
+        // never collide. Drawn after the preview so it sits over the thumbnail.
+        if (window.stableId == hoveredWindowId) {
+            const auto closeRect = closeButtonRect(displayRect);
+            if (closeRect.width > 0.0) {
+                const auto closeBox = boxFor(closeRect);
+                const auto dot      = static_cast<int>(std::round(closeBox.w / 2.0));
+                drawRect(CBox{closeBox.x + 1.0, closeBox.y + 2.0, closeBox.w, closeBox.h},
+                    withAlpha(Theme::shadowColor(), stageAlpha * 0.45), damage, dot);
+                drawRect(closeBox, closeButtonHot ? withAlpha(accent, stageAlpha * 0.96) : surfaceColor(0.34F, stageAlpha * 0.92), damage, dot, true);
+                renderCenteredLabel("\xe2\x9c\x95", closeBox, Theme::badgeSize(),
+                    closeButtonHot ? m_config.backgroundColor() : m_config.foregroundColor(), stageAlpha * 0.95, damage);
             }
         }
 

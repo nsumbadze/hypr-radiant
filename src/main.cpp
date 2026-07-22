@@ -79,6 +79,11 @@ bool RadiantPlugin::initialize() {
                 activate(action.target, "pointer activation");
                 return;
             }
+            if (action.type == PointerActionType::CloseWindow) {
+                if (!m_activation.closeWindow(action.windowId))
+                    log::warn("close target disappeared before the request was sent");
+                return;
+            }
             if (action.type != PointerActionType::MoveWindow && action.type != PointerActionType::CreateWorkspaceAndMoveWindow)
                 return;
             if (!m_activation.moveWindow(action.windowId, action.target.workspaceId, action.target.monitorId)) {

@@ -246,6 +246,39 @@ void horizontalNavigationStillMovesWhenEveryWorkspaceIsEmpty() {
     assert(next.workspaceId == 2);
 }
 
+void closeButtonHotspotWinsOverTheWindowBeneathIt() {
+    auto testFrame = focusedFrame();
+    const auto& card = testFrame.stage.windows.front();
+    const auto button = closeButtonRect(card.rect);
+    assert(button.width > 0.0);
+
+    // Inside the hotspot the corner belongs to the button, not the card it sits on.
+    const auto onButton = HitTester{}.hitTest(testFrame, button.x + button.width / 2.0, button.y + button.height / 2.0);
+    assert(onButton.type == OverviewTargetType::CloseWindow);
+    assert(onButton.windowId == card.stableId);
+
+    // A few pixels clear of it and the card takes the hit again.
+    const auto offButton = HitTester{}.hitTest(testFrame, button.x + button.width + 12.0, button.y + button.height + 12.0);
+    assert(offButton.type == OverviewTargetType::Window);
+    assert(offButton.windowId == card.stableId);
+}
+
+void smallWindowCardsGetNoCloseButton() {
+    // The button would bury a thumbnail this size, so the card goes without one and stays wholly
+    // clickable rather than losing its corner to an affordance nobody could hit.
+    const auto tiny = closeButtonRect({.x = 0.0, .y = 0.0, .width = 60.0, .height = 60.0});
+    assert(tiny.width == 0.0);
+    assert(tiny.height == 0.0);
+
+    WorkspaceWallFrame testFrame{.monitorId = 1, .bounds = {.width = 400, .height = 300}, .focusedStage = true};
+    testFrame.stage.bounds = {.x = 0, .y = 0, .width = 400, .height = 300};
+    testFrame.stage.windows.push_back({.stableId = 7, .workspaceId = 1, .rect = {.x = 10, .y = 10, .width = 60, .height = 60}, .label = "Tiny"});
+
+    const auto corner = HitTester{}.hitTest(testFrame, 20.0, 20.0);
+    assert(corner.type == OverviewTargetType::Window);
+    assert(corner.windowId == 7);
+}
+
 void scaledGlobalPointerMapsToRenderCoordinates() {
     const auto point = mapGlobalPointToFrame(
         {.x = 100.0, .y = 50.0, .width = 1280.0, .height = 800.0},
@@ -291,6 +324,8 @@ int main() {
     horizontalWorkspaceNavigationWrapsAndSkipsCreateTarget();
     horizontalWorkspaceNavigationSkipsEmptyWorkspaces();
     horizontalNavigationStillMovesWhenEveryWorkspaceIsEmpty();
+    closeButtonHotspotWinsOverTheWindowBeneathIt();
+    smallWindowCardsGetNoCloseButton();
     scaledGlobalPointerMapsToRenderCoordinates();
     unscaledGlobalPointerOnlyRemovesMonitorOrigin();
     std::cout << "HitTesterTest passed\n";

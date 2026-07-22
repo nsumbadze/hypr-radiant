@@ -68,9 +68,29 @@ RadiantPoint mapGlobalPointToFrame(
     };
 }
 
+LayoutRect closeButtonRect(const LayoutRect& windowRect) noexcept {
+    constexpr auto size    = 22.0;
+    constexpr auto inset   = 8.0;
+    // Below this the button would cover most of the thumbnail, so the card simply does not get one.
+    constexpr auto minCard = 96.0;
+
+    if (windowRect.width < minCard || windowRect.height < minCard)
+        return {};
+
+    return {.x = windowRect.x + inset, .y = windowRect.y + inset, .width = size, .height = size};
+}
+
 OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, double y) const {
     if (frame.focusedStage) {
         for (const auto& window : frame.stage.windows) {
+            // Checked ahead of the card itself so the corner belongs to the button, not the window.
+            if (contains(closeButtonRect(window.rect), x, y))
+                return {
+                    .type = OverviewTargetType::CloseWindow,
+                    .workspaceId = window.workspaceId,
+                    .windowId = window.stableId,
+                    .monitorId = frame.monitorId,
+                };
             if (contains(window.rect, x, y))
                 return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
         }

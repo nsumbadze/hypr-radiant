@@ -4,6 +4,7 @@
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
+#include <hyprland/src/managers/XWaylandManager.hpp>
 
 namespace hypr_radiant {
 namespace {
@@ -73,6 +74,20 @@ bool ActivationController::moveWindow(std::uint64_t windowId, std::int64_t works
         return false;
 
     g_pCompositor->moveWindowToWorkspaceSafe(window, workspace);
+    return true;
+}
+
+bool ActivationController::closeWindow(std::uint64_t windowId) const {
+    if (!g_pXWaylandManager)
+        return false;
+
+    const auto window = windowByStableId(windowId);
+    if (!window)
+        return false;
+
+    // A polite close, the same request a titlebar close button sends: the client still gets to
+    // prompt about unsaved work, and may refuse outright.
+    g_pXWaylandManager->sendCloseWindow(window);
     return true;
 }
 
