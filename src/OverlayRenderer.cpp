@@ -432,16 +432,22 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
 
     const auto previousWorkspace  = m_selectedTarget.workspaceId;
     const auto previousMonitorId  = m_selectedFrameMonitorId;
+    const auto crossedMonitor     = previousMonitorId != -1 && previousMonitorId != frame->monitorId;
     m_selectedTarget = target;
     m_selectedFrameMonitorId = frame->monitorId;
     animateSelection();
     if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage && target.workspaceId != previousWorkspace) {
         m_previousFrames = m_frames;
         rebuildFrames();
-        m_stageTransitionMonitorId = frame->monitorId;
-        m_stageTransition.hideImmediate();
-        // Longer than the open animation: the depth push needs room to read as movement.
-        m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * WORKSPACE_PUSH_SCALE))));
+        // Landing on another monitor always reports a different workspace, but that is the pointer
+        // crossing screens, not a deliberate step through the rail. Replaying the push there made
+        // every monitor hop look like the overlay reopening.
+        if (!crossedMonitor) {
+            m_stageTransitionMonitorId = frame->monitorId;
+            m_stageTransition.hideImmediate();
+            // Longer than the open animation: the depth push needs room to read as movement.
+            m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * WORKSPACE_PUSH_SCALE))));
+        }
     }
     // Hovering only repaints the monitor under the pointer, plus whichever monitor lost the
     // selection highlight; damaging every monitor made unrelated screens visibly re-render.
