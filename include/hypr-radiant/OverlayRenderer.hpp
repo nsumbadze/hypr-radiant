@@ -52,6 +52,7 @@ class OverlayRenderer {
     void clearSearchOrHide();
     void toggleGroupedMode();
     void setWorkspaceShelfVisible(bool visible);
+    void setHintDockVisible(bool visible);
     void toggleWorkspaceShelf();
     void setWorkspaceShelfGestureProgress(bool revealing, double progress);
     void finishWorkspaceShelfGesture(bool revealing, bool commit);
@@ -65,6 +66,7 @@ class OverlayRenderer {
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] bool           searchActive() const noexcept;
     [[nodiscard]] bool           workspaceShelfVisible() const noexcept;
+    [[nodiscard]] bool           hintDockVisible() const noexcept;
     [[nodiscard]] OverviewMode   mode() const noexcept;
     [[nodiscard]] OverviewTarget selectedTarget() const noexcept;
     [[nodiscard]] OverviewTarget hitTest(double x, double y) const;
@@ -112,6 +114,7 @@ class OverlayRenderer {
     FadeAnimation                                      m_stageTransition;
     FadeAnimation                                      m_selectionTransition;
     FadeAnimation                                      m_shelfTransition;
+    FadeAnimation                                      m_dockTransition;
     CHyprSignalListener                                m_renderStageListener;
     CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;
@@ -127,6 +130,7 @@ class OverlayRenderer {
     // so a hover-driven preview change stays local to the screen under the pointer.
     std::int64_t                                          m_stageTransitionMonitorId = -1;
     bool                                                  m_pointerInsideShelfBand = false;
+    bool                                                  m_pointerInsideDockBand = false;
     std::string                                           m_searchQuery;
     bool                                                  m_searchActive = false;
     OverviewMode                                          m_mode = OverviewMode::Spatial;

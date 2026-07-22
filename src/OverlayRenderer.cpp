@@ -31,6 +31,9 @@ namespace {
 
 // Multiplier applied to the configured animation duration for the workspace depth push.
 constexpr auto WORKSPACE_PUSH_SCALE = 1.3;
+// Band along the bottom edge the hint dock counts as its own. The pointer has to leave this
+// entirely before the dock retracts, so a small twitch over the dock does not dismiss it.
+constexpr auto DOCK_BAND_HEIGHT = 92.0;
 
 bool sameTarget(OverviewTarget lhs, OverviewTarget rhs) {
     return lhs.type == rhs.type && lhs.workspaceId == rhs.workspaceId && lhs.windowId == rhs.windowId;
@@ -322,6 +325,7 @@ void OverlayRenderer::show(RadiantState state) {
 
     m_textures.clear();
     m_shelfTransition.hideImmediate();
+    m_dockTransition.hideImmediate();
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
@@ -351,6 +355,7 @@ void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationC
 
     m_textures.clear();
     m_shelfTransition.hideImmediate();
+    m_dockTransition.hideImmediate();
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
@@ -470,6 +475,16 @@ void OverlayRenderer::pointerMoved(double x, double y) {
             else if (!m_pointerDown && m_pointerInsideShelfBand && !insideShelfBand)
                 setWorkspaceShelfVisible(false);
             m_pointerInsideShelfBand = insideShelfBand;
+
+            // Mirror of the shelf at the other edge: the dock lives off-screen until the pointer
+            // reaches the bottom, then retracts once it leaves the band it occupies.
+            const auto frameBottom    = frame->bounds.y + frame->bounds.height;
+            const auto insideDockBand = localY >= frameBottom - DOCK_BAND_HEIGHT;
+            if (localY >= frameBottom - revealEdge)
+                setHintDockVisible(true);
+            else if (!m_pointerDown && m_pointerInsideDockBand && !insideDockBand)
+                setHintDockVisible(false);
+            m_pointerInsideDockBand = insideDockBand;
         }
     }
     if (!m_pointerDown) {
@@ -643,6 +658,14 @@ void OverlayRenderer::setWorkspaceShelfVisible(bool visible) {
     damageAllMonitors();
 }
 
+void OverlayRenderer::setHintDockVisible(bool visible) {
+    if (m_config.layoutMode() != LayoutMode::Stage || !active() || m_dockTransition.targetVisible() == visible)
+        return;
+
+    m_dockTransition.animateTo(visible, std::max(90, static_cast<int>(std::round(m_config.animationDurationMs() * 0.82))));
+    damageAllMonitors();
+}
+
 void OverlayRenderer::toggleWorkspaceShelf() {
     setWorkspaceShelfVisible(!m_shelfTransition.targetVisible());
 }
@@ -667,6 +690,7 @@ void OverlayRenderer::hideImmediate() {
     m_stageTransition.hideImmediate();
     m_selectionTransition.hideImmediate();
     m_shelfTransition.hideImmediate();
+    m_dockTransition.hideImmediate();
     m_frames.clear();
     m_previousFrames.clear();
     m_frameBoundsByMonitor.clear();
@@ -707,6 +731,10 @@ bool OverlayRenderer::workspaceShelfVisible() const noexcept {
     return m_shelfTransition.targetVisible();
 }
 
+bool OverlayRenderer::hintDockVisible() const noexcept {
+    return m_dockTransition.targetVisible();
+}
+
 OverviewMode OverlayRenderer::mode() const noexcept {
     return m_mode;
 }
@@ -742,7 +770,8 @@ void OverlayRenderer::onRenderStage(eRenderStage stage) {
     if (alpha > 0.001F)
         renderCurrentMonitor(alpha);
 
-    if (m_animation.running() || m_stageTransition.running() || m_selectionTransition.running() || m_shelfTransition.running())
+    if (m_animation.running() || m_stageTransition.running() || m_selectionTransition.running() || m_shelfTransition.running() ||
+        m_dockTransition.running())
         damageAllMonitors();
 }
 
@@ -1354,66 +1383,99 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         }
     }
 
-    if (!m_searchActive) {
-        // A statusline rather than a floating keycap tray: this audience reads <CR> and <Esc> as
-        // text, so embossed caps in a rounded pill were borrowing a GUI idiom that fights the
-        // tiling-WM surroundings. Flush to the bottom edge, mode block hard left the way lualine
-        // anchors NORMAL, keys at full weight with their actions dimmed behind them.
-        const auto modeLabel =
-            m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
+    const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
+    if (!m_searchActive && dockProgress > 0.001) {
+        // A shortcut dock: a small frosted capsule that rides up from the bottom edge, lit
+        // along its rim by a two-stop gradient the way Hyprland lights a window border. It stays
+        // hidden until the pointer reaches the bottom or the wheel scrolls down, so the stage is
+        // uncluttered by shortcuts you already know.
+        const auto dockAlpha = contentAlpha * dockProgress;
+        const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
 
         struct DeckHint {
             const char* keys;
             const char* action;
         };
         // Only bindings that actually exist: every letter key falls through to search, so there is
-        // no hjkl to advertise. Up/Down was missing from the old deck entirely.
-        static constexpr std::array<DeckHint, 6> HINTS{{
+        // no hjkl to advertise.
+        static constexpr std::array<DeckHint, 5> HINTS{{
                 {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
                 {"\xe2\x86\x91\xe2\x86\x93", "window"},
-                {"<Tab>", "group"},
-                {"<CR>", "open"},
+                {"\xe2\x87\xa5", "group"},
+                {"\xe2\x86\xb5", "open"},
                 {"/", "find"},
-                {"<Esc>", "close"},
             }};
 
-        constexpr auto barHeight    = 30.0;
-        constexpr auto modePadX     = 14.0;
-        constexpr auto hintsPadX    = 16.0;
-        constexpr auto keysGap      = 7.0;
-        constexpr auto pairGap      = 18.0;
+        constexpr auto dockHeight   = 26.0;
+        constexpr auto dockPadR     = 15.0;
+        constexpr auto pillInset    = 4.0;
+        constexpr auto pillPadX     = 11.0;
+        constexpr auto pillGap      = 13.0;
+        constexpr auto keysGap      = 6.0;
+        constexpr auto pairGap      = 15.0;
         constexpr auto measureWidth = 240.0;
+        constexpr auto riseDistance = 14.0;
+        constexpr auto rimAngle     = 2.62F;
 
         const auto foreground = m_config.foregroundColor();
-        const auto bar        = CBox{0.0, frame.bounds.height - barHeight, frame.bounds.width, barHeight};
+        // Derived from the live theme rather than a fixed pair, so the rim tracks accent_color and
+        // falls back with it when the config leaves the defaults in place.
+        const auto rimLit   = tintedSurface(accent, foreground, 0.42);
+        const auto rimShade = withAlpha(accent, 0.16);
 
-        drawRect(bar, withAlpha(railSurface, contentAlpha * 0.92), damage);
-        // Hairline along the top edge instead of an outline: a statusline is bounded by the screen,
-        // not by a box floating in front of it.
-        drawRect(CBox{bar.x, bar.y, bar.w, 1.0}, withAlpha(accent, contentAlpha * 0.22), damage);
+        const auto pillHeight = dockHeight - pillInset * 2.0;
+        const auto modeSize   = measureLabel(modeLabel, measureWidth, Theme::hintSize(), foreground);
+        const auto pillWidth  = modeSize.width + pillPadX * 2.0;
 
-        const auto modeSize  = measureLabel(modeLabel, measureWidth, Theme::hintSize(), foreground);
-        const auto modeWidth = modeSize.width + modePadX * 2.0;
-        const auto modeBox   = CBox{bar.x, bar.y, modeWidth, bar.h};
-        // The one accent moment in the deck; everything right of it stays monochrome.
-        drawRect(modeBox, withAlpha(accent, contentAlpha * 0.92), damage);
-        renderCenteredLabel(modeLabel, modeBox, Theme::hintSize(), m_config.backgroundColor(), contentAlpha, damage);
-
-        auto cursorX = modeBox.x + modeBox.w + hintsPadX;
-        for (const auto& hint : HINTS) {
-            const auto keysSize   = measureLabel(hint.keys, measureWidth, Theme::hintSize(), foreground);
-            const auto actionSize = measureLabel(hint.action, measureWidth, Theme::hintSize(), foreground);
-            if (cursorX + keysSize.width + keysGap + actionSize.width > bar.x + bar.w - hintsPadX)
-                break;
-
-            renderColoredLabel(hint.keys, cursorX, bar.y + centered(bar.h, keysSize.height), measureWidth,
-                Theme::hintSize(), foreground, contentAlpha * 0.95, damage);
-            cursorX += keysSize.width + keysGap;
-            renderColoredLabel(hint.action, cursorX, bar.y + centered(bar.h, actionSize.height), measureWidth,
-                Theme::hintSize(), foreground, contentAlpha * 0.55, damage);
-            cursorX += actionSize.width + pairGap;
+        auto contentWidth = pillInset + pillWidth + pillGap;
+        std::array<double, HINTS.size()> keyWidths{};
+        std::array<double, HINTS.size()> actionWidths{};
+        for (std::size_t i = 0; i < HINTS.size(); ++i) {
+            keyWidths[i]    = measureLabel(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground).width;
+            actionWidths[i] = measureLabel(HINTS[i].action, measureWidth, Theme::hintSize(), foreground).width;
+            contentWidth += keyWidths[i] + keysGap + actionWidths[i] + (i + 1 < HINTS.size() ? pairGap : 0.0);
         }
-    } else {
+        contentWidth += dockPadR;
+
+        const auto dockWidth = std::min(std::max(1.0, frame.bounds.width - 64.0), contentWidth);
+        // Rides up into place, so the reveal reads as the dock arriving rather than fading in.
+        const auto dockY = frame.bounds.height - 34.0 - dockHeight + (1.0 - dockProgress) * riseDistance;
+        const auto dock  = CBox{centered(frame.bounds.width, dockWidth), dockY, dockWidth, dockHeight};
+        const auto radius = static_cast<int>(std::round(dockHeight / 2.0));
+
+        // Ambient then contact shadow, matching how the window cards are lifted off the backdrop.
+        drawRect(CBox{dock.x - 3.0, dock.y + 9.0, dock.w + 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.40), damage, radius + 6);
+        drawRect(CBox{dock.x + 3.0, dock.y + 5.0, dock.w - 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
+        drawRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
+
+        if (g_pHyprRenderer) {
+            CBorderPassElement::SBorderData border;
+            border.box   = dock;
+            border.grad1 = Config::CGradientValueData{std::vector<CHyprColor>{withAlpha(rimLit, dockAlpha * 0.55), rimShade}, rimAngle};
+            border.a     = static_cast<float>(dockAlpha * 0.55);
+            border.round      = radius;
+            border.borderSize = 1;
+            g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+        }
+
+        const auto pillBox = CBox{dock.x + pillInset, dock.y + pillInset, pillWidth, pillHeight};
+        drawRect(pillBox, withAlpha(accent, dockAlpha * 0.95), damage, static_cast<int>(std::round(pillHeight / 2.0)), true);
+        renderCenteredLabel(modeLabel, pillBox, Theme::hintSize(), m_config.backgroundColor(), dockAlpha, damage);
+
+        auto cursorX = pillBox.x + pillBox.w + pillGap;
+        for (std::size_t i = 0; i < HINTS.size(); ++i) {
+            const auto keySize    = measureLabel(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground);
+            const auto actionSize = measureLabel(HINTS[i].action, measureWidth, Theme::hintSize(), foreground);
+            renderColoredLabel(HINTS[i].keys, cursorX, dock.y + centered(dock.h, keySize.height), measureWidth,
+                Theme::hintSize(), rimLit, dockAlpha * 0.96, damage);
+            cursorX += keyWidths[i] + keysGap;
+            renderColoredLabel(HINTS[i].action, cursorX, dock.y + centered(dock.h, actionSize.height), measureWidth,
+                Theme::hintSize(), foreground, dockAlpha * 0.58, damage);
+            cursorX += actionWidths[i] + pairGap;
+        }
+    }
+
+    if (m_searchActive) {
         auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
         drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, dim, damage);

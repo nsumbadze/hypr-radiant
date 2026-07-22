@@ -93,7 +93,12 @@ bool RadiantPlugin::initialize() {
         [this](char value) { m_overlay.appendSearchChar(value); },
         [this] { m_overlay.backspaceSearch(); },
         [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
-        [this](bool reveal) { m_overlay.setWorkspaceShelfVisible(reveal); },
+        // Scroll runs the two edges as one axis: up brings the workspace shelf down from the top,
+        // down brings the hint dock up from the bottom, and each hides the other.
+        [this](bool scrollingUp) {
+            m_overlay.setWorkspaceShelfVisible(scrollingUp);
+            m_overlay.setHintDockVisible(!scrollingUp);
+        },
         [this] { return m_overlay.searchActive(); },
         [this] { m_overlay.beginSearch(); },
         [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },

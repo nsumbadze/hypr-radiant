@@ -107,6 +107,8 @@ subtle spatial variation. The `workspace_wall` layout retains the original grid.
 - `hyprctl dispatch radiant:shelf show|hide|toggle`: control the workspace shelf
 - Move the pointer to the top edge or scroll up: reveal the workspace shelf
 - Leave the shelf or scroll down: hide it; scrolling down again closes via gesture
+- Move the pointer to the bottom edge or scroll down: reveal the shortcut dock
+- Leave the bottom edge or scroll up: hide the dock again
 - Hover a rail workspace or stage window: move selection
 - Drag a stage window onto a rail card: move it to that workspace
 - Drag a stage window onto the trailing `+`: create a workspace and move it there
