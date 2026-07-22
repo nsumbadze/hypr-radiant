@@ -1368,6 +1368,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     }
 
     for (const auto& window : frame.stage.windows) {
+        // A window that has already unmapped has nothing left to preview, and drawing its card
+        // anyway left an empty surface sitting on the stage until the next collect landed.
+        if (!findLiveWindow(window.stableId))
+            continue;
         const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
             m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
         auto displayRect = remapStageRect(window.rect, frame.stage.bounds, pushedStageBounds);

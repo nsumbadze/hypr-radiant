@@ -8,6 +8,7 @@
 #include <hypr-radiant/StateCollector.hpp>
 
 #include <hyprland/src/SharedDefs.hpp>
+#include <hyprland/src/helpers/signal/Signal.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <chrono>
@@ -43,6 +44,10 @@ class RadiantPlugin {
     GestureController m_gestures;
     StateCollector  m_stateCollector;
     OverlayRenderer m_overlay;
+    // A window closing while the overview is up leaves its card behind, so the layout is re-flowed
+    // as soon as the compositor reports one gone, however it was closed.
+    CHyprSignalListener m_windowCloseListener;
+    CHyprSignalListener m_windowDestroyListener;
     Clock::time_point m_lastOpenedAt = Clock::time_point::min();
     std::string       m_lastTransition = "plugin loaded";
 };

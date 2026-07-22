@@ -4,6 +4,7 @@
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <memory>
@@ -68,6 +69,15 @@ bool RadiantPlugin::initialize() {
     }
 
     m_overlay.install();
+    // Re-collect whenever a window goes away while the overview is up. Without this the card for a
+    // closed window lingers as an empty surface, whether it was closed from the overview's own
+    // button or from a keybind behind it.
+    const auto onWindowGone = [this](PHLWINDOW) {
+        if (m_overlay.active())
+            m_overlay.refresh(m_stateCollector.collect());
+    };
+    m_windowCloseListener   = Event::bus()->m_events.window.close.listen(onWindowGone);
+    m_windowDestroyListener = Event::bus()->m_events.window.destroy.listen(onWindowGone);
     m_input.install(
         [this] { return m_overlay.active(); },
         [this](double x, double y) { return m_overlay.hitTest(x, y); },
@@ -175,6 +185,8 @@ SDispatchResult RadiantPlugin::showApplication(const std::string& args) {
 }
 
 void RadiantPlugin::shutdown() {
+    m_windowCloseListener.reset();
+    m_windowDestroyListener.reset();
     m_gestures.uninstall();
     m_input.uninstall();
     m_overlay.uninstall();
