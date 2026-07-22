@@ -214,6 +214,38 @@ void horizontalWorkspaceNavigationWrapsAndSkipsCreateTarget() {
     assert(next.workspaceId == 1);
 }
 
+void horizontalWorkspaceNavigationSkipsEmptyWorkspaces() {
+    // Ctrl+wheel, the horizontal three-finger swipe and the arrow keys all step the rail through
+    // this path. Filled gap slots are rendered so the numbering reads correctly, but sweeping
+    // should carry past them to the next workspace that actually holds something.
+    WorkspaceWallFrame testFrame{.monitorId = 1, .bounds = {.width = 600, .height = 200}, .focusedStage = true};
+    testFrame.workspaces.push_back({.workspaceId = 1, .name = "1", .rect = {.x = 10, .y = 10, .width = 100, .height = 80}, .active = true, .empty = false});
+    testFrame.workspaces.push_back({.workspaceId = 2, .name = "2", .rect = {.x = 150, .y = 10, .width = 100, .height = 80}});
+    testFrame.workspaces.push_back({.workspaceId = 3, .name = "3", .rect = {.x = 290, .y = 10, .width = 100, .height = 80}, .empty = false});
+
+    const auto next = HitTester{}.moveSelection(
+        testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 1}, NavigationDirection::Right);
+    assert(next.type == OverviewTargetType::Workspace);
+    assert(next.workspaceId == 3);
+
+    const auto back = HitTester{}.moveSelection(
+        testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 3}, NavigationDirection::Left);
+    assert(back.type == OverviewTargetType::Workspace);
+    assert(back.workspaceId == 1);
+}
+
+void horizontalNavigationStillMovesWhenEveryWorkspaceIsEmpty() {
+    // Skipping empties must not strand the selection when there is nothing else to reach for.
+    WorkspaceWallFrame testFrame{.monitorId = 1, .bounds = {.width = 600, .height = 200}, .focusedStage = true};
+    testFrame.workspaces.push_back({.workspaceId = 1, .name = "1", .rect = {.x = 10, .y = 10, .width = 100, .height = 80}, .active = true});
+    testFrame.workspaces.push_back({.workspaceId = 2, .name = "2", .rect = {.x = 150, .y = 10, .width = 100, .height = 80}});
+
+    const auto next = HitTester{}.moveSelection(
+        testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 1}, NavigationDirection::Right);
+    assert(next.type == OverviewTargetType::Workspace);
+    assert(next.workspaceId == 2);
+}
+
 void scaledGlobalPointerMapsToRenderCoordinates() {
     const auto point = mapGlobalPointToFrame(
         {.x = 100.0, .y = 50.0, .width = 1280.0, .height = 800.0},
@@ -257,6 +289,8 @@ int main() {
     focusedStageWindowsAreInteractive();
     focusedNavigationEntersStageAndReturnsToRail();
     horizontalWorkspaceNavigationWrapsAndSkipsCreateTarget();
+    horizontalWorkspaceNavigationSkipsEmptyWorkspaces();
+    horizontalNavigationStillMovesWhenEveryWorkspaceIsEmpty();
     scaledGlobalPointerMapsToRenderCoordinates();
     unscaledGlobalPointerOnlyRemovesMonitorOrigin();
     std::cout << "HitTesterTest passed\n";

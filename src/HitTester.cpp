@@ -127,8 +127,24 @@ OverviewTarget HitTester::initialSelection(const WorkspaceWallFrame& frame) cons
 OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, OverviewTarget current, NavigationDirection direction) const {
     auto targets = workspaceTargets(frame);
     const auto horizontal = direction == NavigationDirection::Left || direction == NavigationDirection::Right;
-    if (horizontal)
+    if (horizontal) {
         std::erase_if(targets, [](OverviewTarget target) { return target.type == OverviewTargetType::NewWorkspace; });
+        // Stepping the rail should land on workspaces that actually hold something. Empty slots are
+        // there so the numbering reads correctly, not as stops on the way past. Skipping them keeps
+        // a sweep from stalling on gaps that have nothing to show on the stage. The workspace_wall
+        // grid is left alone: every slot is a deliberate cell there, so skipping would strand
+        // vertical neighbours behind an empty column.
+        auto occupied = frame.focusedStage ? targets : std::vector<OverviewTarget>{};
+        std::erase_if(occupied, [&frame](OverviewTarget target) {
+            const auto card = std::ranges::find_if(frame.workspaces, [target](const WorkspaceCard& candidate) {
+                return candidate.workspaceId == target.workspaceId;
+            });
+            return card != frame.workspaces.end() && card->empty;
+        });
+        // Everything empty means there is nothing to skip to, so leave the rail navigable.
+        if (!occupied.empty())
+            targets = std::move(occupied);
+    }
     if (targets.empty())
         return {};
 
