@@ -382,6 +382,7 @@ void OverlayRenderer::toggle(RadiantState state) {
         m_state = std::move(state);
         rebuildFrames();
         clearSearch();
+        releaseHoverAffordances();
         m_animation.animateTo(false, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.67))));
         damageAllMonitors();
         return;
@@ -402,19 +403,21 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
 
     const auto previousTarget = m_selectedTarget;
     const auto previousWorkspace = m_selectedTarget.workspaceId;
+    // rebuildFrames() clears m_frames, so nothing may read through `frame` past that point.
+    const auto frameMonitorId = frame->monitorId;
     m_selectedTarget = m_hitTester.moveSelection(*frame, m_selectedTarget, direction);
-    m_selectedFrameMonitorId = frame->monitorId;
+    m_selectedFrameMonitorId = frameMonitorId;
     if (!sameTarget(previousTarget, m_selectedTarget))
         animateSelection();
     if (m_config.layoutMode() == LayoutMode::Stage && m_selectedTarget.workspaceId != previousWorkspace) {
         m_previousFrames = m_frames;
         rebuildFrames();
-        m_stageTransitionMonitorId = frame->monitorId;
+        m_stageTransitionMonitorId = frameMonitorId;
         m_stageTransition.hideImmediate();
         // Longer than the open animation: the depth push needs room to read as movement.
         m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * WORKSPACE_PUSH_SCALE))));
     }
-    damageMonitorById(frame->monitorId);
+    damageMonitorById(frameMonitorId);
 }
 
 void OverlayRenderer::selectTargetAt(double x, double y) {
@@ -444,9 +447,11 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
 
     const auto previousWorkspace  = m_selectedTarget.workspaceId;
     const auto previousMonitorId  = m_selectedFrameMonitorId;
-    const auto crossedMonitor     = previousMonitorId != -1 && previousMonitorId != frame->monitorId;
+    // rebuildFrames() below clears m_frames, so `frame` must not be read past that point.
+    const auto frameMonitorId     = frame->monitorId;
+    const auto crossedMonitor     = previousMonitorId != -1 && previousMonitorId != frameMonitorId;
     m_selectedTarget = target;
-    m_selectedFrameMonitorId = frame->monitorId;
+    m_selectedFrameMonitorId = frameMonitorId;
     animateSelection();
     if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage && target.workspaceId != previousWorkspace) {
         // A push still in flight on this monitor means the pointer is skimming the rail rather than
@@ -454,7 +459,7 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
         // across a long rail cancelled each push before it was visible, so the depth move played
         // far too fast or never appeared. Let the in-flight push run on toward the new selection
         // and keep the frames it started from, so the sweep reads as one continuous move.
-        const auto pushInFlight = m_stageTransition.running() && m_stageTransitionMonitorId == frame->monitorId;
+        const auto pushInFlight = m_stageTransition.running() && m_stageTransitionMonitorId == frameMonitorId;
         if (!pushInFlight)
             m_previousFrames = m_frames;
         rebuildFrames();
@@ -462,7 +467,7 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
         // crossing screens, not a deliberate step through the rail. Replaying the push there made
         // every monitor hop look like the overlay reopening.
         if (!crossedMonitor && !pushInFlight) {
-            m_stageTransitionMonitorId = frame->monitorId;
+            m_stageTransitionMonitorId = frameMonitorId;
             m_stageTransition.hideImmediate();
             // Longer than the open animation: the depth push needs room to read as movement.
             m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * WORKSPACE_PUSH_SCALE))));
@@ -470,8 +475,8 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     }
     // Hovering only repaints the monitor under the pointer, plus whichever monitor lost the
     // selection highlight; damaging every monitor made unrelated screens visibly re-render.
-    damageMonitorById(frame->monitorId);
-    if (previousMonitorId != -1 && previousMonitorId != frame->monitorId)
+    damageMonitorById(frameMonitorId);
+    if (previousMonitorId != -1 && previousMonitorId != frameMonitorId)
         damageMonitorById(previousMonitorId);
 }
 
@@ -596,6 +601,8 @@ void OverlayRenderer::setGestureProgress(bool opening, double progress) {
 
 void OverlayRenderer::finishGesture(bool opening, bool commit) {
     const auto visible = opening ? commit : !commit;
+    if (!visible)
+        releaseHoverAffordances();
     m_animation.animateTo(visible, m_config.animationDurationMs());
     m_stageTransition.animateTo(visible, m_config.animationDurationMs());
     damageAllMonitors();
@@ -725,6 +732,14 @@ void OverlayRenderer::setPointerCursorOverride(bool pointerCursor) {
     g_pHyprRenderer->setCursorFromName(pointerCursor ? "pointer" : "left_ptr");
 }
 
+void OverlayRenderer::releaseHoverAffordances() {
+    m_closeButtonTransition.hideImmediate();
+    m_closeButtonHotTransition.hideImmediate();
+    m_closeButtonWindowId = 0;
+    m_closeButtonHot      = false;
+    setPointerCursorOverride(false);
+}
+
 void OverlayRenderer::setHintDockVisible(bool visible) {
     if (m_config.layoutMode() != LayoutMode::Stage || !active() || m_dockTransition.targetVisible() == visible)
         return;
@@ -758,11 +773,7 @@ void OverlayRenderer::hideImmediate() {
     m_selectionTransition.hideImmediate();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
-    m_closeButtonTransition.hideImmediate();
-    m_closeButtonHotTransition.hideImmediate();
-    m_closeButtonWindowId = 0;
-    m_closeButtonHot = false;
-    setPointerCursorOverride(false);
+    releaseHoverAffordances();
     m_frames.clear();
     m_previousFrames.clear();
     m_frameBoundsByMonitor.clear();

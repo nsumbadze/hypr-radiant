@@ -104,6 +104,48 @@ void focusedStageFillsGapsWithEmptyWorkspaces() {
         assert(frame.workspaces.at(index).rect.x > frame.workspaces.at(index - 1).rect.x);
 }
 
+void hugeWorkspaceIdDoesNotExplodeTheRail() {
+    // `hyprctl dispatch workspace 5000000` is legal, and the gap fill used to materialise a card per
+    // integer up to the highest live ID — one full window scan each — which hung the compositor and
+    // exhausted memory. Real workspaces stay listed; only the empty slots between them are bounded.
+    RadiantState state;
+    state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5000000, .activeWorkspaceName = "5000000"});
+    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1, .monitorName = "DP-1"});
+    state.workspaces.push_back({.id = 5000000, .name = "far", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
+
+    assert(frame.workspaces.size() < 128);
+    // Both real workspaces survive the cap.
+    const auto hasId = [&frame](std::int64_t id) {
+        return std::ranges::any_of(frame.workspaces, [id](const WorkspaceCard& card) { return card.workspaceId == id; });
+    };
+    assert(hasId(1));
+    assert(hasId(5000000));
+}
+
+void clientLabelsAreTruncated() {
+    // Titles are client-controlled and land in a Pango layout plus a texture-cache key, so an
+    // unbounded one becomes a multi-megabyte surface.
+    RadiantState state;
+    state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.windows.push_back({
+        .stableId = 1,
+        .title = std::string(64000, 'x'),
+        .className = "Test",
+        .geometry = {.size = {.width = 800, .height = 600}},
+        .workspaceId = 1,
+        .monitorId = 1,
+        .mapped = true,
+    });
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
+
+    assert(!frame.stage.windows.empty());
+    assert(frame.stage.windows.front().label.size() <= 256);
+}
+
 void focusedStageCardSpacingMatchesSpec() {
     const auto state = sampleState();
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
@@ -382,6 +424,8 @@ int main() {
     polishedDefaultsLeaveBreathingRoom();
     focusedStageUsesRealWorkspacesPlusEmptyNext();
     focusedStageFillsGapsWithEmptyWorkspaces();
+    hugeWorkspaceIdDoesNotExplodeTheRail();
+    clientLabelsAreTruncated();
     focusedStageCardSpacingMatchesSpec();
     focusedStageEmptyNextWorkspaceGeometry();
     focusedStageArrangesWindowsAsANonOverlappingLayer();

@@ -72,12 +72,13 @@ bool RadiantPlugin::initialize() {
     // Re-collect whenever a window goes away while the overview is up. Without this the card for a
     // closed window lingers as an empty surface, whether it was closed from the overview's own
     // button or from a keybind behind it.
-    const auto onWindowGone = [this](PHLWINDOW) {
+    // Only destroy, not close: close fires on request and destroy on the window actually going
+    // away, so listening to both re-collected and re-rasterised every label twice per closed window.
+    // A window that refuses to close never destroys, and correctly never triggers a re-layout.
+    m_windowDestroyListener = Event::bus()->m_events.window.destroy.listen([this](PHLWINDOW) {
         if (m_overlay.active())
             m_overlay.refresh(m_stateCollector.collect());
-    };
-    m_windowCloseListener   = Event::bus()->m_events.window.close.listen(onWindowGone);
-    m_windowDestroyListener = Event::bus()->m_events.window.destroy.listen(onWindowGone);
+    });
     m_input.install(
         [this] { return m_overlay.active(); },
         [this](double x, double y) { return m_overlay.hitTest(x, y); },
@@ -185,7 +186,6 @@ SDispatchResult RadiantPlugin::showApplication(const std::string& args) {
 }
 
 void RadiantPlugin::shutdown() {
-    m_windowCloseListener.reset();
     m_windowDestroyListener.reset();
     m_gestures.uninstall();
     m_input.uninstall();
@@ -292,8 +292,12 @@ SDispatchResult RadiantPlugin::open(const std::string& args) {
 SDispatchResult RadiantPlugin::close(const std::string& args) {
     if (!args.empty())
         log::warn("radiant:close ignores dispatcher arguments: {}", args);
-    if (!m_overlay.active())
+    if (!m_overlay.active()) {
+        // Still release: this dispatcher is the way out if the grab ever outlives the overlay, and
+        // returning early would leave the keyboard captured with no overlay left to close.
+        m_input.releaseKeyboard();
         return {.passEvent = false, .success = true, .error = ""};
+    }
 
     m_config.refreshPalette();
     m_overlay.toggle(m_stateCollector.collect());

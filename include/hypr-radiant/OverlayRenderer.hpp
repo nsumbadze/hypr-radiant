@@ -113,6 +113,9 @@ class OverlayRenderer {
     /// animate instead of popping in and out as the pointer crosses cards.
     void updateCloseAffordance(double x, double y);
     void setPointerCursorOverride(bool pointerCursor);
+    /// Drops the affordances that must not outlive a visible overlay — chiefly the pointer cursor
+    /// override, which would otherwise leave a hand cursor on the desktop after closing.
+    void releaseHoverAffordances();
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;

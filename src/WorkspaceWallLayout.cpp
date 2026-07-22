@@ -12,12 +12,29 @@ bool containsPositiveWorkspaceId(const WorkspaceSnapshot& workspace) {
     return workspace.id > 0 && !workspace.special;
 }
 
+// Titles and classes are set by the client, so their length is not ours to trust. They are laid out
+// by Pango and used as a texture-cache key; an unbounded one turns into a multi-megabyte surface and
+// a stall on first paint. Far more than this never fits a card anyway.
+constexpr std::size_t maxLabelBytes = 256;
+
+std::string truncatedLabel(const std::string& value) {
+    if (value.size() <= maxLabelBytes)
+        return value;
+
+    // Step back off a UTF-8 continuation byte so the cut never splits a code point.
+    auto end = maxLabelBytes;
+    while (end > 0 && (static_cast<unsigned char>(value[end]) & 0xC0) == 0x80)
+        --end;
+
+    return value.substr(0, end);
+}
+
 std::string labelFor(const WindowSnapshot& window) {
     if (!window.title.empty())
-        return window.title;
+        return truncatedLabel(window.title);
 
     if (!window.className.empty())
-        return window.className;
+        return truncatedLabel(window.className);
 
     return "Window";
 }
@@ -25,6 +42,12 @@ std::string labelFor(const WindowSnapshot& window) {
 LayoutRect inset(const LayoutRect& rect, double amount) {
     return {.x = rect.x + amount, .y = rect.y + amount, .width = std::max(0.0, rect.width - amount * 2.0), .height = std::max(0.0, rect.height - amount * 2.0)};
 }
+
+// Workspace IDs come straight from the compositor and are user-chosen: `hyprctl dispatch workspace
+// 5000000` is legal. Filling every slot up to the highest live ID would allocate a card per integer
+// and rescan every window per card, so the fill is bounded. Real workspaces above the cap are still
+// listed; only the empty slots between them stop being generated.
+constexpr std::int64_t maxFilledSlots = 64;
 
 double centered(double available, double size) {
     return std::max(0.0, (available - size) / 2.0);
@@ -56,7 +79,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         .focusedStage = options.focusedStage,
     };
 
-    int maxWorkspaceId = std::max(1, options.minimumWorkspaceSlots);
+    std::int64_t maxWorkspaceId = std::max(1, options.minimumWorkspaceSlots);
     std::map<std::int64_t, WorkspaceSnapshot> workspaceById;
 
     for (const auto& workspace : state.workspaces) {
@@ -67,7 +90,9 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             continue;
 
         workspaceById[workspace.id] = workspace;
-        maxWorkspaceId = std::max(maxWorkspaceId, static_cast<int>(workspace.id));
+        // Clamped rather than narrowed: a huge live ID must not become the slot count, and
+        // static_cast<int> of one past INT_MAX is implementation defined.
+        maxWorkspaceId = std::max(maxWorkspaceId, std::min<std::int64_t>(workspace.id, maxFilledSlots));
     }
 
     const auto count = static_cast<std::size_t>(maxWorkspaceId);
@@ -92,7 +117,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             if (containsPositiveWorkspaceId(workspace) && workspace.monitorId != monitor.id && workspace.monitorId != -1)
                 ownedElsewhere.insert(workspace.id);
         }
-        const auto highestSlot = *ids.rbegin();
+        const auto highestSlot = std::min<std::int64_t>(*ids.rbegin(), maxFilledSlots);
         for (std::int64_t id = 1; id <= highestSlot; ++id) {
             if (!ownedElsewhere.contains(id))
                 ids.insert(id);

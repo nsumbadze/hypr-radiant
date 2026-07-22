@@ -13,6 +13,11 @@ namespace hypr_radiant {
 
 class InputController {
   public:
+    // A leaked seat grab has an empty focusable-surface set, so it locks every client out of the
+    // keyboard for the rest of the session. Releasing here means that cannot outlive the object even
+    // if a future refactor drops the explicit uninstall() call.
+    ~InputController();
+
     using ActiveFn   = std::function<bool()>;
     using HitTestFn  = std::function<OverviewTarget(double, double)>;
     using ActivateFn = std::function<void(OverviewTarget)>;

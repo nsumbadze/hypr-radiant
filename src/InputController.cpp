@@ -51,6 +51,10 @@ std::optional<char> searchCharForKey(uint32_t key) {
 
 } // namespace
 
+InputController::~InputController() {
+    releaseKeyboard();
+}
+
 void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
     MoveFn move, ShelfScrollFn shelfScroll, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close,
     ToggleModeFn toggleMode) {

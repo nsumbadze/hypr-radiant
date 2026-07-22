@@ -55,7 +55,11 @@ bool ActivationController::activate(const OverviewTarget& target) const {
     if (!activateWorkspace(window->workspaceID()))
         return false;
 
-    Desktop::focusState()->fullWindowFocus(window, Desktop::FOCUS_REASON_SWITCH_TO_WINDOW_HARD);
+    const auto focus = Desktop::focusState();
+    if (!focus)
+        return false;
+
+    focus->fullWindowFocus(window, Desktop::FOCUS_REASON_SWITCH_TO_WINDOW_HARD);
     return true;
 }
 
