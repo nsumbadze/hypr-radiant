@@ -1,6 +1,8 @@
 #include <hypr-radiant/InputController.hpp>
 
+#include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/managers/SeatManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 
 #include <linux/input-event-codes.h>
@@ -21,6 +23,20 @@ bool pressed(wl_keyboard_key_state state) {
 
 bool pointerPressed(wl_pointer_button_state state) {
     return state == WL_POINTER_BUTTON_STATE_PRESSED;
+}
+
+bool ctrlHeld() {
+    if (!g_pSeatManager)
+        return false;
+
+    const auto keyboard = g_pSeatManager->m_keyboard.lock();
+    return keyboard && (keyboard->getModifiers() & HL_MODIFIER_CTRL) != 0;
+}
+
+// Touchpads report FINGER/CONTINUOUS scroll, which stays bound to the shelf. Only a physical
+// wheel opts into workspace stepping.
+bool fromMouseWheel(const IPointer::SAxisEvent& event) {
+    return event.mouse || event.source == WL_POINTER_AXIS_SOURCE_WHEEL;
 }
 
 std::optional<char> searchCharForKey(uint32_t key) {
@@ -92,7 +108,7 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (!inputArmed())
             return;
 
-        if (event.axis != WL_POINTER_AXIS_VERTICAL_SCROLL || !m_shelfScroll)
+        if (event.axis != WL_POINTER_AXIS_VERTICAL_SCROLL)
             return;
 
         const auto amount = event.deltaDiscrete != 0 ? static_cast<double>(event.deltaDiscrete) : event.delta;
@@ -104,8 +120,18 @@ void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn act
         if (std::abs(m_scrollAccumulator) < threshold)
             return;
 
-        m_shelfScroll(m_scrollAccumulator < 0.0);
-        m_scrollAccumulator = 0.0;
+        const auto scrollingUp = m_scrollAccumulator < 0.0;
+        m_scrollAccumulator    = 0.0;
+
+        // Ctrl + wheel steps through workspaces, mirroring the horizontal three-finger swipe.
+        if (ctrlHeld() && fromMouseWheel(event)) {
+            if (m_move)
+                m_move(scrollingUp ? NavigationDirection::Left : NavigationDirection::Right);
+            return;
+        }
+
+        if (m_shelfScroll)
+            m_shelfScroll(scrollingUp);
     });
 
     m_keyListener = Event::bus()->m_events.input.keyboard.key.listen([this](IKeyboard::SKeyEvent event, Event::SCallbackInfo& info) {

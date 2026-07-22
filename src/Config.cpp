@@ -1,8 +1,6 @@
 #include <hypr-radiant/Config.hpp>
 
 #include <algorithm>
-#include <charconv>
-#include <cctype>
 #include <string>
 #include <string_view>
 
@@ -31,9 +29,9 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         "Overview accent color, or auto to inherit the focused Hyprland border.",
         "auto");
     m_backgroundColor = makeShared<Config::Values::CStringValue>(
-        "plugin:radiant:background_color", "Overview glass background color.", "111c18");
+        "plugin:radiant:background_color", "Overview glass background color, or auto to follow the Omarchy theme.", "auto");
     m_foregroundColor = makeShared<Config::Values::CStringValue>(
-        "plugin:radiant:foreground_color", "Overview text color.", "C1C497");
+        "plugin:radiant:foreground_color", "Overview text color, or auto to follow the Omarchy theme.", "auto");
     m_fontFamily = makeShared<Config::Values::CStringValue>(
         "plugin:radiant:font_family", "Overview interface font family.", "JetBrainsMono Nerd Font");
 
@@ -46,6 +44,8 @@ bool RadiantConfig::registerValues(HANDLE handle) {
     m_gestureDistance = makeShared<Config::Values::CFloatValue>(
         "plugin:radiant:gesture_distance", "Trackpad travel required to fully open the overview.", static_cast<float>(DEFAULT_GESTURE_DISTANCE),
         Config::Values::SFloatValueOptions{.min = 120.0F, .max = 800.0F});
+
+    refreshPalette();
 
     return HyprlandAPI::addConfigValueV2(handle, m_opacity) && HyprlandAPI::addConfigValueV2(handle, m_animationDurationMs) &&
         HyprlandAPI::addConfigValueV2(handle, m_layout) && HyprlandAPI::addConfigValueV2(handle, m_accentColor) &&
@@ -103,18 +103,26 @@ std::optional<CHyprColor> RadiantConfig::accentColorOverride() const {
     return CHyprColor{parsed->red, parsed->green, parsed->blue, parsed->alpha};
 }
 
+void RadiantConfig::refreshPalette() {
+    m_palette = loadOmarchyPalette();
+}
+
+const OmarchyPalette& RadiantConfig::palette() const {
+    return m_palette;
+}
+
+// An explicit config value wins; `auto` falls through to the active Omarchy theme, which itself
+// falls back to neutral gray when no theme file is readable.
 CHyprColor RadiantConfig::backgroundColor() const {
     const auto parsed = m_backgroundColor ? parseAccentColor(m_backgroundColor->value()) : std::nullopt;
-    if (!parsed)
-        return {0.067F, 0.110F, 0.094F, 1.0F};
-    return {parsed->red, parsed->green, parsed->blue, parsed->alpha};
+    const auto color  = parsed.value_or(m_palette.background);
+    return {color.red, color.green, color.blue, color.alpha};
 }
 
 CHyprColor RadiantConfig::foregroundColor() const {
     const auto parsed = m_foregroundColor ? parseAccentColor(m_foregroundColor->value()) : std::nullopt;
-    if (!parsed)
-        return {0.757F, 0.769F, 0.592F, 1.0F};
-    return {parsed->red, parsed->green, parsed->blue, parsed->alpha};
+    const auto color  = parsed.value_or(m_palette.foreground);
+    return {color.red, color.green, color.blue, color.alpha};
 }
 
 std::string RadiantConfig::fontFamily() const {
@@ -128,49 +136,6 @@ LayoutMode parseLayoutMode(std::string_view value) {
         return LayoutMode::WorkspaceWall;
 
     return LayoutMode::Stage;
-}
-
-std::optional<RadiantRgba> parseAccentColor(std::string_view value) {
-    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
-        value.remove_prefix(1);
-    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back())))
-        value.remove_suffix(1);
-
-    if (value.empty() || value == "auto")
-        return std::nullopt;
-
-    if (value.starts_with('#'))
-        value.remove_prefix(1);
-    else if (value.starts_with("rgba(") && value.ends_with(')')) {
-        value.remove_prefix(5);
-        value.remove_suffix(1);
-    } else if (value.starts_with("rgb(") && value.ends_with(')')) {
-        value.remove_prefix(4);
-        value.remove_suffix(1);
-    } else if (value.starts_with("0x")) {
-        value.remove_prefix(2);
-    }
-
-    if (value.size() != 6 && value.size() != 8)
-        return std::nullopt;
-
-    std::uint32_t hex = 0;
-    const auto [end, error] = std::from_chars(value.data(), value.data() + value.size(), hex, 16);
-    if (error != std::errc{} || end != value.data() + value.size())
-        return std::nullopt;
-
-    if (value.size() == 6)
-        hex = (hex << 8U) | 0xFFU;
-
-    constexpr auto channel = [](std::uint32_t number, unsigned shift) {
-        return static_cast<float>((number >> shift) & 0xFFU) / 255.0F;
-    };
-    return RadiantRgba{
-        .red   = channel(hex, 24U),
-        .green = channel(hex, 16U),
-        .blue  = channel(hex, 8U),
-        .alpha = channel(hex, 0U),
-    };
 }
 
 } // namespace hypr_radiant

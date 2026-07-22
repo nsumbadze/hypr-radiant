@@ -50,11 +50,11 @@ struct WorkspaceRail {
 };
 
 struct WorkspaceStage {
-    std::int64_t            workspaceId = -1;
-    std::string             name;
-    LayoutRect              bounds;
-    std::vector<WindowCard> windows;
-    bool                    empty = true;
+    std::int64_t              workspaceId = -1;
+    std::string               name;
+    LayoutRect                bounds;
+    std::vector<WindowCard>   windows;
+    bool                      empty = true;
 };
 
 struct WorkspaceWallFrame {

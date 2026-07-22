@@ -73,6 +73,7 @@ class OverlayRenderer {
     void onRenderStage(eRenderStage stage);
     void renderCurrentMonitor(double alpha);
     void damageAllMonitors() const;
+    void damageMonitorById(std::int64_t monitorId) const;
     void rebuildFrames();
     void rebuildSearchMatches();
     void selectFirstSearchMatch();
@@ -85,6 +86,10 @@ class OverlayRenderer {
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
     void renderColoredLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha,
         const CRegion& damage);
+    void renderCenteredLabel(const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage);
+    void renderRightAlignedLabel(const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage);
+    [[nodiscard]] SP<Render::ITexture> labelTexture(const std::string& text, double maxWidth, int pointSize, CHyprColor color);
+    [[nodiscard]] RadiantSize            measureLabel(const std::string& text, double maxWidth, int pointSize, CHyprColor color);
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
     [[nodiscard]] OverviewTarget searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const;
@@ -96,6 +101,9 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* frameForSelectedTarget() const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
+    /// Surface derived from the active theme background, stepped `lift` toward its contrasting
+    /// end. Lightens on dark themes and darkens on light ones.
+    [[nodiscard]] CHyprColor surfaceColor(float lift, double alpha) const;
     void resetPointerInteraction();
     void animateSelection();
 
@@ -115,6 +123,10 @@ class OverlayRenderer {
     std::unordered_map<std::int64_t, LayoutRect>          m_frameBoundsByMonitor;
     OverviewTarget                                        m_selectedTarget;
     std::int64_t                                          m_selectedFrameMonitorId = -1;
+    // -1 animates the stage on every monitor (open/refresh); otherwise only this monitor animates,
+    // so a hover-driven preview change stays local to the screen under the pointer.
+    std::int64_t                                          m_stageTransitionMonitorId = -1;
+    bool                                                  m_pointerInsideShelfBand = false;
     std::string                                           m_searchQuery;
     bool                                                  m_searchActive = false;
     OverviewMode                                          m_mode = OverviewMode::Spatial;

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <hypr-radiant/Color.hpp>
+#include <hypr-radiant/OmarchyPalette.hpp>
+
 #include <hyprland/src/config/values/types/FloatValue.hpp>
 #include <hyprland/src/config/values/types/IntValue.hpp>
 #include <hyprland/src/config/values/types/StringValue.hpp>
@@ -21,18 +24,14 @@ enum class LayoutMode {
 
 [[nodiscard]] LayoutMode parseLayoutMode(std::string_view value);
 
-struct RadiantRgba {
-    float red   = 0.0F;
-    float green = 0.0F;
-    float blue  = 0.0F;
-    float alpha = 1.0F;
-};
-
-[[nodiscard]] std::optional<RadiantRgba> parseAccentColor(std::string_view value);
-
 class RadiantConfig {
   public:
     bool registerValues(HANDLE handle);
+
+    /// Re-reads the active Omarchy theme palette. Called when the overview opens so a theme
+    /// switch is picked up without reloading the plugin.
+    void refreshPalette();
+    [[nodiscard]] const OmarchyPalette& palette() const;
 
     [[nodiscard]] float           opacity() const;
     [[nodiscard]] int             animationDurationMs() const;
@@ -56,6 +55,7 @@ class RadiantConfig {
     SP<Config::Values::CIntValue>    m_gestureEnabled;
     SP<Config::Values::CIntValue>    m_gestureFingers;
     SP<Config::Values::CFloatValue>  m_gestureDistance;
+    OmarchyPalette                   m_palette;
 };
 
 } // namespace hypr_radiant

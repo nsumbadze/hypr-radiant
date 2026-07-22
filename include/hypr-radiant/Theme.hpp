@@ -15,7 +15,7 @@ namespace hypr_radiant::Theme {
 }
 
 [[nodiscard]] constexpr int windowRadius() noexcept {
-    return 12;
+    return 14;
 }
 
 [[nodiscard]] constexpr int searchRadius() noexcept {
@@ -81,25 +81,9 @@ namespace hypr_radiant::Theme {
     return {0.067F, 0.110F, 0.094F, 0.78F};
 }
 
-/// Neutral backdrop used by the desktop/Omarchy rail-and-stage layout.
-[[nodiscard]] inline CHyprColor stageBackdropColor() noexcept {
-    return {0.018F, 0.020F, 0.024F, 0.76F};
-}
-
-[[nodiscard]] inline CHyprColor railColor() noexcept {
-    return {0.038F, 0.043F, 0.047F, 0.78F};
-}
-
-[[nodiscard]] inline CHyprColor railCardFill(bool selected, bool empty, float alpha) noexcept {
-    if (empty)
-        return {0.030F, 0.035F, 0.038F, 0.62F * alpha};
-    if (selected)
-        return {0.090F, 0.102F, 0.103F, 0.91F * alpha};
-    return {0.061F, 0.069F, 0.071F, 0.84F * alpha};
-}
-
-[[nodiscard]] inline CHyprColor stageWindowFill(float alpha) noexcept {
-    return {0.055F, 0.058F, 0.064F, 0.94F * alpha};
+/// Radius of a keycap chip in the shortcut deck.
+[[nodiscard]] constexpr int keycapRadius() noexcept {
+    return 5;
 }
 
 /// Background panel that frames the workspace grid.
