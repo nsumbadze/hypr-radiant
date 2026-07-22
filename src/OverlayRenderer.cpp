@@ -1387,8 +1387,8 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     if (!m_searchActive && dockProgress > 0.001) {
         // A shortcut dock: a small frosted capsule that rides up from the bottom edge, lit
         // along its rim by a two-stop gradient the way Hyprland lights a window border. It stays
-        // hidden until the pointer reaches the bottom or the wheel scrolls down, so the stage is
-        // uncluttered by shortcuts you already know.
+        // hidden until the pointer reaches the bottom edge, so the stage is uncluttered by
+        // shortcuts you already know.
         const auto dockAlpha = contentAlpha * dockProgress;
         const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
 

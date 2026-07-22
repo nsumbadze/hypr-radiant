@@ -93,12 +93,9 @@ bool RadiantPlugin::initialize() {
         [this](char value) { m_overlay.appendSearchChar(value); },
         [this] { m_overlay.backspaceSearch(); },
         [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
-        // Scroll runs the two edges as one axis: up brings the workspace shelf down from the top,
-        // down brings the hint dock up from the bottom, and each hides the other.
-        [this](bool scrollingUp) {
-            m_overlay.setWorkspaceShelfVisible(scrollingUp);
-            m_overlay.setHintDockVisible(!scrollingUp);
-        },
+        // Scroll stays bound to the workspace shelf alone. The hint dock is pointer-only: scrolling
+        // down is already the close gesture, so revealing the dock on it fought that.
+        [this](bool reveal) { m_overlay.setWorkspaceShelfVisible(reveal); },
         [this] { return m_overlay.searchActive(); },
         [this] { m_overlay.beginSearch(); },
         [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
