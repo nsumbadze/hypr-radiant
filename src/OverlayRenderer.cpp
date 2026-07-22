@@ -96,16 +96,6 @@ CHyprColor tintedSurface(CHyprColor surface, CHyprColor tint, double amount) {
     return surface;
 }
 
-CHyprColor resolvedAppSignalColor(const std::string& appClass, CHyprColor inheritedAccent) {
-    const auto color = appSignalColor(appClass, {
-                                               .r = static_cast<float>(inheritedAccent.r),
-                                               .g = static_cast<float>(inheritedAccent.g),
-                                               .b = static_cast<float>(inheritedAccent.b),
-                                               .a = static_cast<float>(inheritedAccent.a),
-                                           });
-    return {color.r, color.g, color.b, color.a};
-}
-
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
     for (const auto& monitor : state.monitors) {
         if (monitor.id == id)
@@ -1286,9 +1276,8 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         const auto radius = Theme::windowRadius();
 
         if (window.appGroupStart && m_mode != OverviewMode::Grouped) {
-            const auto glyphColor = resolvedAppSignalColor(window.appClass, accent);
             renderColoredLabel(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
-                18.0, Theme::hintSize(), glyphColor, stageAlpha * 0.92, damage);
+                18.0, Theme::hintSize(), accent, stageAlpha * 0.92, damage);
             renderLabel(window.appClass, displayRect.x + 24.0, displayRect.y - 22.0,
                 std::max(1.0, displayRect.width - 26.0), Theme::hintSize(), stageAlpha * 0.68, damage);
         }
@@ -1343,7 +1332,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         if (selected)
             drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(accent, stageAlpha * 0.64), damage, 1);
         renderColoredLabel(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
-            18.0, Theme::hintSize(), resolvedAppSignalColor(window.appClass, accent), stageAlpha * (selected ? 1.0 : 0.82), damage);
+            18.0, Theme::hintSize(), accent, stageAlpha * (selected ? 1.0 : 0.82), damage);
         renderLabel(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
             std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), stageAlpha * (selected ? 1.0 : 0.76), damage);
     }
