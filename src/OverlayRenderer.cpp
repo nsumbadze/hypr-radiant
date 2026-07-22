@@ -208,7 +208,6 @@ MonitorSnapshot snapshotForCurrentMonitor(const PHLMONITOR& monitor) {
         .position = {.x = monitor->m_position.x, .y = monitor->m_position.y},
         .size     = {.width = monitor->m_size.x, .height = monitor->m_size.y},
     };
-    snapshot.scale    = monitor->m_scale;
 
     if (monitor->m_activeWorkspace) {
         snapshot.activeWorkspaceId   = monitor->m_activeWorkspace->m_id;
@@ -814,10 +813,6 @@ bool OverlayRenderer::workspaceShelfVisible() const noexcept {
     return m_shelfTransition.targetVisible();
 }
 
-bool OverlayRenderer::hintDockVisible() const noexcept {
-    return m_dockTransition.targetVisible();
-}
-
 OverviewMode OverlayRenderer::mode() const noexcept {
     return m_mode;
 }
@@ -1081,9 +1076,9 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         hasContent    = true;
     }
 
-    const auto titleX = hasContent ? contentLeft : (mode == LayoutMode::Stage ? 48.0 : 46.0);
+    const auto titleX = hasContent ? contentLeft : 46.0;
     const auto titleY = hasContent ? std::max(34.0, contentTop - 58.0) : 34.0;
-    if (hasContent && mode != LayoutMode::Stage) {
+    if (hasContent) {
         const auto stageBox = CBox{
             std::max(18.0, contentLeft - 44.0),
             std::max(18.0, titleY - 24.0),
@@ -1099,27 +1094,6 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         const auto helpX     = contentLeft + centered(contentRight - contentLeft, helpWidth);
         renderLabel("\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 navigate \xc2\xb7 Enter activate \xc2\xb7 1-9 jump \xc2\xb7 / search \xc2\xb7 Esc close",
             helpX, frame.bounds.height - 16.0 - 24.0 + 4.0, helpWidth, Theme::hintSize(), contentAlpha * 0.68, damage);
-    }
-
-    bool   hasDock    = false;
-    double dockLeft   = frame.bounds.width;
-    double dockTop    = frame.bounds.height;
-    double dockRight  = 0.0;
-    double dockBottom = 0.0;
-    for (const auto& workspace : frame.workspaces) {
-        if (workspace.rect.height > 120.0 || workspace.rect.width <= 0.0)
-            continue;
-        hasDock    = true;
-        dockLeft   = std::min(dockLeft, workspace.rect.x);
-        dockTop    = std::min(dockTop, workspace.rect.y);
-        dockRight  = std::max(dockRight, workspace.rect.x + workspace.rect.width);
-        dockBottom = std::max(dockBottom, workspace.rect.y + workspace.rect.height);
-    }
-
-    if (hasDock && mode == LayoutMode::Stage) {
-        const auto dockBox = CBox{dockLeft - 12.0, dockTop - 10.0, dockRight - dockLeft + 24.0, dockBottom - dockTop + 20.0};
-        drawRect(CBox{dockBox.x + Theme::shadowOffsetX(), dockBox.y + Theme::shadowOffsetY(), dockBox.w, dockBox.h}, shadowColor, damage, 18);
-        drawRect(dockBox, withAlpha(Theme::panelColor(), contentAlpha), damage, 16);
     }
 
     for (const auto& workspace : frame.workspaces) {
@@ -1886,19 +1860,6 @@ void OverlayRenderer::renderCenteredLabel(
         return;
 
     renderColoredLabel(text, within.x + centered(within.w, size.width), within.y + centered(within.h, size.height),
-        within.w, pointSize, color, alpha, damage);
-}
-
-void OverlayRenderer::renderRightAlignedLabel(
-    const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage) {
-    if (alpha <= 0.001 || within.w <= 0.0)
-        return;
-
-    const auto size = measureLabel(text, within.w, pointSize, color);
-    if (size.width <= 0.0)
-        return;
-
-    renderColoredLabel(text, within.x + within.w - size.width, within.y + centered(within.h, size.height),
         within.w, pointSize, color, alpha, damage);
 }
 

@@ -26,8 +26,6 @@ struct MonitorSnapshot {
     std::int64_t  id                = -1;
     std::string   name;
     RadiantGeometry geometry;
-    float         scale             = 1.0F;
-    int           transform         = 0;
     std::int64_t  activeWorkspaceId = -1;
     std::string   activeWorkspaceName;
 };
@@ -36,10 +34,7 @@ struct WorkspaceSnapshot {
     std::int64_t id             = -1;
     std::string  name;
     std::int64_t monitorId      = -1;
-    std::string  monitorName;
-    bool         visible        = false;
     bool         special        = false;
-    int          fullscreenMode = 0;
 };
 
 struct WindowSnapshot {
@@ -48,13 +43,10 @@ struct WindowSnapshot {
     std::string   className;
     RadiantGeometry geometry;
     std::int64_t  workspaceId = -1;
-    std::string   workspaceName;
     std::int64_t  monitorId   = -1;
-    std::string   monitorName;
     bool          mapped      = false;
     bool          floating    = false;
     bool          fullscreen  = false;
-    bool          pinned      = false;
 };
 
 struct RadiantState {

@@ -29,7 +29,6 @@ class RadiantPlugin {
     SDispatchResult showApplication(const std::string& args);
     SDispatchResult shelf(const std::string& args);
     SDispatchResult status(const std::string& args);
-    [[nodiscard]] bool active() const noexcept;
 
   private:
     using Clock = std::chrono::steady_clock;

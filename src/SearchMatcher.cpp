@@ -48,18 +48,4 @@ std::vector<std::uint64_t> SearchMatcher::matchingStageWindowIds(const Workspace
     return matches;
 }
 
-std::optional<OverviewTarget> SearchMatcher::firstMatch(const WorkspaceWallFrame& frame, std::string_view query) const {
-    if (query.empty())
-        return std::nullopt;
-
-    for (const auto& workspace : frame.workspaces) {
-        for (const auto& window : workspace.windows) {
-            if (this->matches(window.label, query))
-                return OverviewTarget{.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
-        }
-    }
-
-    return std::nullopt;
-}
-
 } // namespace hypr_radiant

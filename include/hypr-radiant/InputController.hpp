@@ -19,7 +19,6 @@ class InputController {
     ~InputController();
 
     using ActiveFn   = std::function<bool()>;
-    using HitTestFn  = std::function<OverviewTarget(double, double)>;
     using ActivateFn = std::function<void(OverviewTarget)>;
     using PointerMoveFn = std::function<void(double, double)>;
     using PointerButtonFn = std::function<void(bool, double, double)>;
@@ -33,7 +32,7 @@ class InputController {
     using CloseFn    = std::function<void()>;
     using ToggleModeFn = std::function<void()>;
 
-    void install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
+    void install(ActiveFn active, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
         MoveFn move, ShelfScrollFn shelfScroll, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close,
         ToggleModeFn toggleMode);
     void uninstall();
@@ -49,7 +48,6 @@ class InputController {
     using Clock = std::chrono::steady_clock;
 
     ActiveFn            m_active;
-    HitTestFn           m_hitTest;
     ActivateFn          m_activate;
     PointerMoveFn       m_pointerMove;
     PointerButtonFn     m_pointerButton;

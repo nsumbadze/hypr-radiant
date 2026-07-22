@@ -25,7 +25,6 @@ void matchesCaseInsensitiveSubstring() {
 
 void emptyQueryHasNoMatches() {
     assert(SearchMatcher{}.matchingWindowIds(frame(), "").empty());
-    assert(!SearchMatcher{}.firstMatch(frame(), "").has_value());
 }
 
 void returnsAllMatchingWindowIdsInLayoutOrder() {
@@ -34,14 +33,6 @@ void returnsAllMatchingWindowIdsInLayoutOrder() {
     assert(matches[0] == 11);
     assert(matches[1] == 12);
     assert(matches[2] == 21);
-}
-
-void firstMatchReturnsWindowTarget() {
-    const auto target = SearchMatcher{}.firstMatch(frame(), "disc");
-    assert(target.has_value());
-    assert(target->type == OverviewTargetType::Window);
-    assert(target->workspaceId == 2);
-    assert(target->windowId == 21);
 }
 
 void stageSearchMatchesApplicationClass() {
@@ -60,7 +51,6 @@ int main() {
     matchesCaseInsensitiveSubstring();
     emptyQueryHasNoMatches();
     returnsAllMatchingWindowIdsInLayoutOrder();
-    firstMatchReturnsWindowTarget();
     stageSearchMatchesApplicationClass();
     std::cout << "SearchMatcherTest passed\n";
     return 0;

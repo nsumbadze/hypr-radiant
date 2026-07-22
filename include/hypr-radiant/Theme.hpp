@@ -10,10 +10,6 @@ namespace hypr_radiant::Theme {
     return compact ? 14 : 22;
 }
 
-[[nodiscard]] constexpr int railRadius() noexcept {
-    return 22;
-}
-
 [[nodiscard]] constexpr int windowRadius() noexcept {
     return 14;
 }
@@ -34,10 +30,6 @@ namespace hypr_radiant::Theme {
 
 [[nodiscard]] constexpr double shadowOffsetY() noexcept {
     return 12.0;
-}
-
-[[nodiscard]] constexpr double shadowBlur() noexcept {
-    return 22.0;
 }
 
 // ── Typography sizes ──────────────────────────────────────────
@@ -81,11 +73,6 @@ namespace hypr_radiant::Theme {
     return {0.067F, 0.110F, 0.094F, 0.78F};
 }
 
-/// Radius of a keycap chip in the shortcut deck.
-[[nodiscard]] constexpr int keycapRadius() noexcept {
-    return 5;
-}
-
 /// Background panel that frames the workspace grid.
 [[nodiscard]] inline CHyprColor panelColor() noexcept {
     return {0.018F, 0.021F, 0.030F, 0.90F};
@@ -123,16 +110,6 @@ namespace hypr_radiant::Theme {
     return {0.314F, 0.580F, 0.459F, 1.0F};
 }
 
-/// Cool signal used sparingly at the leading edge of animated rail accents.
-[[nodiscard]] inline CHyprColor signalColor() noexcept {
-    return {0.200F, 0.800F, 1.000F, 1.0F};
-}
-
-/// Text colour (#C1C497).
-[[nodiscard]] inline CHyprColor textColor() noexcept {
-    return {0.757F, 0.769F, 0.592F, 1.0F};
-}
-
 /// Drop-shadow colour.
 [[nodiscard]] inline CHyprColor shadowColor() noexcept {
     return {0.000F, 0.000F, 0.000F, 0.45F};
@@ -167,11 +144,6 @@ namespace hypr_radiant::Theme {
     if (selected)
         return {0.178F, 0.160F, 0.115F, 0.98F * alpha};
     return {0.092F, 0.099F, 0.125F, 0.82F * alpha};
-}
-
-/// Accent bar colour for the selected search row (amber/gold).
-[[nodiscard]] inline CHyprColor searchRowAccent() noexcept {
-    return {0.980F, 0.740F, 0.280F, 1.0F};
 }
 
 [[nodiscard]] inline CHyprColor searchBadgeSpace() noexcept {

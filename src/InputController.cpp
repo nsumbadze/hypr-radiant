@@ -55,11 +55,10 @@ InputController::~InputController() {
     releaseKeyboard();
 }
 
-void InputController::install(ActiveFn active, HitTestFn hitTest, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
+void InputController::install(ActiveFn active, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
     MoveFn move, ShelfScrollFn shelfScroll, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close,
     ToggleModeFn toggleMode) {
     m_active   = std::move(active);
-    m_hitTest  = std::move(hitTest);
     m_activate = std::move(activate);
     m_pointerMove = std::move(pointerMove);
     m_pointerButton = std::move(pointerButton);
@@ -255,7 +254,6 @@ void InputController::uninstall() {
     m_mouseAxisListener.reset();
     m_keyListener.reset();
     m_active = {};
-    m_hitTest = {};
     m_activate = {};
     m_pointerMove = {};
     m_pointerButton = {};

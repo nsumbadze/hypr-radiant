@@ -16,8 +16,8 @@ namespace {
 RadiantState sampleState() {
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 2, .activeWorkspaceName = "2"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
+    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1});
     state.windows.push_back({
         .stableId = 10,
         .title = "Editor",
@@ -84,8 +84,8 @@ void focusedStageFillsGapsWithEmptyWorkspaces() {
     // both made those workspaces look unavailable and shifted every card sideways as they emptied.
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5, .activeWorkspaceName = "5"});
-    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 5, .name = "five", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1});
+    state.workspaces.push_back({.id = 5, .name = "five", .monitorId = 1});
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
@@ -110,8 +110,8 @@ void hugeWorkspaceIdDoesNotExplodeTheRail() {
     // exhausted memory. Real workspaces stay listed; only the empty slots between them are bounded.
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5000000, .activeWorkspaceName = "5000000"});
-    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 5000000, .name = "far", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1});
+    state.workspaces.push_back({.id = 5000000, .name = "far", .monitorId = 1});
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
@@ -129,7 +129,7 @@ void clientLabelsAreTruncated() {
     // unbounded one becomes a multi-megabyte surface.
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
     state.windows.push_back({
         .stableId = 1,
         .title = std::string(64000, 'x'),
@@ -176,9 +176,9 @@ void focusedStageCardSpacingMatchesSpec() {
 void focusedStageEmptyNextWorkspaceGeometry() {
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 3, .activeWorkspaceName = "3"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 3, .name = "3", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
+    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1});
+    state.workspaces.push_back({.id = 3, .name = "3", .monitorId = 1});
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
@@ -252,10 +252,10 @@ void multiMonitorPerFrameBounds() {
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 2, .activeWorkspaceName = "2"});
     state.monitors.push_back({.id = 2, .name = "HDMI-A-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5, .activeWorkspaceName = "5"});
 
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1, .monitorName = "DP-1", .visible = true});
-    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 2, .monitorName = "HDMI-A-1"});
-    state.workspaces.push_back({.id = 5, .name = "5", .monitorId = 2, .monitorName = "HDMI-A-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
+    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1});
+    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 2});
+    state.workspaces.push_back({.id = 5, .name = "5", .monitorId = 2});
 
     const auto frame1 = WorkspaceWallLayout{}.compute(state, state.monitors.at(0), {.width = 1920, .height = 1080}, stageOptions());
     const auto frame2 = WorkspaceWallLayout{}.compute(state, state.monitors.at(1), {.width = 1920, .height = 1080}, stageOptions());
@@ -319,7 +319,7 @@ void searchPanelGeometryCapsAtScreenSize() {
 void tinyRenderSizeDoesNotProduceNegativeRects() {
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 20, .height = 20}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
     state.windows.push_back({.stableId = 2, .title = "Two", .workspaceId = 1, .monitorId = 1, .mapped = true});
     state.windows.push_back({.stableId = 1, .title = "One", .workspaceId = 1, .monitorId = 1, .mapped = true});
 
@@ -342,7 +342,7 @@ void tinyRenderSizeDoesNotProduceNegativeRects() {
 void sortsWindowsByStableId() {
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
     state.windows.push_back({.stableId = 30, .title = "Thirty", .workspaceId = 1, .monitorId = 1, .mapped = true});
     state.windows.push_back({.stableId = 10, .title = "Ten", .workspaceId = 1, .monitorId = 1, .mapped = true});
 
@@ -356,7 +356,7 @@ void sortsWindowsByStableId() {
 void fillsEmptySlotsAndFallsBackToClassName() {
     RadiantState state;
     state.monitors.push_back({.id = 7, .name = "HDMI-A-1", .geometry = {.size = {.width = 1280, .height = 720}}, .activeWorkspaceId = 4, .activeWorkspaceName = "4"});
-    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 7, .monitorName = "HDMI-A-1", .visible = true});
+    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 7});
     state.windows.push_back({.stableId = 44, .className = "Firefox", .workspaceId = 4, .monitorId = 7, .mapped = true});
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1280, .height = 720});
@@ -410,7 +410,7 @@ void appExposeFiltersAcrossLocalWorkspaces() {
 
 void newWorkspaceTargetAvoidsOtherMonitorIds() {
     auto state = sampleState();
-    state.workspaces.push_back({.id = 7, .name = "remote", .monitorId = 2, .monitorName = "HDMI-A-1"});
+    state.workspaces.push_back({.id = 7, .name = "remote", .monitorId = 2});
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
     assert(frame.workspaces.back().createTarget);

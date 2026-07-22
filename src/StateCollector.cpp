@@ -39,13 +39,6 @@ std::string workspaceName(const PHLWORKSPACE& workspace) {
     return workspace->m_name;
 }
 
-std::string monitorName(const PHLMONITOR& monitor) {
-    if (!monitor)
-        return "";
-
-    return monitor->m_name;
-}
-
 } // namespace
 
 RadiantState StateCollector::collect() const {
@@ -66,8 +59,6 @@ RadiantState StateCollector::collect() const {
             .id                  = monitorId(monitor),
             .name                = monitor->m_name,
             .geometry            = geometryFrom(monitor->m_position, monitor->m_size),
-            .scale               = monitor->m_scale,
-            .transform           = static_cast<int>(monitor->m_transform),
             .activeWorkspaceId   = workspaceId(activeWorkspace),
             .activeWorkspaceName = valid(activeWorkspace) ? activeWorkspace->m_name : "",
         });
@@ -84,10 +75,7 @@ RadiantState StateCollector::collect() const {
             .id             = workspaceId(workspace),
             .name           = workspaceName(workspace),
             .monitorId      = validMonitor ? monitorId(monitor) : -1,
-            .monitorName    = validMonitor ? monitorName(monitor) : "",
-            .visible        = workspace->m_visible,
             .special        = workspace->m_isSpecialWorkspace,
-            .fullscreenMode = static_cast<int>(workspace->m_fullscreenMode),
         });
     }
 
@@ -105,13 +93,10 @@ RadiantState StateCollector::collect() const {
             .className     = window->m_class,
             .geometry      = geometryFrom(window->m_realPosition->value(), window->m_realSize->value()),
             .workspaceId   = workspaceId(workspace),
-            .workspaceName = workspaceName(workspace),
             .monitorId     = validMonitor ? monitorId(monitor) : -1,
-            .monitorName   = validMonitor ? monitorName(monitor) : "",
             .mapped        = window->m_isMapped,
             .floating      = window->m_isFloating,
             .fullscreen    = window->m_fullscreenState.internal != FSMODE_NONE || window->m_fullscreenState.client != FSMODE_NONE,
-            .pinned        = window->m_pinned,
         });
     }
 

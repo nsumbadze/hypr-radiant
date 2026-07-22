@@ -21,7 +21,6 @@ struct WindowCard {
     LayoutRect    rect;
     std::string   label;
     std::string   appClass;
-    bool          focused     = false;
     bool          floating    = false;
     bool          fullscreen  = false;
     bool          appGroupStart = false;

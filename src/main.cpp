@@ -81,7 +81,6 @@ bool RadiantPlugin::initialize() {
     });
     m_input.install(
         [this] { return m_overlay.active(); },
-        [this](double x, double y) { return m_overlay.hitTest(x, y); },
         [this](OverviewTarget target) { activate(target, "keyboard activation"); },
         [this](double x, double y) { m_overlay.pointerMoved(x, y); },
         [this](bool pressed, double x, double y) {
@@ -304,10 +303,6 @@ SDispatchResult RadiantPlugin::close(const std::string& args) {
     m_input.releaseKeyboard();
     recordTransition("closed by explicit dispatcher", true);
     return {.passEvent = false, .success = true, .error = ""};
-}
-
-bool RadiantPlugin::active() const noexcept {
-    return m_overlay.active();
 }
 
 } // namespace hypr_radiant
