@@ -1355,92 +1355,64 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     }
 
     if (!m_searchActive) {
-        const auto modeLabel = m_mode == OverviewMode::Grouped ? "Apps" : m_mode == OverviewMode::AppExpose ? "App Exposé" : "Spatial";
+        // A statusline rather than a floating keycap tray: this audience reads <CR> and <Esc> as
+        // text, so embossed caps in a rounded pill were borrowing a GUI idiom that fights the
+        // tiling-WM surroundings. Flush to the bottom edge, mode block hard left the way lualine
+        // anchors NORMAL, keys at full weight with their actions dimmed behind them.
+        const auto modeLabel =
+            m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
 
-        // Each shortcut is a raised keycap chip followed by its action, so the deck reads as
-        // deliberate chrome rather than a run-on line of text.
         struct DeckHint {
-            const char* cap;
-            const char* label;
+            const char* keys;
+            const char* action;
         };
-        static constexpr std::array<DeckHint, 5> HINTS{{
-                {"\xe2\x86\x90\xe2\x86\x92", "navigate"},
-                {"\xe2\x87\xa5", "view"},
-                {"\xe2\x86\xb5", "open"},
-                {"/", "search"},
-                {"esc", "close"},
+        // Only bindings that actually exist: every letter key falls through to search, so there is
+        // no hjkl to advertise. Up/Down was missing from the old deck entirely.
+        static constexpr std::array<DeckHint, 6> HINTS{{
+                {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
+                {"\xe2\x86\x91\xe2\x86\x93", "window"},
+                {"<Tab>", "group"},
+                {"<CR>", "open"},
+                {"/", "find"},
+                {"<Esc>", "close"},
             }};
 
-        constexpr auto deckPaddingX = 18.0;
-        constexpr auto deckHeight   = 40.0;
-        constexpr auto capHeight    = 22.0;
-        constexpr auto capPadX      = 9.0;
-        constexpr auto capMinWidth  = 26.0;
-        constexpr auto capGap       = 7.0;
-        constexpr auto groupGap     = 18.0;
-        constexpr auto dividerGap   = 18.0;
+        constexpr auto barHeight    = 30.0;
+        constexpr auto modePadX     = 14.0;
+        constexpr auto hintsPadX    = 16.0;
+        constexpr auto keysGap      = 7.0;
+        constexpr auto pairGap      = 18.0;
         constexpr auto measureWidth = 240.0;
 
         const auto foreground = m_config.foregroundColor();
+        const auto bar        = CBox{0.0, frame.bounds.height - barHeight, frame.bounds.width, barHeight};
 
-        std::array<double, HINTS.size()> capWidths{};
-        std::array<double, HINTS.size()> labelWidths{};
-        std::array<double, HINTS.size()> labelHeights{};
-        auto contentWidth = 0.0;
-        for (std::size_t i = 0; i < HINTS.size(); ++i) {
-            const auto capSize   = measureLabel(HINTS[i].cap, measureWidth, Theme::hintSize(), foreground);
-            const auto labelSize = measureLabel(HINTS[i].label, measureWidth, Theme::hintSize(), foreground);
-            capWidths[i]    = std::max(capMinWidth, capSize.width + capPadX * 2.0);
-            labelWidths[i]  = labelSize.width;
-            labelHeights[i] = labelSize.height;
-            contentWidth += capWidths[i] + capGap + labelWidths[i] + (i + 1 < HINTS.size() ? groupGap : 0.0);
+        drawRect(bar, withAlpha(railSurface, contentAlpha * 0.92), damage);
+        // Hairline along the top edge instead of an outline: a statusline is bounded by the screen,
+        // not by a box floating in front of it.
+        drawRect(CBox{bar.x, bar.y, bar.w, 1.0}, withAlpha(accent, contentAlpha * 0.22), damage);
+
+        const auto modeSize  = measureLabel(modeLabel, measureWidth, Theme::hintSize(), foreground);
+        const auto modeWidth = modeSize.width + modePadX * 2.0;
+        const auto modeBox   = CBox{bar.x, bar.y, modeWidth, bar.h};
+        // The one accent moment in the deck; everything right of it stays monochrome.
+        drawRect(modeBox, withAlpha(accent, contentAlpha * 0.92), damage);
+        renderCenteredLabel(modeLabel, modeBox, Theme::hintSize(), m_config.backgroundColor(), contentAlpha, damage);
+
+        auto cursorX = modeBox.x + modeBox.w + hintsPadX;
+        for (const auto& hint : HINTS) {
+            const auto keysSize   = measureLabel(hint.keys, measureWidth, Theme::hintSize(), foreground);
+            const auto actionSize = measureLabel(hint.action, measureWidth, Theme::hintSize(), foreground);
+            if (cursorX + keysSize.width + keysGap + actionSize.width > bar.x + bar.w - hintsPadX)
+                break;
+
+            renderColoredLabel(hint.keys, cursorX, bar.y + centered(bar.h, keysSize.height), measureWidth,
+                Theme::hintSize(), foreground, contentAlpha * 0.95, damage);
+            cursorX += keysSize.width + keysGap;
+            renderColoredLabel(hint.action, cursorX, bar.y + centered(bar.h, actionSize.height), measureWidth,
+                Theme::hintSize(), foreground, contentAlpha * 0.55, damage);
+            cursorX += actionSize.width + pairGap;
         }
-        const auto modeSize = measureLabel(modeLabel, measureWidth, Theme::hintSize(), foreground);
-        contentWidth += dividerGap * 2.0 + 1.0 + modeSize.width;
-
-        const auto maxDeckWidth = std::max(1.0, frame.bounds.width - 64.0);
-        const auto deckWidth    = std::min(maxDeckWidth, contentWidth + deckPaddingX * 2.0);
-        const auto deck = CBox{centered(frame.bounds.width, deckWidth), frame.bounds.height - 58.0, deckWidth, deckHeight};
-
-        drawRect(CBox{deck.x + 5.0, deck.y + 8.0, deck.w, deck.h}, withAlpha(Theme::shadowColor(), contentAlpha * 0.60), damage, 16);
-        drawRect(deck, withAlpha(railSurface, contentAlpha * 0.88), damage, 16, true);
-        if (g_pHyprRenderer) {
-            CBorderPassElement::SBorderData border;
-            border.box        = deck;
-            border.grad1      = Config::CGradientValueData{withAlpha(accent, contentAlpha * 0.20)};
-            border.a          = static_cast<float>(accent.a * contentAlpha * 0.20);
-            border.round      = 16;
-            border.borderSize = 1;
-            g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
-        }
-
-        auto       cursorX = deck.x + deckPaddingX;
-        const auto capY    = deck.y + centered(deck.h, capHeight);
-        for (std::size_t i = 0; i < HINTS.size(); ++i) {
-            const auto capBox = CBox{cursorX, capY, capWidths[i], capHeight};
-            drawRect(capBox, surfaceColor(0.22F, contentAlpha * 0.92), damage, Theme::keycapRadius());
-            if (g_pHyprRenderer) {
-                CBorderPassElement::SBorderData capBorder;
-                const auto                     capEdge = surfaceColor(0.40F, contentAlpha * 0.55);
-                capBorder.box        = capBox;
-                capBorder.grad1      = Config::CGradientValueData{capEdge};
-                capBorder.a          = capEdge.a;
-                capBorder.round      = Theme::keycapRadius();
-                capBorder.borderSize = 1;
-                g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(capBorder));
-            }
-            renderCenteredLabel(HINTS[i].cap, capBox, Theme::hintSize(), foreground, contentAlpha * 0.96, damage);
-            cursorX += capWidths[i] + capGap;
-            renderColoredLabel(HINTS[i].label, cursorX, deck.y + centered(deck.h, labelHeights[i]), measureWidth,
-                Theme::hintSize(), foreground, contentAlpha * 0.62, damage);
-            cursorX += labelWidths[i] + (i + 1 < HINTS.size() ? groupGap : 0.0);
-        }
-
-        cursorX += dividerGap;
-        drawRect(CBox{cursorX, deck.y + deck.h * 0.28, 1.0, deck.h * 0.44}, withAlpha(foreground, contentAlpha * 0.22), damage);
-        cursorX += 1.0 + dividerGap;
-        renderColoredLabel(modeLabel, cursorX, deck.y + centered(deck.h, modeSize.height), measureWidth, Theme::hintSize(),
-            foreground, contentAlpha * 0.90, damage);
     } else {
         auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
