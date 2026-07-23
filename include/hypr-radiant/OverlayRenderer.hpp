@@ -84,6 +84,7 @@ class OverlayRenderer {
     void clearSearch();
     void renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderStageFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
+    void renderHintDock(const WorkspaceWallFrame& frame, double contentAlpha, CHyprColor accent, CHyprColor railSurface, const CRegion& damage);
     void renderWindowPreview(const WindowCard& window, const CBox& clipBox, double alpha, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);

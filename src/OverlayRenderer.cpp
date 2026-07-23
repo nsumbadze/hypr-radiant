@@ -101,6 +101,11 @@ void drawBorder(const CBox& box, CHyprColor from, CHyprColor to, float angle, fl
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
 }
 
+CHyprColor withAlpha(CHyprColor color, double multiplier) {
+    color.a *= multiplier;
+    return color;
+}
+
 CHyprColor tintedSurface(CHyprColor surface, CHyprColor tint, double amount) {
     const auto mix = static_cast<float>(std::clamp(amount, 0.0, 1.0));
     surface.r = std::lerp(surface.r, tint.r, mix);
@@ -1018,10 +1023,6 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     const auto searchActive = m_searchActive;
     const auto contentAlpha = searchActive ? alpha * 0.055 : alpha;
 
-    const auto withAlpha = [](CHyprColor color, double multiplier) {
-        color.a *= multiplier;
-        return color;
-    };
     const auto shadowColor = withAlpha(Theme::shadowColor(), contentAlpha);
 
     double contentLeft   = frame.bounds.width;
@@ -1140,11 +1141,94 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     }
 }
 
+void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double contentAlpha, CHyprColor accent, CHyprColor railSurface,
+    const CRegion& damage) {
+const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
+    if (!m_searchActive && dockProgress > 0.001) {
+        // A shortcut dock: a small frosted capsule that rides up from the bottom edge, lit
+        // along its rim by a two-stop gradient the way Hyprland lights a window border. It stays
+        // hidden until the pointer reaches the bottom edge, so the stage is uncluttered by
+        // shortcuts you already know.
+        const auto dockAlpha = contentAlpha * dockProgress;
+        const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
+
+        struct DeckHint {
+            const char* keys;
+            const char* action;
+        };
+        // Only bindings that actually exist: every letter key falls through to search, so there is
+        // no hjkl to advertise.
+        static constexpr std::array<DeckHint, 5> HINTS{{
+                {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
+                {"\xe2\x86\x91\xe2\x86\x93", "window"},
+                {"\xe2\x87\xa5", "group"},
+                {"\xe2\x86\xb5", "open"},
+                {"/", "find"},
+            }};
+
+        constexpr auto dockHeight   = 26.0;
+        constexpr auto dockPadR     = 15.0;
+        constexpr auto pillInset    = 4.0;
+        constexpr auto pillPadX     = 11.0;
+        constexpr auto pillGap      = 13.0;
+        constexpr auto keysGap      = 6.0;
+        constexpr auto pairGap      = 15.0;
+        constexpr auto measureWidth = 240.0;
+        constexpr auto riseDistance = 14.0;
+        constexpr auto rimAngle     = 2.62F;
+
+        const auto foreground = m_config.foregroundColor();
+        // Derived from the live theme rather than a fixed pair, so the rim tracks accent_color and
+        // falls back with it when the config leaves the defaults in place.
+        const auto rimLit   = tintedSurface(accent, foreground, 0.42);
+        const auto rimShade = withAlpha(accent, 0.16);
+
+        const auto pillHeight = dockHeight - pillInset * 2.0;
+        const auto modeSize   = measureLabel(modeLabel, measureWidth, Theme::hintSize(), foreground);
+        const auto pillWidth  = modeSize.width + pillPadX * 2.0;
+
+        auto contentWidth = pillInset + pillWidth + pillGap;
+        std::array<double, HINTS.size()> keyWidths{};
+        std::array<double, HINTS.size()> actionWidths{};
+        for (std::size_t i = 0; i < HINTS.size(); ++i) {
+            keyWidths[i]    = measureLabel(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground).width;
+            actionWidths[i] = measureLabel(HINTS[i].action, measureWidth, Theme::hintSize(), foreground).width;
+            contentWidth += keyWidths[i] + keysGap + actionWidths[i] + (i + 1 < HINTS.size() ? pairGap : 0.0);
+        }
+        contentWidth += dockPadR;
+
+        const auto dockWidth = std::min(std::max(1.0, frame.bounds.width - 64.0), contentWidth);
+        // Rides up into place, so the reveal reads as the dock arriving rather than fading in.
+        const auto dockY = frame.bounds.height - 34.0 - dockHeight + (1.0 - dockProgress) * riseDistance;
+        const auto dock  = CBox{centered(frame.bounds.width, dockWidth), dockY, dockWidth, dockHeight};
+        const auto radius = static_cast<int>(std::round(dockHeight / 2.0));
+
+        // Ambient then contact shadow, matching how the window cards are lifted off the backdrop.
+        drawRect(CBox{dock.x - 3.0, dock.y + 9.0, dock.w + 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.40), damage, radius + 6);
+        drawRect(CBox{dock.x + 3.0, dock.y + 5.0, dock.w - 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
+        drawRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
+
+        drawBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), rimShade, rimAngle, static_cast<float>(dockAlpha * 0.55), radius, 1);
+
+        const auto pillBox = CBox{dock.x + pillInset, dock.y + pillInset, pillWidth, pillHeight};
+        drawRect(pillBox, withAlpha(accent, dockAlpha * 0.95), damage, static_cast<int>(std::round(pillHeight / 2.0)), true);
+        renderCenteredLabel(modeLabel, pillBox, Theme::hintSize(), m_config.backgroundColor(), dockAlpha, damage);
+
+        auto cursorX = pillBox.x + pillBox.w + pillGap;
+        for (std::size_t i = 0; i < HINTS.size(); ++i) {
+            const auto keySize    = measureLabel(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground);
+            const auto actionSize = measureLabel(HINTS[i].action, measureWidth, Theme::hintSize(), foreground);
+            renderColoredLabel(HINTS[i].keys, cursorX, dock.y + centered(dock.h, keySize.height), measureWidth,
+                Theme::hintSize(), rimLit, dockAlpha * 0.96, damage);
+            cursorX += keyWidths[i] + keysGap;
+            renderColoredLabel(HINTS[i].action, cursorX, dock.y + centered(dock.h, actionSize.height), measureWidth,
+                Theme::hintSize(), foreground, dockAlpha * 0.58, damage);
+            cursorX += actionWidths[i] + pairGap;
+        }
+    }
+}
+
 void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
-    const auto withAlpha = [](CHyprColor color, double multiplier) {
-        color.a *= multiplier;
-        return color;
-    };
 
     const auto searchMultiplier = m_searchActive ? 0.16 : 1.0;
     // Monitors are not dimmed by which one holds the selection: every monitor shows its own
@@ -1421,89 +1505,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         }
     }
 
-    const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
-    if (!m_searchActive && dockProgress > 0.001) {
-        // A shortcut dock: a small frosted capsule that rides up from the bottom edge, lit
-        // along its rim by a two-stop gradient the way Hyprland lights a window border. It stays
-        // hidden until the pointer reaches the bottom edge, so the stage is uncluttered by
-        // shortcuts you already know.
-        const auto dockAlpha = contentAlpha * dockProgress;
-        const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
-
-        struct DeckHint {
-            const char* keys;
-            const char* action;
-        };
-        // Only bindings that actually exist: every letter key falls through to search, so there is
-        // no hjkl to advertise.
-        static constexpr std::array<DeckHint, 5> HINTS{{
-                {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
-                {"\xe2\x86\x91\xe2\x86\x93", "window"},
-                {"\xe2\x87\xa5", "group"},
-                {"\xe2\x86\xb5", "open"},
-                {"/", "find"},
-            }};
-
-        constexpr auto dockHeight   = 26.0;
-        constexpr auto dockPadR     = 15.0;
-        constexpr auto pillInset    = 4.0;
-        constexpr auto pillPadX     = 11.0;
-        constexpr auto pillGap      = 13.0;
-        constexpr auto keysGap      = 6.0;
-        constexpr auto pairGap      = 15.0;
-        constexpr auto measureWidth = 240.0;
-        constexpr auto riseDistance = 14.0;
-        constexpr auto rimAngle     = 2.62F;
-
-        const auto foreground = m_config.foregroundColor();
-        // Derived from the live theme rather than a fixed pair, so the rim tracks accent_color and
-        // falls back with it when the config leaves the defaults in place.
-        const auto rimLit   = tintedSurface(accent, foreground, 0.42);
-        const auto rimShade = withAlpha(accent, 0.16);
-
-        const auto pillHeight = dockHeight - pillInset * 2.0;
-        const auto modeSize   = measureLabel(modeLabel, measureWidth, Theme::hintSize(), foreground);
-        const auto pillWidth  = modeSize.width + pillPadX * 2.0;
-
-        auto contentWidth = pillInset + pillWidth + pillGap;
-        std::array<double, HINTS.size()> keyWidths{};
-        std::array<double, HINTS.size()> actionWidths{};
-        for (std::size_t i = 0; i < HINTS.size(); ++i) {
-            keyWidths[i]    = measureLabel(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground).width;
-            actionWidths[i] = measureLabel(HINTS[i].action, measureWidth, Theme::hintSize(), foreground).width;
-            contentWidth += keyWidths[i] + keysGap + actionWidths[i] + (i + 1 < HINTS.size() ? pairGap : 0.0);
-        }
-        contentWidth += dockPadR;
-
-        const auto dockWidth = std::min(std::max(1.0, frame.bounds.width - 64.0), contentWidth);
-        // Rides up into place, so the reveal reads as the dock arriving rather than fading in.
-        const auto dockY = frame.bounds.height - 34.0 - dockHeight + (1.0 - dockProgress) * riseDistance;
-        const auto dock  = CBox{centered(frame.bounds.width, dockWidth), dockY, dockWidth, dockHeight};
-        const auto radius = static_cast<int>(std::round(dockHeight / 2.0));
-
-        // Ambient then contact shadow, matching how the window cards are lifted off the backdrop.
-        drawRect(CBox{dock.x - 3.0, dock.y + 9.0, dock.w + 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.40), damage, radius + 6);
-        drawRect(CBox{dock.x + 3.0, dock.y + 5.0, dock.w - 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
-        drawRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
-
-        drawBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), rimShade, rimAngle, static_cast<float>(dockAlpha * 0.55), radius, 1);
-
-        const auto pillBox = CBox{dock.x + pillInset, dock.y + pillInset, pillWidth, pillHeight};
-        drawRect(pillBox, withAlpha(accent, dockAlpha * 0.95), damage, static_cast<int>(std::round(pillHeight / 2.0)), true);
-        renderCenteredLabel(modeLabel, pillBox, Theme::hintSize(), m_config.backgroundColor(), dockAlpha, damage);
-
-        auto cursorX = pillBox.x + pillBox.w + pillGap;
-        for (std::size_t i = 0; i < HINTS.size(); ++i) {
-            const auto keySize    = measureLabel(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground);
-            const auto actionSize = measureLabel(HINTS[i].action, measureWidth, Theme::hintSize(), foreground);
-            renderColoredLabel(HINTS[i].keys, cursorX, dock.y + centered(dock.h, keySize.height), measureWidth,
-                Theme::hintSize(), rimLit, dockAlpha * 0.96, damage);
-            cursorX += keyWidths[i] + keysGap;
-            renderColoredLabel(HINTS[i].action, cursorX, dock.y + centered(dock.h, actionSize.height), measureWidth,
-                Theme::hintSize(), foreground, dockAlpha * 0.58, damage);
-            cursorX += actionWidths[i] + pairGap;
-        }
-    }
+    renderHintDock(frame, contentAlpha, accent, railSurface, damage);
 
     if (m_searchActive) {
         auto dim = m_config.backgroundColor();
@@ -1560,10 +1562,6 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
     const auto visibleStart   = visibleSearchStart(targets, m_selectedTarget, geometry.capacity);
     const auto visibleEnd     = std::min(targets.size(), visibleStart + geometry.capacity);
 
-    const auto withAlpha = [](CHyprColor color, double multiplier) {
-        color.a *= multiplier;
-        return color;
-    };
     const auto accent = resolvedAccentColor();
     const auto background = m_config.backgroundColor();
 
