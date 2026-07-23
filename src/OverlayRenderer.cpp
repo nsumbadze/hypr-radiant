@@ -1228,6 +1228,140 @@ const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
     }
 }
 
+void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const StageContext& ctx, const CRegion& damage) {
+    for (const auto& window : frame.stage.windows) {
+        // A window that has already unmapped has nothing left to preview, and drawing its card
+        // anyway left an empty surface sitting on the stage until the next collect landed.
+        if (!findLiveWindow(window.stableId))
+            continue;
+        const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
+            m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
+        auto displayRect = remapStageRect(window.rect, frame.stage.bounds, ctx.pushedStageBounds);
+        if (selected)
+            displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.014, ctx.selectionTransition), -3.0 * ctx.selectionTransition);
+        const auto windowBox = boxFor(displayRect);
+        const auto radius = Theme::windowRadius();
+
+        if (window.appGroupStart && m_mode != OverviewMode::Grouped) {
+            renderColoredLabel(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
+                18.0, Theme::hintSize(), ctx.accent, ctx.stageAlpha * 0.92, damage);
+            renderLabel(window.appClass, displayRect.x + 24.0, displayRect.y - 22.0,
+                std::max(1.0, displayRect.width - 26.0), Theme::hintSize(), ctx.stageAlpha * 0.68, damage);
+        }
+
+        const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? ctx.stageAlpha * 0.30 : ctx.stageAlpha;
+        const auto lift = selected ? ctx.selectionTransition : 0.0;
+        // Two shadow layers: a wide ambient one plus a tighter contact shadow, so cards float
+        // instead of sitting flat on the backdrop.
+        drawRect(CBox{windowBox.x - 4.0, windowBox.y + 6.0 + lift * 8.0, windowBox.w + 8.0, windowBox.h + 8.0},
+            withAlpha(Theme::shadowColor(), windowAlpha * (0.34 + lift * 0.24)), damage, radius + 10);
+        drawRect(CBox{windowBox.x + 5.0, windowBox.y + 9.0 + lift * 5.0, windowBox.w, windowBox.h},
+            withAlpha(Theme::shadowColor(), windowAlpha * (0.62 + lift * 0.20)), damage, radius + 2);
+        if (selected) {
+            drawRect(CBox{windowBox.x - 8.0, windowBox.y - 8.0, windowBox.w + 16.0, windowBox.h + 16.0},
+                withAlpha(ctx.accent, ctx.stageAlpha * 0.10 * ctx.selectionTransition), damage, radius + 8);
+        }
+        drawRect(windowBox, withAlpha(ctx.stageSurface, windowAlpha), damage, radius);
+        renderWindowPreview(window, windowBox, windowAlpha, damage);
+        // Glass top edge: a hairline highlight along the upper border, the glass card cue that
+        // separates a floating surface from a flat rectangle.
+        drawRect(CBox{windowBox.x + radius * 0.6, windowBox.y, std::max(0.0, windowBox.w - radius * 1.2), 1.0},
+            surfaceColor(0.60F, windowAlpha * 0.20), damage);
+
+        if (selected) {
+            drawBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(ctx.accent, ctx.stageAlpha * 0.82),
+                radius + 1, 1);
+
+            const std::string state = window.fullscreen ? "Full" : window.floating ? "Float" : "";
+            if (!state.empty() && windowBox.w >= 112.0 && windowBox.h >= 56.0) {
+                const auto badge = CBox{windowBox.x + 10.0, windowBox.y + 10.0, 64.0, 22.0};
+                drawRect(badge, withAlpha(ctx.railSurface, ctx.stageAlpha * 0.88), damage, 7, true);
+                drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(ctx.accent, ctx.stageAlpha), damage, 2);
+                renderLabel(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), ctx.stageAlpha * 0.92, damage);
+            }
+        }
+
+        // Top-right corner, opposite the state badge so the two never collide. Drawn after the
+        // preview so it sits over the thumbnail rather than under it.
+        const auto closeProgress = window.stableId == m_closeButtonWindowId ? std::clamp(m_closeButtonTransition.value(), 0.0, 1.0) : 0.0;
+        if (closeProgress > 0.001) {
+            // Built from the layout-space card and mapped through the same stage remap the hit test
+            // inverts, so the drawn button and its hotspot are the same rectangle. Deriving it from
+            // displayRect instead put it inside the selection scale, which only applies while the
+            // card is hovered: the button drifted off its hotspot exactly when it was being used,
+            // and along the edge that turned into a hover/unhover loop.
+            const auto closeRect = closeButtonRect(window.rect);
+            if (closeRect.width > 0.0) {
+                constexpr auto CLOSE_GLYPH = "\xe2\x9c\x95";
+                // Measured against a box far wider than the button. Handing the 22px button width
+                // to the text layout made the glyph lay out inside a 22px line, and centring it
+                // against that constrained box left it sitting off to one side.
+                constexpr auto GLYPH_MEASURE_WIDTH = 64.0;
+
+                const auto hotProgress = std::clamp(m_closeButtonHotTransition.value(), 0.0, 1.0);
+                // Grows into place on reveal but never past its hotspot. Swelling under the pointer
+                // put the button's edge outside the area that reports it hot, so resting there
+                // toggled hot off and on and the button flickered.
+                const auto scaled   = scaledAroundCenter(closeRect, std::lerp(0.82, 1.0, closeProgress), 0.0);
+                const auto closeBox = boxFor(remapStageRect(scaled, frame.stage.bounds, ctx.pushedStageBounds));
+                const auto dot      = static_cast<int>(std::round(closeBox.w / 2.0));
+                const auto reveal   = ctx.stageAlpha * closeProgress;
+
+                // Hot reads as a halo outside the button instead of extra size: decoration can
+                // safely overhang the hotspot, geometry cannot.
+                if (hotProgress > 0.001)
+                    drawRect(CBox{closeBox.x - 5.0, closeBox.y - 5.0, closeBox.w + 10.0, closeBox.h + 10.0},
+                        withAlpha(ctx.accent, reveal * 0.24 * hotProgress), damage, dot + 5);
+                drawRect(CBox{closeBox.x + 1.0, closeBox.y + 2.0, closeBox.w, closeBox.h},
+                    withAlpha(Theme::shadowColor(), reveal * 0.42), damage, dot);
+                // Rests as a neutral surface and crossfades into the ctx.accent under the pointer.
+                const auto fill = tintedSurface(surfaceColor(0.34F, 1.0), ctx.accent, hotProgress * 0.94);
+                drawRect(closeBox, withAlpha(fill, reveal * 0.94), damage, dot, true);
+
+                const auto glyphColor = tintedSurface(m_config.foregroundColor(), m_config.backgroundColor(), hotProgress);
+                const auto glyphSize  = measureLabel(CLOSE_GLYPH, GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor);
+                renderColoredLabel(CLOSE_GLYPH, closeBox.x + centered(closeBox.w, glyphSize.width),
+                    closeBox.y + centered(closeBox.h, glyphSize.height), GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor,
+                    reveal * 0.96, damage);
+            }
+        }
+
+        const auto titleUpper = std::max(1.0, std::min(380.0, ctx.displayedStageBounds.width - 24.0));
+        const auto titleLower = std::min(136.0, titleUpper);
+        const auto titleWidth = std::clamp(104.0 + static_cast<double>(window.label.size()) * 6.2, titleLower, titleUpper);
+        const auto stageRight = ctx.displayedStageBounds.x + ctx.displayedStageBounds.width;
+        const auto titleX = std::clamp(windowBox.x + centered(windowBox.w, titleWidth), ctx.displayedStageBounds.x, std::max(ctx.displayedStageBounds.x, stageRight - titleWidth));
+        const auto titleY = std::min(windowBox.y + windowBox.h + 8.0, ctx.displayedStageBounds.y + ctx.displayedStageBounds.height - 26.0);
+        const auto titleBox = CBox{titleX, titleY, titleWidth, 26.0};
+        auto titleSurface = tintedSurface(ctx.railSurface, ctx.accent, selected ? 0.18 : 0.04);
+        drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), ctx.stageAlpha * 0.52), damage, 9);
+        drawRect(titleBox, withAlpha(titleSurface, ctx.stageAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
+        if (selected)
+            drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(ctx.accent, ctx.stageAlpha * 0.64), damage, 1);
+        renderColoredLabel(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
+            18.0, Theme::hintSize(), ctx.accent, ctx.stageAlpha * (selected ? 1.0 : 0.82), damage);
+        renderLabel(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
+            std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), ctx.stageAlpha * (selected ? 1.0 : 0.76), damage);
+    }
+
+    if (m_dragging) {
+        const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
+        const auto* source = findWindowCard(m_pointerDownTarget.windowId);
+        if (bounds != m_frameBoundsByMonitor.end() && source && contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y)) {
+            const auto local = mapGlobalPointToFrame(bounds->second, frame.bounds, m_pointerPosition.x, m_pointerPosition.y);
+            const auto localX = local.x;
+            const auto localY = local.y;
+            const auto ghostWidth = std::clamp(source->rect.width * 0.58, 180.0, 320.0);
+            const auto aspect = source->rect.height > 0.0 ? source->rect.width / source->rect.height : 16.0 / 9.0;
+            const auto ghostHeight = std::clamp(ghostWidth / std::max(0.2, aspect), 100.0, 220.0);
+            const auto ghost = CBox{localX - ghostWidth / 2.0, localY - ghostHeight / 2.0, ghostWidth, ghostHeight};
+            drawRect(CBox{ghost.x + 9.0, ghost.y + 12.0, ghost.w, ghost.h}, withAlpha(Theme::shadowColor(), ctx.contentAlpha), damage, Theme::windowRadius() + 3);
+            drawRect(ghost, surfaceColor(0.12F, ctx.contentAlpha * 0.96), damage, Theme::windowRadius());
+            renderWindowPreview(*source, ghost, ctx.contentAlpha * 0.96, damage);
+        }
+    }
+}
+
 void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
 
     const auto searchMultiplier = m_searchActive ? 0.16 : 1.0;
@@ -1373,137 +1507,17 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             pushedStageBounds.y + centered(pushedStageBounds.height, 24.0), 180.0, Theme::footerSize(), stageAlpha * 0.42, damage);
     }
 
-    for (const auto& window : frame.stage.windows) {
-        // A window that has already unmapped has nothing left to preview, and drawing its card
-        // anyway left an empty surface sitting on the stage until the next collect landed.
-        if (!findLiveWindow(window.stableId))
-            continue;
-        const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
-            m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-        auto displayRect = remapStageRect(window.rect, frame.stage.bounds, pushedStageBounds);
-        if (selected)
-            displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.014, selectionTransition), -3.0 * selectionTransition);
-        const auto windowBox = boxFor(displayRect);
-        const auto radius = Theme::windowRadius();
-
-        if (window.appGroupStart && m_mode != OverviewMode::Grouped) {
-            renderColoredLabel(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
-                18.0, Theme::hintSize(), accent, stageAlpha * 0.92, damage);
-            renderLabel(window.appClass, displayRect.x + 24.0, displayRect.y - 22.0,
-                std::max(1.0, displayRect.width - 26.0), Theme::hintSize(), stageAlpha * 0.68, damage);
-        }
-
-        const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? stageAlpha * 0.30 : stageAlpha;
-        const auto lift = selected ? selectionTransition : 0.0;
-        // Two shadow layers: a wide ambient one plus a tighter contact shadow, so cards float
-        // instead of sitting flat on the backdrop.
-        drawRect(CBox{windowBox.x - 4.0, windowBox.y + 6.0 + lift * 8.0, windowBox.w + 8.0, windowBox.h + 8.0},
-            withAlpha(Theme::shadowColor(), windowAlpha * (0.34 + lift * 0.24)), damage, radius + 10);
-        drawRect(CBox{windowBox.x + 5.0, windowBox.y + 9.0 + lift * 5.0, windowBox.w, windowBox.h},
-            withAlpha(Theme::shadowColor(), windowAlpha * (0.62 + lift * 0.20)), damage, radius + 2);
-        if (selected) {
-            drawRect(CBox{windowBox.x - 8.0, windowBox.y - 8.0, windowBox.w + 16.0, windowBox.h + 16.0},
-                withAlpha(accent, stageAlpha * 0.10 * selectionTransition), damage, radius + 8);
-        }
-        drawRect(windowBox, withAlpha(stageSurface, windowAlpha), damage, radius);
-        renderWindowPreview(window, windowBox, windowAlpha, damage);
-        // Glass top edge: a hairline highlight along the upper border, the glass card cue that
-        // separates a floating surface from a flat rectangle.
-        drawRect(CBox{windowBox.x + radius * 0.6, windowBox.y, std::max(0.0, windowBox.w - radius * 1.2), 1.0},
-            surfaceColor(0.60F, windowAlpha * 0.20), damage);
-
-        if (selected) {
-            drawBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(accent, stageAlpha * 0.82),
-                radius + 1, 1);
-
-            const std::string state = window.fullscreen ? "Full" : window.floating ? "Float" : "";
-            if (!state.empty() && windowBox.w >= 112.0 && windowBox.h >= 56.0) {
-                const auto badge = CBox{windowBox.x + 10.0, windowBox.y + 10.0, 64.0, 22.0};
-                drawRect(badge, withAlpha(railSurface, stageAlpha * 0.88), damage, 7, true);
-                drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(accent, stageAlpha), damage, 2);
-                renderLabel(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), stageAlpha * 0.92, damage);
-            }
-        }
-
-        // Top-right corner, opposite the state badge so the two never collide. Drawn after the
-        // preview so it sits over the thumbnail rather than under it.
-        const auto closeProgress = window.stableId == m_closeButtonWindowId ? std::clamp(m_closeButtonTransition.value(), 0.0, 1.0) : 0.0;
-        if (closeProgress > 0.001) {
-            // Built from the layout-space card and mapped through the same stage remap the hit test
-            // inverts, so the drawn button and its hotspot are the same rectangle. Deriving it from
-            // displayRect instead put it inside the selection scale, which only applies while the
-            // card is hovered: the button drifted off its hotspot exactly when it was being used,
-            // and along the edge that turned into a hover/unhover loop.
-            const auto closeRect = closeButtonRect(window.rect);
-            if (closeRect.width > 0.0) {
-                constexpr auto CLOSE_GLYPH = "\xe2\x9c\x95";
-                // Measured against a box far wider than the button. Handing the 22px button width
-                // to the text layout made the glyph lay out inside a 22px line, and centring it
-                // against that constrained box left it sitting off to one side.
-                constexpr auto GLYPH_MEASURE_WIDTH = 64.0;
-
-                const auto hotProgress = std::clamp(m_closeButtonHotTransition.value(), 0.0, 1.0);
-                // Grows into place on reveal but never past its hotspot. Swelling under the pointer
-                // put the button's edge outside the area that reports it hot, so resting there
-                // toggled hot off and on and the button flickered.
-                const auto scaled   = scaledAroundCenter(closeRect, std::lerp(0.82, 1.0, closeProgress), 0.0);
-                const auto closeBox = boxFor(remapStageRect(scaled, frame.stage.bounds, pushedStageBounds));
-                const auto dot      = static_cast<int>(std::round(closeBox.w / 2.0));
-                const auto reveal   = stageAlpha * closeProgress;
-
-                // Hot reads as a halo outside the button instead of extra size: decoration can
-                // safely overhang the hotspot, geometry cannot.
-                if (hotProgress > 0.001)
-                    drawRect(CBox{closeBox.x - 5.0, closeBox.y - 5.0, closeBox.w + 10.0, closeBox.h + 10.0},
-                        withAlpha(accent, reveal * 0.24 * hotProgress), damage, dot + 5);
-                drawRect(CBox{closeBox.x + 1.0, closeBox.y + 2.0, closeBox.w, closeBox.h},
-                    withAlpha(Theme::shadowColor(), reveal * 0.42), damage, dot);
-                // Rests as a neutral surface and crossfades into the accent under the pointer.
-                const auto fill = tintedSurface(surfaceColor(0.34F, 1.0), accent, hotProgress * 0.94);
-                drawRect(closeBox, withAlpha(fill, reveal * 0.94), damage, dot, true);
-
-                const auto glyphColor = tintedSurface(m_config.foregroundColor(), m_config.backgroundColor(), hotProgress);
-                const auto glyphSize  = measureLabel(CLOSE_GLYPH, GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor);
-                renderColoredLabel(CLOSE_GLYPH, closeBox.x + centered(closeBox.w, glyphSize.width),
-                    closeBox.y + centered(closeBox.h, glyphSize.height), GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor,
-                    reveal * 0.96, damage);
-            }
-        }
-
-        const auto titleUpper = std::max(1.0, std::min(380.0, displayedStageBounds.width - 24.0));
-        const auto titleLower = std::min(136.0, titleUpper);
-        const auto titleWidth = std::clamp(104.0 + static_cast<double>(window.label.size()) * 6.2, titleLower, titleUpper);
-        const auto stageRight = displayedStageBounds.x + displayedStageBounds.width;
-        const auto titleX = std::clamp(windowBox.x + centered(windowBox.w, titleWidth), displayedStageBounds.x, std::max(displayedStageBounds.x, stageRight - titleWidth));
-        const auto titleY = std::min(windowBox.y + windowBox.h + 8.0, displayedStageBounds.y + displayedStageBounds.height - 26.0);
-        const auto titleBox = CBox{titleX, titleY, titleWidth, 26.0};
-        auto titleSurface = tintedSurface(railSurface, accent, selected ? 0.18 : 0.04);
-        drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), stageAlpha * 0.52), damage, 9);
-        drawRect(titleBox, withAlpha(titleSurface, stageAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
-        if (selected)
-            drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(accent, stageAlpha * 0.64), damage, 1);
-        renderColoredLabel(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
-            18.0, Theme::hintSize(), accent, stageAlpha * (selected ? 1.0 : 0.82), damage);
-        renderLabel(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
-            std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), stageAlpha * (selected ? 1.0 : 0.76), damage);
-    }
-
-    if (m_dragging) {
-        const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
-        const auto* source = findWindowCard(m_pointerDownTarget.windowId);
-        if (bounds != m_frameBoundsByMonitor.end() && source && contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y)) {
-            const auto local = mapGlobalPointToFrame(bounds->second, frame.bounds, m_pointerPosition.x, m_pointerPosition.y);
-            const auto localX = local.x;
-            const auto localY = local.y;
-            const auto ghostWidth = std::clamp(source->rect.width * 0.58, 180.0, 320.0);
-            const auto aspect = source->rect.height > 0.0 ? source->rect.width / source->rect.height : 16.0 / 9.0;
-            const auto ghostHeight = std::clamp(ghostWidth / std::max(0.2, aspect), 100.0, 220.0);
-            const auto ghost = CBox{localX - ghostWidth / 2.0, localY - ghostHeight / 2.0, ghostWidth, ghostHeight};
-            drawRect(CBox{ghost.x + 9.0, ghost.y + 12.0, ghost.w, ghost.h}, withAlpha(Theme::shadowColor(), contentAlpha), damage, Theme::windowRadius() + 3);
-            drawRect(ghost, surfaceColor(0.12F, contentAlpha * 0.96), damage, Theme::windowRadius());
-            renderWindowPreview(*source, ghost, contentAlpha * 0.96, damage);
-        }
-    }
+    const StageContext stageCtx{
+        .contentAlpha = contentAlpha,
+        .stageAlpha           = stageAlpha,
+        .selectionTransition  = selectionTransition,
+        .accent               = accent,
+        .stageSurface         = stageSurface,
+        .railSurface          = railSurface,
+        .displayedStageBounds = displayedStageBounds,
+        .pushedStageBounds    = pushedStageBounds,
+    };
+    renderStageWindows(frame, stageCtx, damage);
 
     renderHintDock(frame, contentAlpha, accent, railSurface, damage);
 

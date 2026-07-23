@@ -85,6 +85,19 @@ class OverlayRenderer {
     void renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderStageFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderHintDock(const WorkspaceWallFrame& frame, double contentAlpha, CHyprColor accent, CHyprColor railSurface, const CRegion& damage);
+    // Derived per-frame values the stage-window pass reads; bundled so the pass takes one named
+    // argument instead of eight positional doubles and colours that could be transposed unnoticed.
+    struct StageContext {
+        double     contentAlpha;
+        double     stageAlpha;
+        double     selectionTransition;
+        CHyprColor accent;
+        CHyprColor stageSurface;
+        CHyprColor railSurface;
+        LayoutRect displayedStageBounds;
+        LayoutRect pushedStageBounds;
+    };
+    void renderStageWindows(const WorkspaceWallFrame& frame, const StageContext& ctx, const CRegion& damage);
     void renderWindowPreview(const WindowCard& window, const CBox& clipBox, double alpha, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
