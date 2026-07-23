@@ -79,11 +79,11 @@ bool RadiantPlugin::initialize() {
         if (m_overlay.active())
             m_overlay.refresh(m_stateCollector.collect());
     });
-    m_input.install(
-        [this] { return m_overlay.active(); },
-        [this](OverviewTarget target) { activate(target, "keyboard activation"); },
-        [this](double x, double y) { m_overlay.pointerMoved(x, y); },
-        [this](bool pressed, double x, double y) {
+    m_input.install({
+        .active   = [this] { return m_overlay.active(); },
+        .activate = [this](OverviewTarget target) { activate(target, "keyboard activation"); },
+        .pointerMove = [this](double x, double y) { m_overlay.pointerMoved(x, y); },
+        .pointerButton = [this](bool pressed, double x, double y) {
             const auto action = m_overlay.pointerButton(pressed, x, y);
             if (action.type == PointerActionType::Activate) {
                 activate(action.target, "pointer activation");
@@ -103,26 +103,25 @@ bool RadiantPlugin::initialize() {
             if (action.type == PointerActionType::CreateWorkspaceAndMoveWindow)
                 log::info("created workspace {} and moved window {}", action.target.workspaceId, action.windowId);
             m_input.deferActivation(POST_DROP_ACTIVATION_DELAY);
-            m_overlay.refresh(m_stateCollector.collect());
-        },
-        [this](char value) { m_overlay.appendSearchChar(value); },
-        [this] { m_overlay.backspaceSearch(); },
-        [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
+            m_overlay.refresh(m_stateCollector.collect()); },
+        .textInput = [this](char value) { m_overlay.appendSearchChar(value); },
+        .backspace = [this] { m_overlay.backspaceSearch(); },
+        .move = [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
         // Scroll stays bound to the workspace shelf alone. The hint dock is pointer-only: scrolling
         // down is already the close gesture, so revealing the dock on it fought that.
-        [this](bool reveal) { m_overlay.setWorkspaceShelfVisible(reveal); },
-        [this] { return m_overlay.searchActive(); },
-        [this] { m_overlay.beginSearch(); },
-        [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
-        [this] {
+        .shelfScroll = [this](bool reveal) { m_overlay.setWorkspaceShelfVisible(reveal); },
+        .searchActive = [this] { return m_overlay.searchActive(); },
+        .openSearch = [this] { m_overlay.beginSearch(); },
+        .jump = [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
+        .close = [this] {
             const auto wasActive = m_overlay.active();
             m_overlay.clearSearchOrHide();
             if (wasActive && !m_overlay.active()) {
                 recordTransition("closed by Escape", true);
                 m_input.releaseKeyboard();
-            }
-        },
-        [this] { m_overlay.toggleGroupedMode(); });
+            } },
+        .toggleMode = [this] { m_overlay.toggleGroupedMode(); },
+    });
     m_gestures.install(
         [this] { return m_config.gestureEnabled(); },
         [this] { return m_config.gestureFingers(); },
@@ -134,7 +133,7 @@ bool RadiantPlugin::initialize() {
                 m_config.refreshPalette();
                 m_overlay.beginGestureOpen(m_stateCollector.collect());
                 m_lastOpenedAt = Clock::now();
-                m_input.grabKeyboard(false);
+                m_input.grabKeyboard(InputController::OpeningRelease::Skip);
             }
         },
         [this](SwipeAction action, double progress) {
@@ -157,7 +156,7 @@ bool RadiantPlugin::initialize() {
             m_overlay.finishGesture(opening, commit);
             const auto remainsVisible = opening ? commit : !commit;
             if (remainsVisible)
-                m_input.grabKeyboard(false);
+                m_input.grabKeyboard(InputController::OpeningRelease::Skip);
             else {
                 recordTransition(opening ? "opening gesture cancelled" : "closed by gesture", true);
                 m_input.releaseKeyboard();

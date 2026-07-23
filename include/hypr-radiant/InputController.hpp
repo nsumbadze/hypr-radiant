@@ -32,12 +32,33 @@ class InputController {
     using CloseFn    = std::function<void()>;
     using ToggleModeFn = std::function<void()>;
 
-    void install(ActiveFn active, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
-        MoveFn move, ShelfScrollFn shelfScroll, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close,
-        ToggleModeFn toggleMode);
+    // One named field per callback: the previous 13 positional std::functions were transposable at
+    // the call site — two same-typed lambdas 30 lines apart compiled fine while silently swapping,
+    // say, Tab and Escape. Designated initialisers make order irrelevant.
+    struct Callbacks {
+        ActiveFn        active;
+        ActivateFn      activate;
+        PointerMoveFn   pointerMove;
+        PointerButtonFn pointerButton;
+        TextInputFn     textInput;
+        BackspaceFn     backspace;
+        MoveFn          move;
+        ShelfScrollFn   shelfScroll;
+        SearchActiveFn  searchActive;
+        OpenSearchFn    openSearch;
+        JumpFn          jump;
+        CloseFn         close;
+        ToggleModeFn    toggleMode;
+    };
+
+    void install(Callbacks callbacks);
     void uninstall();
 
-    void grabKeyboard(bool waitForOpeningRelease = true);
+    // Whether to hold the opening key (a keybind's own Enter) suppressed until it is released, so it
+    // does not immediately activate the selection the overview just opened on.
+    enum class OpeningRelease { Wait,
+        Skip };
+    void grabKeyboard(OpeningRelease openingRelease = OpeningRelease::Wait);
     void releaseKeyboard();
     void deferActivation(std::chrono::milliseconds duration);
 

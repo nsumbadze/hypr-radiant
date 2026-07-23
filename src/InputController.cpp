@@ -55,22 +55,20 @@ InputController::~InputController() {
     releaseKeyboard();
 }
 
-void InputController::install(ActiveFn active, ActivateFn activate, PointerMoveFn pointerMove, PointerButtonFn pointerButton, TextInputFn textInput, BackspaceFn backspace,
-    MoveFn move, ShelfScrollFn shelfScroll, SearchActiveFn searchActive, OpenSearchFn openSearch, JumpFn jump, CloseFn close,
-    ToggleModeFn toggleMode) {
-    m_active   = std::move(active);
-    m_activate = std::move(activate);
-    m_pointerMove = std::move(pointerMove);
-    m_pointerButton = std::move(pointerButton);
-    m_textInput = std::move(textInput);
-    m_backspace = std::move(backspace);
-    m_move     = std::move(move);
-    m_shelfScroll = std::move(shelfScroll);
-    m_searchActive = std::move(searchActive);
-    m_openSearch = std::move(openSearch);
-    m_jump     = std::move(jump);
-    m_close    = std::move(close);
-    m_toggleMode = std::move(toggleMode);
+void InputController::install(Callbacks callbacks) {
+    m_active        = std::move(callbacks.active);
+    m_activate      = std::move(callbacks.activate);
+    m_pointerMove   = std::move(callbacks.pointerMove);
+    m_pointerButton = std::move(callbacks.pointerButton);
+    m_textInput     = std::move(callbacks.textInput);
+    m_backspace     = std::move(callbacks.backspace);
+    m_move          = std::move(callbacks.move);
+    m_shelfScroll   = std::move(callbacks.shelfScroll);
+    m_searchActive  = std::move(callbacks.searchActive);
+    m_openSearch    = std::move(callbacks.openSearch);
+    m_jump          = std::move(callbacks.jump);
+    m_close         = std::move(callbacks.close);
+    m_toggleMode    = std::move(callbacks.toggleMode);
 
     m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](Vector2D position, Event::SCallbackInfo& info) {
         if (!m_active || !m_active())
@@ -225,12 +223,13 @@ void InputController::install(ActiveFn active, ActivateFn activate, PointerMoveF
     m_seatGrab->m_keyboard = true;
 }
 
-void InputController::grabKeyboard(bool waitForOpeningRelease) {
+void InputController::grabKeyboard(OpeningRelease openingRelease) {
+    const auto wait = openingRelease == OpeningRelease::Wait;
     const auto now = Clock::now();
     m_acceptInputAfter = now + INPUT_ARM_DELAY;
     m_acceptActivationAfter = now + ACTIVATION_ARM_DELAY;
-    m_openingInputGuard.arm(waitForOpeningRelease);
-    if (waitForOpeningRelease) {
+    m_openingInputGuard.arm(wait);
+    if (wait) {
         m_openingInputGuard.suppressKeyUntilRelease(KEY_ENTER);
         m_openingInputGuard.suppressKeyUntilRelease(KEY_KPENTER);
     }
