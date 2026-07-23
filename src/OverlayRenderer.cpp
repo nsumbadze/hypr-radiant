@@ -247,7 +247,7 @@ std::size_t visibleSearchStart(const std::vector<OverviewTarget>& targets, Overv
 
 } // namespace
 
-OverlayRenderer::OverlayRenderer(const RadiantConfig& config) : m_config(config) {}
+OverlayRenderer::OverlayRenderer(const RadiantConfig& config) : m_config(config), m_labels(config) {}
 
 void OverlayRenderer::install() {
     if (!Event::bus())
@@ -289,7 +289,7 @@ void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::s
         m_selectedTarget         = {};
     }
 
-    m_textures.clear();
+    m_labels.clear();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
     releaseHoverAffordances();
@@ -324,7 +324,7 @@ void OverlayRenderer::toggle(RadiantState state) {
         m_state = std::move(state);
         rebuildFrames();
         clearSearch();
-        m_textures.clear();
+        m_labels.clear();
         releaseHoverAffordances();
         m_animation.animateTo(false, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.67))));
         damageAllMonitors();
@@ -524,7 +524,7 @@ void OverlayRenderer::refresh(RadiantState state) {
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, m_config.animationDurationMs());
     animateSelection();
-    m_textures.clear();
+    m_labels.clear();
     damageAllMonitors();
 }
 
@@ -619,7 +619,7 @@ void OverlayRenderer::toggleGroupedMode() {
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, m_config.animationDurationMs());
     animateSelection();
-    m_textures.clear();
+    m_labels.clear();
     damageAllMonitors();
 }
 
@@ -721,7 +721,7 @@ void OverlayRenderer::hideImmediate() {
     m_frames.clear();
     m_previousFrames.clear();
     m_frameBoundsByMonitor.clear();
-    m_textures.clear();
+    m_labels.clear();
     m_selectedTarget = {};
     m_selectedFrameMonitorId = -1;
     m_stageTransitionMonitorId = -1;
@@ -1043,11 +1043,11 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         drawRect(CBox{stageBox.x + Theme::shadowOffsetX(), stageBox.y + Theme::shadowOffsetY(), stageBox.w, stageBox.h}, shadowColor, damage, 34);
         drawRect(stageBox, withAlpha(Theme::panelColor(), contentAlpha), damage, 32, true);
     }
-    renderLabel("Workspaces", titleX, titleY, std::max(1.0, frame.bounds.width * 0.45), Theme::titleSize(), contentAlpha, damage);
+    m_labels.render("Workspaces", titleX, titleY, std::max(1.0, frame.bounds.width * 0.45), Theme::titleSize(), contentAlpha, damage);
     if (!searchActive && hasContent) {
         const auto helpWidth = std::min(680.0, std::max(1.0, contentRight - contentLeft));
         const auto helpX     = contentLeft + centered(contentRight - contentLeft, helpWidth);
-        renderLabel("\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 navigate \xc2\xb7 Enter activate \xc2\xb7 1-9 jump \xc2\xb7 / search \xc2\xb7 Esc close",
+        m_labels.render("\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 navigate \xc2\xb7 Enter activate \xc2\xb7 1-9 jump \xc2\xb7 / search \xc2\xb7 Esc close",
             helpX, frame.bounds.height - 16.0 - 24.0 + 4.0, helpWidth, Theme::hintSize(), contentAlpha * 0.68, damage);
     }
 
@@ -1079,11 +1079,11 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                 accentBar, damage, 2);
         }
 
-        renderLabel(workspace.name, workspace.rect.x + (compact ? 10.0 : 18.0), workspace.rect.y + (compact ? 8.0 : 14.0),
+        m_labels.render(workspace.name, workspace.rect.x + (compact ? 10.0 : 18.0), workspace.rect.y + (compact ? 8.0 : 14.0),
             std::max(1.0, workspace.rect.width - (compact ? 20.0 : 36.0)), compact ? Theme::hintSize() : Theme::labelSize(), contentAlpha, damage);
 
         if (workspace.empty && !compact)
-            renderLabel("Empty", workspace.rect.x + 18.0, workspace.rect.y + 44.0, std::max(1.0, workspace.rect.width - 36.0), Theme::footerSize(), contentAlpha * 0.42, damage);
+            m_labels.render("Empty", workspace.rect.x + 18.0, workspace.rect.y + 44.0, std::max(1.0, workspace.rect.width - 36.0), Theme::footerSize(), contentAlpha * 0.42, damage);
 
         for (const auto& window : workspace.windows) {
             const auto windowSelected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
@@ -1110,10 +1110,10 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
                 drawRect(CBox{windowBox.x, windowBox.y + windowBox.h - footerHeight, windowBox.w, footerHeight},
                     Theme::windowFill(windowSelected, static_cast<float>(contentAlpha)), damage, windowRound);
-                renderLabel(window.label, window.rect.x + 14.0, window.rect.y + window.rect.height - footerHeight + 8.0,
+                m_labels.render(window.label, window.rect.x + 14.0, window.rect.y + window.rect.height - footerHeight + 8.0,
                     std::max(1.0, window.rect.width - 28.0), Theme::footerSize(), contentAlpha, damage);
             } else {
-                renderLabel(window.label, window.rect.x + (compact ? 8.0 : 12.0), window.rect.y + (compact ? 5.0 : 8.0),
+                m_labels.render(window.label, window.rect.x + (compact ? 8.0 : 12.0), window.rect.y + (compact ? 5.0 : 8.0),
                     std::max(1.0, window.rect.width - (compact ? 16.0 : 20.0)), compact ? Theme::badgeSize() : Theme::footerSize(), contentAlpha, damage);
             }
 
@@ -1175,15 +1175,15 @@ const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
         const auto rimShade = withAlpha(accent, 0.16);
 
         const auto pillHeight = dockHeight - pillInset * 2.0;
-        const auto modeSize   = measureLabel(modeLabel, measureWidth, Theme::hintSize(), foreground);
+        const auto modeSize   = m_labels.measure(modeLabel, measureWidth, Theme::hintSize(), foreground);
         const auto pillWidth  = modeSize.width + pillPadX * 2.0;
 
         auto contentWidth = pillInset + pillWidth + pillGap;
         std::array<double, HINTS.size()> keyWidths{};
         std::array<double, HINTS.size()> actionWidths{};
         for (std::size_t i = 0; i < HINTS.size(); ++i) {
-            keyWidths[i]    = measureLabel(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground).width;
-            actionWidths[i] = measureLabel(HINTS[i].action, measureWidth, Theme::hintSize(), foreground).width;
+            keyWidths[i]    = m_labels.measure(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground).width;
+            actionWidths[i] = m_labels.measure(HINTS[i].action, measureWidth, Theme::hintSize(), foreground).width;
             contentWidth += keyWidths[i] + keysGap + actionWidths[i] + (i + 1 < HINTS.size() ? pairGap : 0.0);
         }
         contentWidth += dockPadR;
@@ -1203,16 +1203,16 @@ const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
 
         const auto pillBox = CBox{dock.x + pillInset, dock.y + pillInset, pillWidth, pillHeight};
         drawRect(pillBox, withAlpha(accent, dockAlpha * 0.95), damage, static_cast<int>(std::round(pillHeight / 2.0)), true);
-        renderCenteredLabel(modeLabel, pillBox, Theme::hintSize(), m_config.backgroundColor(), dockAlpha, damage);
+        m_labels.renderCentered(modeLabel, pillBox, Theme::hintSize(), m_config.backgroundColor(), dockAlpha, damage);
 
         auto cursorX = pillBox.x + pillBox.w + pillGap;
         for (std::size_t i = 0; i < HINTS.size(); ++i) {
-            const auto keySize    = measureLabel(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground);
-            const auto actionSize = measureLabel(HINTS[i].action, measureWidth, Theme::hintSize(), foreground);
-            renderColoredLabel(HINTS[i].keys, cursorX, dock.y + centered(dock.h, keySize.height), measureWidth,
+            const auto keySize    = m_labels.measure(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground);
+            const auto actionSize = m_labels.measure(HINTS[i].action, measureWidth, Theme::hintSize(), foreground);
+            m_labels.renderColored(HINTS[i].keys, cursorX, dock.y + centered(dock.h, keySize.height), measureWidth,
                 Theme::hintSize(), rimLit, dockAlpha * 0.96, damage);
             cursorX += keyWidths[i] + keysGap;
-            renderColoredLabel(HINTS[i].action, cursorX, dock.y + centered(dock.h, actionSize.height), measureWidth,
+            m_labels.renderColored(HINTS[i].action, cursorX, dock.y + centered(dock.h, actionSize.height), measureWidth,
                 Theme::hintSize(), foreground, dockAlpha * 0.58, damage);
             cursorX += actionWidths[i] + pairGap;
         }
@@ -1234,9 +1234,9 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
         const auto radius = Theme::windowRadius();
 
         if (window.appGroupStart && m_mode != OverviewMode::Grouped) {
-            renderColoredLabel(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
+            m_labels.renderColored(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
                 18.0, Theme::hintSize(), ctx.accent, ctx.stageAlpha * 0.92, damage);
-            renderLabel(window.appClass, displayRect.x + 24.0, displayRect.y - 22.0,
+            m_labels.render(window.appClass, displayRect.x + 24.0, displayRect.y - 22.0,
                 std::max(1.0, displayRect.width - 26.0), Theme::hintSize(), ctx.stageAlpha * 0.68, damage);
         }
 
@@ -1268,7 +1268,7 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
                 const auto badge = CBox{windowBox.x + 10.0, windowBox.y + 10.0, 64.0, 22.0};
                 drawRect(badge, withAlpha(ctx.railSurface, ctx.stageAlpha * 0.88), damage, 7, true);
                 drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(ctx.accent, ctx.stageAlpha), damage, 2);
-                renderLabel(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), ctx.stageAlpha * 0.92, damage);
+                m_labels.render(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), ctx.stageAlpha * 0.92, damage);
             }
         }
 
@@ -1310,8 +1310,8 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
                 drawRect(closeBox, withAlpha(fill, reveal * 0.94), damage, dot, true);
 
                 const auto glyphColor = tintedSurface(m_config.foregroundColor(), m_config.backgroundColor(), hotProgress);
-                const auto glyphSize  = measureLabel(CLOSE_GLYPH, GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor);
-                renderColoredLabel(CLOSE_GLYPH, closeBox.x + centered(closeBox.w, glyphSize.width),
+                const auto glyphSize  = m_labels.measure(CLOSE_GLYPH, GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor);
+                m_labels.renderColored(CLOSE_GLYPH, closeBox.x + centered(closeBox.w, glyphSize.width),
                     closeBox.y + centered(closeBox.h, glyphSize.height), GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor,
                     reveal * 0.96, damage);
             }
@@ -1329,9 +1329,9 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
         drawRect(titleBox, withAlpha(titleSurface, ctx.stageAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
         if (selected)
             drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(ctx.accent, ctx.stageAlpha * 0.64), damage, 1);
-        renderColoredLabel(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
+        m_labels.renderColored(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
             18.0, Theme::hintSize(), ctx.accent, ctx.stageAlpha * (selected ? 1.0 : 0.82), damage);
-        renderLabel(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
+        m_labels.render(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
             std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), ctx.stageAlpha * (selected ? 1.0 : 0.76), damage);
     }
 
@@ -1444,9 +1444,9 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             const auto ringStrength = selected ? 0.88 : 0.46;
             drawBorder(cardBox, withAlpha(accent, railAlpha * ringStrength), radius, selected ? 2 : 1);
             const auto glyphBox = CBox{cardBox.x, cardBox.y + centered(cardBox.h, 36.0) - 7.0, cardBox.w, 36.0};
-            renderCenteredLabel("+", glyphBox, Theme::titleSize() + 14, accent, railAlpha * (selected ? 1.0 : 0.78), damage);
+            m_labels.renderCentered("+", glyphBox, Theme::titleSize() + 14, accent, railAlpha * (selected ? 1.0 : 0.78), damage);
             const auto captionBox = CBox{cardBox.x, cardBox.y + cardBox.h - 27.0, cardBox.w, 16.0};
-            renderCenteredLabel("New", captionBox, Theme::badgeSize(), m_config.foregroundColor(),
+            m_labels.renderCentered("New", captionBox, Theme::badgeSize(), m_config.foregroundColor(),
                 railAlpha * (selected ? 0.82 : 0.56), damage);
         }
 
@@ -1468,10 +1468,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     }
 
     if (frame.rail.overflowLeft)
-        renderLabel("\xe2\x80\xb9", frame.rail.bounds.x + 5.0, frame.rail.bounds.y + railEntranceOffset + frame.rail.bounds.height / 2.0 - 10.0,
+        m_labels.render("\xe2\x80\xb9", frame.rail.bounds.x + 5.0, frame.rail.bounds.y + railEntranceOffset + frame.rail.bounds.height / 2.0 - 10.0,
             20.0, Theme::titleSize(), railAlpha * 0.72, damage);
     if (frame.rail.overflowRight)
-        renderLabel("\xe2\x80\xba", frame.rail.bounds.x + frame.rail.bounds.width - 20.0,
+        m_labels.render("\xe2\x80\xba", frame.rail.bounds.x + frame.rail.bounds.width - 20.0,
             frame.rail.bounds.y + railEntranceOffset + frame.rail.bounds.height / 2.0 - 10.0, 16.0, Theme::titleSize(), railAlpha * 0.72, damage);
 
     // Depth push: the outgoing workspace recedes and fades out while the incoming one settles
@@ -1494,7 +1494,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         }
     }
     if (frame.stage.empty) {
-        renderLabel("Empty workspace", pushedStageBounds.x + centered(pushedStageBounds.width, 180.0),
+        m_labels.render("Empty workspace", pushedStageBounds.x + centered(pushedStageBounds.width, 180.0),
             pushedStageBounds.y + centered(pushedStageBounds.height, 24.0), 180.0, Theme::footerSize(), stageAlpha * 0.42, damage);
     }
 
@@ -1584,17 +1584,17 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
     // Measure through the shared cache rather than a second hand-rolled lookup with its own key
     // format: the old IIFE inserted a differently-keyed entry for the same ">" the renderLabel below
     // already caches.
-    const auto promptSize   = measureLabel(">", 32.0, Theme::labelSize(), m_config.foregroundColor());
+    const auto promptSize   = m_labels.measure(">", 32.0, Theme::labelSize(), m_config.foregroundColor());
     const auto promptWidth  = promptSize.width;
     const auto promptHeight = promptSize.height;
     const auto textY        = inputBox.y + std::round((inputBox.h - promptHeight) / 2.0);
     const auto promptX      = inputBox.x + 16.0;
     const auto queryX       = promptX + promptWidth + 10.0;
 
-    renderLabel(">", promptX, textY, 32.0, Theme::labelSize(), alpha, damage);
-    renderLabel(std::format("{}_", m_searchQuery), queryX, textY,
+    m_labels.render(">", promptX, textY, 32.0, Theme::labelSize(), alpha, damage);
+    m_labels.render(std::format("{}_", m_searchQuery), queryX, textY,
         std::max(1.0, inputBox.x + inputBox.w - 92.0 - queryX), Theme::labelSize(), alpha, damage);
-    renderLabel(std::format("{} result{}", targets.size(), targets.size() == 1 ? "" : "s"),
+    m_labels.render(std::format("{} result{}", targets.size(), targets.size() == 1 ? "" : "s"),
         inputBox.x + inputBox.w - 84.0, inputBox.y + 17.0, 72.0, Theme::hintSize(), alpha * 0.50, damage);
 
     for (std::size_t index = visibleStart; index < visibleEnd; ++index) {
@@ -1620,24 +1620,24 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
             const auto* workspace = findWorkspaceCard(target.workspaceId);
             const auto  name      = workspace && !workspace->name.empty() ? workspace->name : std::to_string(target.workspaceId);
             drawRect(badgeBox, withAlpha(Theme::searchBadgeSpace(), alpha), damage, Theme::inputRadius());
-            renderLabel("SPACE", row.x + 31.0, row.y + 23.0, 46.0, Theme::badgeSize(), alpha * 0.78, damage);
-            renderLabel(std::format("Workspace {}", name), row.x + 104.0, row.y + 8.0, row.w - 128.0, Theme::labelSize(), alpha, damage);
-            renderLabel("Switch to this workspace", row.x + 104.0, row.y + 30.0, row.w - 128.0, Theme::hintSize(), alpha * 0.50, damage);
+            m_labels.render("SPACE", row.x + 31.0, row.y + 23.0, 46.0, Theme::badgeSize(), alpha * 0.78, damage);
+            m_labels.render(std::format("Workspace {}", name), row.x + 104.0, row.y + 8.0, row.w - 128.0, Theme::labelSize(), alpha, damage);
+            m_labels.render("Switch to this workspace", row.x + 104.0, row.y + 30.0, row.w - 128.0, Theme::hintSize(), alpha * 0.50, damage);
         } else if (const auto* window = findWindowCard(target.windowId)) {
             drawRect(badgeBox, withAlpha(Theme::searchBadgeWindow(), alpha), damage, Theme::inputRadius());
-            renderLabel("WINDOW", row.x + 26.0, row.y + 23.0, 56.0, Theme::badgeSize(), alpha * 0.78, damage);
-            renderLabel(window->label, row.x + 104.0, row.y + 8.0, row.w - 128.0, Theme::labelSize(), alpha, damage);
-            renderLabel(std::format("Workspace {}", window->workspaceId), row.x + 104.0, row.y + 30.0, row.w - 128.0, Theme::hintSize(), alpha * 0.50, damage);
+            m_labels.render("WINDOW", row.x + 26.0, row.y + 23.0, 56.0, Theme::badgeSize(), alpha * 0.78, damage);
+            m_labels.render(window->label, row.x + 104.0, row.y + 8.0, row.w - 128.0, Theme::labelSize(), alpha, damage);
+            m_labels.render(std::format("Workspace {}", window->workspaceId), row.x + 104.0, row.y + 30.0, row.w - 128.0, Theme::hintSize(), alpha * 0.50, damage);
         }
     }
 
     if (targets.empty()) {
-        renderLabel("No results", inputBox.x + 4.0, geometry.resultsY + 18.0, inputBox.w - 8.0, Theme::titleSize(), alpha * 0.78, damage);
-        renderLabel("Try another window title, workspace name, or number", inputBox.x + 4.0, geometry.resultsY + 48.0,
+        m_labels.render("No results", inputBox.x + 4.0, geometry.resultsY + 18.0, inputBox.w - 8.0, Theme::titleSize(), alpha * 0.78, damage);
+        m_labels.render("Try another window title, workspace name, or number", inputBox.x + 4.0, geometry.resultsY + 48.0,
             inputBox.w - 8.0, Theme::hintSize(), alpha * 0.48, damage);
     }
 
-    renderLabel("\xe2\x86\x91\xe2\x86\x93 select \xc2\xb7 Enter activate \xc2\xb7 Esc clear",
+    m_labels.render("\xe2\x86\x91\xe2\x86\x93 select \xc2\xb7 Enter activate \xc2\xb7 Esc clear",
         panelBox.x + 28.0, panelBox.y + panelBox.h - 24.0,
         panelBox.w - 56.0, Theme::hintSize(), alpha * 0.48, damage);
 }
@@ -1688,90 +1688,6 @@ const WorkspaceCard* OverlayRenderer::findWorkspaceCard(std::int64_t workspaceId
     }
 
     return nullptr;
-}
-
-void OverlayRenderer::renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage) {
-    renderColoredLabel(text, x, y, maxWidth, pointSize, m_config.foregroundColor(), alpha, damage);
-}
-
-SP<Render::ITexture> OverlayRenderer::labelTexture(const std::string& text, double maxWidth, int pointSize, CHyprColor color) {
-    if (!g_pHyprRenderer || text.empty() || maxWidth <= 0.0)
-        return {};
-
-    // m_textures is an open-session text cache keyed by (pointSize, ceil(maxWidth), color, text).
-    // It is cleared in show() and hideImmediate(), so repeated frames reuse the same labels
-    // instead of accumulating across overview opens. Per session, growth is naturally bounded
-    // by rendered workspace names (one per workspace card), visible window labels (one per
-    // window card), fixed helpers (overview title, type/search hints, panel title, WINDOW,
-    // SPACE, no-results text, workspace secondary text, and footer), search result labels,
-    // and live search strings. The search caret key std::format("{}_", m_searchQuery) is capped at 64
-    // *characters* but not at distinct strings, so a long typing session accumulates one texture per
-    // distinct prefix. That is bounded per open because clearSearchOrHide's close path and every
-    // session start clear m_textures; it is not bounded within a single open, which is acceptable
-    // given a realistic query count but is the one key here that is length- rather than set-bounded.
-    // Result counts are bounded by the distinct match counts encountered. With W workspace cards,
-    // V visible window cards, E empty non-compact workspace cards, and T <= W + V searchable
-    // targets, a realistic session stays around 74 + E + 3W + 2V + T entries before duplicate
-    // strings/max widths collapse further. The cache therefore cannot realistically grow
-    // without bound during normal use; do not add eviction here unless future analysis changes
-    // those inputs.
-    const auto channel = [](float value) {
-        return static_cast<int>(std::round(std::clamp(value, 0.0F, 1.0F) * 255.0F));
-    };
-    const auto key = std::format("{}:{}:{:02x}{:02x}{:02x}{:02x}:{}", pointSize, static_cast<int>(std::ceil(maxWidth)),
-        channel(color.r), channel(color.g), channel(color.b), channel(color.a), text);
-    auto       it  = m_textures.find(key);
-    if (it == m_textures.end()) {
-        it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, color, pointSize, false,
-            m_config.fontFamily(), static_cast<int>(maxWidth))).first;
-    }
-
-    const auto& texture = it->second;
-    if (!texture || !texture->ok() || texture->m_size.x <= 0.0 || texture->m_size.y <= 0.0)
-        return {};
-
-    return texture;
-}
-
-RadiantSize OverlayRenderer::measureLabel(const std::string& text, double maxWidth, int pointSize, CHyprColor color) {
-    const auto texture = labelTexture(text, maxWidth, pointSize, color);
-    if (!texture)
-        return {.width = 0.0, .height = 0.0};
-
-    return {.width = std::min(texture->m_size.x, maxWidth), .height = texture->m_size.y};
-}
-
-void OverlayRenderer::renderColoredLabel(
-    const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha, const CRegion& damage) {
-    if (alpha <= 0.001)
-        return;
-
-    const auto texture = labelTexture(text, maxWidth, pointSize, color);
-    if (!texture)
-        return;
-
-    CTexPassElement::SRenderData data;
-    data.tex      = texture;
-    data.box      = CBox{std::round(x), std::round(y), std::min(texture->m_size.x, maxWidth), texture->m_size.y};
-    data.overallA = static_cast<float>(std::clamp(alpha, 0.0, 1.0));
-    data.damage   = damage;
-
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
-}
-
-// Places text using its measured size instead of a hand-tuned offset, so glyphs stay optically
-// centered when the interface font or point size changes.
-void OverlayRenderer::renderCenteredLabel(
-    const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage) {
-    if (alpha <= 0.001 || within.w <= 0.0)
-        return;
-
-    const auto size = measureLabel(text, within.w, pointSize, color);
-    if (size.width <= 0.0)
-        return;
-
-    renderColoredLabel(text, within.x + centered(within.w, size.width), within.y + centered(within.h, size.height),
-        within.w, pointSize, color, alpha, damage);
 }
 
 const WorkspaceWallFrame* OverlayRenderer::frameForMonitor(std::int64_t monitorId) const noexcept {

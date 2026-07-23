@@ -68,6 +68,7 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
         src/SearchPanelGeometry.cpp
         src/StageTransform.cpp
         src/OverlayGeometry.cpp
+        src/LabelRenderer.cpp
         src/WorkspaceWallLayout.cpp
         src/StateCollector.cpp
         src/Theme.cpp

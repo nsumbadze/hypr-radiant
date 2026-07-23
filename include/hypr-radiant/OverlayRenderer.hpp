@@ -4,6 +4,7 @@
 #include <hypr-radiant/FadeAnimation.hpp>
 #include <hypr-radiant/RadiantState.hpp>
 #include <hypr-radiant/HitTester.hpp>
+#include <hypr-radiant/LabelRenderer.hpp>
 #include <hypr-radiant/SearchMatcher.hpp>
 #include <hypr-radiant/WorkspaceWallLayout.hpp>
 
@@ -15,10 +16,6 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-
-namespace Render {
-class ITexture;
-}
 
 namespace hypr_radiant {
 
@@ -100,12 +97,6 @@ class OverlayRenderer {
     void renderStageWindows(const WorkspaceWallFrame& frame, const StageContext& ctx, const CRegion& damage);
     void renderWindowPreview(const WindowCard& window, const CBox& clipBox, double alpha, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
-    void renderLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, double alpha, const CRegion& damage);
-    void renderColoredLabel(const std::string& text, double x, double y, double maxWidth, int pointSize, CHyprColor color, double alpha,
-        const CRegion& damage);
-    void renderCenteredLabel(const std::string& text, const CBox& within, int pointSize, CHyprColor color, double alpha, const CRegion& damage);
-    [[nodiscard]] SP<Render::ITexture> labelTexture(const std::string& text, double maxWidth, int pointSize, CHyprColor color);
-    [[nodiscard]] RadiantSize            measureLabel(const std::string& text, double maxWidth, int pointSize, CHyprColor color);
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
     [[nodiscard]] OverviewTarget searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const;
@@ -169,7 +160,7 @@ class OverlayRenderer {
     OverviewTarget                                        m_preSearchTarget;
     std::int64_t                                          m_preSearchMonitorId = -1;
     std::unordered_set<std::uint64_t>                     m_searchMatches;
-    std::unordered_map<std::string, SP<Render::ITexture>> m_textures;
+    LabelRenderer                                         m_labels;
     OverviewTarget                                        m_pointerDownTarget;
     OverviewTarget                                        m_dragTarget;
     RadiantPoint                                            m_pointerDownPosition;
