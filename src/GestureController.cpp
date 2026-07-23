@@ -6,16 +6,15 @@
 
 namespace hypr_radiant {
 
-void GestureController::install(BoolFn enabled, IntFn fingers, DoubleFn distance, BoolFn overviewActive, BoolFn shelfVisible,
-    BeginFn begin, UpdateFn update, EndFn end) {
-    m_enabled = std::move(enabled);
-    m_fingers = std::move(fingers);
-    m_distance = std::move(distance);
-    m_overviewActive = std::move(overviewActive);
-    m_shelfVisible = std::move(shelfVisible);
-    m_begin = std::move(begin);
-    m_update = std::move(update);
-    m_end = std::move(end);
+void GestureController::install(Callbacks callbacks) {
+    m_enabled        = std::move(callbacks.enabled);
+    m_fingers        = std::move(callbacks.fingers);
+    m_distance       = std::move(callbacks.distance);
+    m_overviewActive = std::move(callbacks.overviewActive);
+    m_shelfVisible   = std::move(callbacks.shelfVisible);
+    m_begin          = std::move(callbacks.begin);
+    m_update         = std::move(callbacks.update);
+    m_end            = std::move(callbacks.end);
 
     m_beginListener = Event::bus()->m_events.gesture.swipe.begin.listen([this](IPointer::SSwipeBeginEvent event, Event::SCallbackInfo&) {
         if (!m_enabled || !m_enabled())

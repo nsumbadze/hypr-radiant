@@ -51,4 +51,20 @@ SearchPanelGeometry computeSearchPanelGeometry(const WorkspaceWallFrame& frame, 
     };
 }
 
+std::size_t selectedSearchIndex(const std::vector<OverviewTarget>& targets, const OverviewTarget& selected) {
+    const auto found = std::ranges::find_if(targets, [&selected](const OverviewTarget& target) { return sameTarget(target, selected); });
+    return found == targets.end() ? 0 : static_cast<std::size_t>(std::distance(targets.begin(), found));
+}
+
+std::size_t visibleSearchStart(const std::vector<OverviewTarget>& targets, const OverviewTarget& selected, std::size_t capacity) {
+    if (targets.size() <= capacity)
+        return 0;
+
+    const auto selectedIndex = selectedSearchIndex(targets, selected);
+    if (selectedIndex < capacity)
+        return 0;
+
+    return std::min(selectedIndex - capacity + 1, targets.size() - capacity);
+}
+
 } // namespace hypr_radiant

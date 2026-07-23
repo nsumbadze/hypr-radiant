@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <vector>
 
 using namespace hypr_radiant;
 
@@ -279,6 +280,38 @@ void multiMonitorPerFrameBounds() {
     assert(frame2.workspaces.at(3).empty);
 }
 
+void searchPagingKeepsSelectionInView() {
+    std::vector<OverviewTarget> targets;
+    targets.reserve(10);
+    for (std::int64_t i = 0; i < 10; ++i)
+        targets.push_back({.type = OverviewTargetType::Window, .workspaceId = 1, .windowId = static_cast<std::uint64_t>(100 + i)});
+
+    const auto sel = [&](std::size_t i) { return targets[i]; };
+
+    // Fits entirely: always start at 0.
+    assert(visibleSearchStart(targets, sel(9), 10) == 0);
+    assert(visibleSearchStart(targets, sel(9), 20) == 0);
+
+    // Selection within the first window: no scroll yet.
+    assert(visibleSearchStart(targets, sel(0), 4) == 0);
+    assert(visibleSearchStart(targets, sel(3), 4) == 0);
+
+    // Selection past the window: it scrolls so the selected row is the last visible one, not off it.
+    assert(visibleSearchStart(targets, sel(4), 4) == 1); // rows 1..4 visible, 4 selected
+    assert(visibleSearchStart(targets, sel(6), 4) == 3);
+
+    // Selection at the very end clamps to the last full page rather than scrolling past it.
+    assert(visibleSearchStart(targets, sel(9), 4) == 6); // 10 - 4
+    const auto start = visibleSearchStart(targets, sel(9), 4);
+    assert(start + 4 == targets.size());
+
+    // A selection not present in the list is treated as index 0.
+    const OverviewTarget absent{.type = OverviewTargetType::Window, .workspaceId = 9, .windowId = 999};
+    assert(visibleSearchStart(targets, absent, 4) == 0);
+    assert(selectedSearchIndex(targets, absent) == 0);
+    assert(selectedSearchIndex(targets, sel(6)) == 6);
+}
+
 void searchPanelGeometryMatchesSpec() {
     WorkspaceWallFrame frame;
     frame.bounds = {.x = 0.0, .y = 0.0, .width = 1920.0, .height = 1080.0};
@@ -431,6 +464,7 @@ int main() {
     focusedStageArrangesWindowsAsANonOverlappingLayer();
     focusedStageCentersOverflowAroundPreview();
     multiMonitorPerFrameBounds();
+    searchPagingKeepsSelectionInView();
     searchPanelGeometryMatchesSpec();
     searchPanelGeometryCapsAtScreenSize();
     tinyRenderSizeDoesNotProduceNegativeRects();

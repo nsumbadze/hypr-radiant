@@ -122,27 +122,25 @@ bool RadiantPlugin::initialize() {
             } },
         .toggleMode = [this] { m_overlay.toggleGroupedMode(); },
     });
-    m_gestures.install(
-        [this] { return m_config.gestureEnabled(); },
-        [this] { return m_config.gestureFingers(); },
-        [this] { return m_config.gestureDistance(); },
-        [this] { return m_overlay.active(); },
-        [this] { return m_overlay.workspaceShelfVisible(); },
-        [this](SwipeAction action) {
+    m_gestures.install({
+        .enabled = [this] { return m_config.gestureEnabled(); },
+        .fingers = [this] { return m_config.gestureFingers(); },
+        .distance = [this] { return m_config.gestureDistance(); },
+        .overviewActive = [this] { return m_overlay.active(); },
+        .shelfVisible = [this] { return m_overlay.workspaceShelfVisible(); },
+        .begin = [this](SwipeAction action) {
             if (action == SwipeAction::OpenOverview) {
                 m_config.refreshPalette();
                 m_overlay.beginGestureOpen(m_stateCollector.collect());
                 m_lastOpenedAt = Clock::now();
                 m_input.grabKeyboard(InputController::OpeningRelease::Skip);
-            }
-        },
-        [this](SwipeAction action, double progress) {
+            } },
+        .update = [this](SwipeAction action, double progress) {
             if (action == SwipeAction::OpenOverview || action == SwipeAction::CloseOverview)
                 m_overlay.setGestureProgress(action == SwipeAction::OpenOverview, progress);
             else if (action == SwipeAction::RevealShelf || action == SwipeAction::HideShelf)
-                m_overlay.setWorkspaceShelfGestureProgress(action == SwipeAction::RevealShelf, progress);
-        },
-        [this](SwipeAction action, bool commit) {
+                m_overlay.setWorkspaceShelfGestureProgress(action == SwipeAction::RevealShelf, progress); },
+        .end = [this](SwipeAction action, bool commit) {
             if (action == SwipeAction::RevealShelf || action == SwipeAction::HideShelf) {
                 m_overlay.finishWorkspaceShelfGesture(action == SwipeAction::RevealShelf, commit);
                 return;
@@ -160,8 +158,8 @@ bool RadiantPlugin::initialize() {
             else {
                 recordTransition(opening ? "opening gesture cancelled" : "closed by gesture", true);
                 m_input.releaseKeyboard();
-            }
-        });
+            } },
+    });
     return true;
 }
 

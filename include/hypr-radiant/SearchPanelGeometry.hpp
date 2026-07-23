@@ -1,8 +1,10 @@
 #pragma once
 
+#include <hypr-radiant/OverviewTarget.hpp>
 #include <hypr-radiant/WorkspaceWallLayout.hpp>
 
 #include <cstddef>
+#include <vector>
 
 namespace hypr_radiant {
 
@@ -22,5 +24,11 @@ struct SearchPanelGeometry {
 };
 
 [[nodiscard]] SearchPanelGeometry computeSearchPanelGeometry(const WorkspaceWallFrame& frame, std::size_t resultCount);
+
+/// Index of the selected target in the result list, or 0 when it is absent.
+[[nodiscard]] std::size_t selectedSearchIndex(const std::vector<OverviewTarget>& targets, const OverviewTarget& selected);
+
+/// First result row to draw so the selected one stays within a window of `capacity` rows.
+[[nodiscard]] std::size_t visibleSearchStart(const std::vector<OverviewTarget>& targets, const OverviewTarget& selected, std::size_t capacity);
 
 } // namespace hypr_radiant

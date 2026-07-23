@@ -39,10 +39,6 @@ constexpr auto DOCK_BAND_HEIGHT = 92.0;
 constexpr auto CLOSE_REVEAL_MS = 140;
 constexpr auto CLOSE_HOT_MS    = 110;
 
-bool sameTarget(OverviewTarget lhs, OverviewTarget rhs) {
-    return lhs.type == rhs.type && lhs.workspaceId == rhs.workspaceId && lhs.windowId == rhs.windowId;
-}
-
 CBox boxFor(const LayoutRect& rect) {
     return CBox{std::round(rect.x), std::round(rect.y), std::round(rect.width), std::round(rect.height)};
 }
@@ -227,22 +223,6 @@ WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorks
         .mode                  = overviewMode,
         .applicationFilter     = applicationFilter,
     };
-}
-
-std::size_t selectedSearchIndex(const std::vector<OverviewTarget>& targets, OverviewTarget selected) {
-    const auto found = std::ranges::find_if(targets, [selected](OverviewTarget target) { return sameTarget(target, selected); });
-    return found == targets.end() ? 0 : static_cast<std::size_t>(std::distance(targets.begin(), found));
-}
-
-std::size_t visibleSearchStart(const std::vector<OverviewTarget>& targets, OverviewTarget selected, std::size_t capacity) {
-    if (targets.size() <= capacity)
-        return 0;
-
-    const auto selectedIndex = selectedSearchIndex(targets, selected);
-    if (selectedIndex < capacity)
-        return 0;
-
-    return std::min(selectedIndex - capacity + 1, targets.size() - capacity);
 }
 
 } // namespace

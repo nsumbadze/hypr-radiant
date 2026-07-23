@@ -26,4 +26,10 @@ enum class NavigationDirection {
     Down,
 };
 
+// Identity by what the user is pointing at, deliberately ignoring monitorId so the same window or
+// workspace compares equal regardless of which frame produced the target.
+[[nodiscard]] inline bool sameTarget(const OverviewTarget& lhs, const OverviewTarget& rhs) {
+    return lhs.type == rhs.type && lhs.workspaceId == rhs.workspaceId && lhs.windowId == rhs.windowId;
+}
+
 } // namespace hypr_radiant
