@@ -63,6 +63,29 @@ double stableNoise(std::uint64_t value, std::uint64_t salt) {
     return static_cast<double>(value & 0xffffU) / 65535.0;
 }
 
+// Square-ish grid dimensions for `count` cells: columns = ceil(sqrt), rows to cover the rest.
+struct GridDims {
+    int columns;
+    int rows;
+};
+
+GridDims gridDims(std::size_t count) {
+    const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
+    const auto rows    = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
+    return {.columns = columns, .rows = rows};
+}
+
+// Largest size with `sourceAspect` that fits within the available box, no cropping.
+RadiantSize aspectFit(double sourceAspect, double availableWidth, double availableHeight) {
+    auto width  = availableWidth;
+    auto height = width / sourceAspect;
+    if (height > availableHeight) {
+        height = availableHeight;
+        width  = height * sourceAspect;
+    }
+    return {.width = width, .height = height};
+}
+
 } // namespace
 
 WorkspaceWallFrame WorkspaceWallLayout::compute(
@@ -289,8 +312,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         }
 
         const auto gridRect = [&](const WindowSnapshot& window, std::size_t index, std::size_t count) {
-            const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
-            const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
+            const auto [columns, rows] = gridDims(count);
             const auto gap = std::clamp(renderSize.width * 0.012, 14.0, 24.0);
             const auto header = options.mode == OverviewMode::Grouped ? 22.0 : 0.0;
             const auto cellWidth = std::max(1.0, (stageBounds.width - gap * (columns - 1)) / columns);
@@ -310,12 +332,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             // uniform, so the extra breathing room only read as wasted space.
             const auto availableWidth = std::max(1.0, cell.width * 0.985);
             const auto availableHeight = std::max(1.0, cell.height * 0.96);
-            auto width = availableWidth;
-            auto height = width / sourceAspect;
-            if (height > availableHeight) {
-                height = availableHeight;
-                width = height * sourceAspect;
-            }
+            const auto [width, height] = aspectFit(sourceAspect, availableWidth, availableHeight);
             return LayoutRect{
                 .x = cell.x + centered(cell.width, width),
                 .y = cell.y + centered(cell.height, height),
@@ -329,12 +346,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             const auto sourceAspect = std::max(1.0, window.geometry.size.width) / std::max(1.0, window.geometry.size.height);
             const auto availableWidth = std::max(1.0, slot.width * fill);
             const auto availableHeight = std::max(1.0, slot.height * fill);
-            auto width = availableWidth;
-            auto height = width / sourceAspect;
-            if (height > availableHeight) {
-                height = availableHeight;
-                width = height * sourceAspect;
-            }
+            const auto [width, height] = aspectFit(sourceAspect, availableWidth, availableHeight);
             return LayoutRect{
                 .x = slot.x + centered(slot.width, width),
                 .y = slot.y + centered(slot.height, height),
@@ -344,8 +356,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         };
 
         const auto spatialRect = [&](const WindowSnapshot& window, std::size_t index, std::size_t count) {
-            const auto columns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
-            const auto rows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / columns)));
+            const auto [columns, rows] = gridDims(count);
             const auto outerInset = std::clamp(std::min(stageBounds.width, stageBounds.height) * 0.035, 18.0, 40.0);
             const auto content = inset(stageBounds, outerInset);
             const auto gap = std::clamp(renderSize.width * 0.014, 18.0, 28.0);
@@ -377,12 +388,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             const auto sourceWidth = std::max(1.0, window.geometry.size.width);
             const auto sourceHeight = std::max(1.0, window.geometry.size.height);
             const auto sourceAspect = sourceWidth / sourceHeight;
-            auto width = availableWidth;
-            auto height = width / sourceAspect;
-            if (height > availableHeight) {
-                height = availableHeight;
-                width = height * sourceAspect;
-            }
+            const auto [width, height] = aspectFit(sourceAspect, availableWidth, availableHeight);
 
             const auto usableHeight = std::max(1.0, cell.height - labelReserve);
             const auto freeX = std::max(0.0, cell.width - width);
@@ -414,8 +420,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
             }
 
             const auto groupCount = groups.size();
-            const auto columns    = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(groupCount)))));
-            const auto rows       = std::max(1, static_cast<int>(std::ceil(static_cast<double>(groupCount) / columns)));
+            const auto [columns, rows] = gridDims(groupCount);
 
             // Grouping is carried entirely by proximity: the gap between applications is several
             // times the gap between one application's windows, so the clusters read on their own
@@ -438,8 +443,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
                 const auto& inner = container;
 
                 const auto count        = groups[groupIndex].second.size();
-                const auto innerColumns = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
-                const auto innerRows    = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / innerColumns)));
+                const auto [innerColumns, innerRows] = gridDims(count);
                 const auto slotWidth    = std::max(1.0, (inner.width - innerGap * (innerColumns - 1)) / innerColumns);
                 const auto slotHeight   = std::max(1.0, (inner.height - innerGap * (innerRows - 1)) / innerRows);
 
@@ -473,8 +477,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         return frame;
     }
 
-    const auto cols  = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(count)))));
-    const auto rows  = std::max(1, static_cast<int>(std::ceil(static_cast<double>(count) / static_cast<double>(cols))));
+    const auto [cols, rows] = gridDims(count);
 
     const auto gridWidth  = std::max(1.0, renderSize.width - options.outerPadding * 2.0);
     const auto gridHeight = std::max(1.0, renderSize.height - options.outerPadding * 2.0);
@@ -521,8 +524,7 @@ WorkspaceWallFrame WorkspaceWallLayout::compute(
         const auto windowCount = windows.size();
         if (windowCount > 0) {
             card.empty = false;
-            const auto winCols = std::max(1, static_cast<int>(std::ceil(std::sqrt(static_cast<double>(windowCount)))));
-            const auto winRows = std::max(1, static_cast<int>(std::ceil(static_cast<double>(windowCount) / static_cast<double>(winCols))));
+            const auto [winCols, winRows] = gridDims(windowCount);
             const auto winW    = std::max(0.0, inner.width - options.windowGap * static_cast<double>(winCols - 1)) / static_cast<double>(winCols);
             const auto winH    = std::max(0.0, inner.height - options.windowGap * static_cast<double>(winRows - 1)) / static_cast<double>(winRows);
 
