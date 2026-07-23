@@ -21,18 +21,10 @@ SP<Render::ITexture> LabelRenderer::texture(const std::string& text, double maxW
     if (!g_pHyprRenderer || text.empty() || maxWidth <= 0.0)
         return {};
 
-    // m_textures is an open-session text cache keyed by (pointSize, ceil(maxWidth), color, text).
-    // clear() runs on each overview open/close, so repeated frames reuse the same labels instead of
-    // accumulating across opens. Per session, growth is naturally bounded by rendered workspace names
-    // (one per workspace card), visible window labels (one per window card), fixed helpers (overview
-    // title, type/search hints, panel title, WINDOW, SPACE, no-results text, workspace secondary
-    // text, and footer), search result labels, and live search strings. The search caret key
-    // std::format("{}_", query) is capped at 64 *characters* but not at distinct strings, so a long
-    // typing session accumulates one texture per distinct prefix. That is bounded per open because
-    // every session start clears the cache; it is not bounded within a single open, which is
-    // acceptable given a realistic query count but is the one key here that is length- rather than
-    // set-bounded. The cache therefore cannot realistically grow without bound during normal use; do
-    // not add eviction here unless future analysis changes those inputs.
+    // Cache key: (pointSize, ceil(maxWidth), color, text). clear() runs on every open/close, so a
+    // session only holds the labels actually drawn — workspace/window names plus a fixed set of
+    // helpers. The one unbounded-per-open key is the live search string, which grows one entry per
+    // distinct typed prefix; that is fine for realistic queries, so no eviction is warranted here.
     const auto channel = [](float value) {
         return static_cast<int>(std::round(std::clamp(value, 0.0F, 1.0F) * 255.0F));
     };
