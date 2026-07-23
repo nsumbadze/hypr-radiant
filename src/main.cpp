@@ -326,105 +326,37 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error{"hypr-radiant: failed to initialize"};
     }
 
-    const auto registered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_TOGGLE,
-        [](std::string args) -> SDispatchResult {
+    // Every dispatcher shares one wrapper: the null-plugin guard and the exception handling used to
+    // be copy-pasted six times, and two of them (shelf, status) had silently dropped the try/catch,
+    // so an exception there would have unwound into Hyprland. Registering through one helper makes
+    // that impossible to get inconsistent.
+    using PluginMethod = SDispatchResult (hypr_radiant::RadiantPlugin::*)(const std::string&);
+    const auto registerDispatcher = [](const char* name, PluginMethod method) {
+        return HyprlandAPI::addDispatcherV2(g_pluginHandle, name, [name, method](std::string args) -> SDispatchResult {
             try {
                 if (!g_plugin)
                     return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-
-                return g_plugin->toggle(args);
+                return (g_plugin.get()->*method)(args);
             } catch (const std::exception& error) {
-                hypr_radiant::log::error("radiant:toggle failed: {}", error.what());
+                hypr_radiant::log::error("{} failed: {}", name, error.what());
                 return {.passEvent = false, .success = false, .error = error.what()};
             } catch (...) {
-                hypr_radiant::log::error("radiant:toggle failed with an unknown error");
+                hypr_radiant::log::error("{} failed with an unknown error", name);
                 return {.passEvent = false, .success = false, .error = "unknown hypr-radiant dispatcher error"};
             }
         });
+    };
 
-    if (!registered) {
+    const bool allRegistered = registerDispatcher(DISPATCHER_TOGGLE, &hypr_radiant::RadiantPlugin::toggle)
+        && registerDispatcher(DISPATCHER_OPEN, &hypr_radiant::RadiantPlugin::open)
+        && registerDispatcher(DISPATCHER_CLOSE, &hypr_radiant::RadiantPlugin::close)
+        && registerDispatcher(DISPATCHER_APP, &hypr_radiant::RadiantPlugin::showApplication)
+        && registerDispatcher(DISPATCHER_SHELF, &hypr_radiant::RadiantPlugin::shelf)
+        && registerDispatcher(DISPATCHER_STATUS, &hypr_radiant::RadiantPlugin::status);
+
+    if (!allRegistered) {
         resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:toggle"};
-    }
-
-    const auto openRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_OPEN,
-        [](std::string args) -> SDispatchResult {
-            try {
-                if (!g_plugin)
-                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-                return g_plugin->open(args);
-            } catch (const std::exception& error) {
-                hypr_radiant::log::error("radiant:open failed: {}", error.what());
-                return {.passEvent = false, .success = false, .error = error.what()};
-            }
-        });
-    const auto closeRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_CLOSE,
-        [](std::string args) -> SDispatchResult {
-            try {
-                if (!g_plugin)
-                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-                return g_plugin->close(args);
-            } catch (const std::exception& error) {
-                hypr_radiant::log::error("radiant:close failed: {}", error.what());
-                return {.passEvent = false, .success = false, .error = error.what()};
-            }
-        });
-
-    if (!openRegistered || !closeRegistered) {
-        resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register explicit overview dispatchers"};
-    }
-
-    const auto appRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_APP,
-        [](std::string args) -> SDispatchResult {
-            try {
-                if (!g_plugin)
-                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-                return g_plugin->showApplication(args);
-            } catch (const std::exception& error) {
-                hypr_radiant::log::error("radiant:app failed: {}", error.what());
-                return {.passEvent = false, .success = false, .error = error.what()};
-            }
-        });
-
-    if (!appRegistered) {
-        resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:app"};
-    }
-
-    const auto shelfRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_SHELF,
-        [](std::string args) -> SDispatchResult {
-            if (!g_plugin)
-                return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-            return g_plugin->shelf(args);
-        });
-
-    if (!shelfRegistered) {
-        resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:shelf"};
-    }
-
-    const auto statusRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_STATUS,
-        [](std::string args) -> SDispatchResult {
-            if (!g_plugin)
-                return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-            return g_plugin->status(args);
-        });
-    if (!statusRegistered) {
-        resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:status"};
+        throw std::runtime_error{"hypr-radiant: failed to register dispatchers"};
     }
 
     hypr_radiant::log::info("loaded; overview and shelf dispatchers registered");
