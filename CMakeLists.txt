@@ -67,6 +67,7 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
         src/SearchMatcher.cpp
         src/SearchPanelGeometry.cpp
         src/StageTransform.cpp
+        src/OverlayGeometry.cpp
         src/WorkspaceWallLayout.cpp
         src/StateCollector.cpp
         src/Theme.cpp
@@ -250,4 +251,16 @@ if(BUILD_TESTING)
     hypr_radiant_enable_warnings(hypr-radiant-stage-transform-tests)
     hypr_radiant_enable_sanitizers(hypr-radiant-stage-transform-tests)
     add_test(NAME hypr-radiant-stage-transform-tests COMMAND hypr-radiant-stage-transform-tests)
+
+    add_executable(hypr-radiant-overlay-geometry-tests
+        tests/OverlayGeometryTest.cpp
+        src/OverlayGeometry.cpp
+        src/StageTransform.cpp
+    )
+    target_include_directories(hypr-radiant-overlay-geometry-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-overlay-geometry-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-overlay-geometry-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-overlay-geometry-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-overlay-geometry-tests)
+    add_test(NAME hypr-radiant-overlay-geometry-tests COMMAND hypr-radiant-overlay-geometry-tests)
 endif()
