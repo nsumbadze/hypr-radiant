@@ -27,7 +27,9 @@ jobs:
         src/OpeningInputGuard.cpp
         src/AppIdentity.cpp
         src/StageTransform.cpp
+        src/OverlayGeometry.cpp
         tests/WorkspaceWallLayoutTest.cpp
+        tests/OverlayGeometryTest.cpp
         tests/HitTesterTest.cpp
         tests/SearchMatcherTest.cpp
         tests/FadeAnimationTest.cpp
