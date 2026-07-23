@@ -92,7 +92,7 @@ OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, dou
                     .monitorId = frame.monitorId,
                 };
             if (contains(window.rect, x, y))
-                return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
+                return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId, .monitorId = frame.monitorId};
         }
 
         if (contains(frame.rail.bounds, x, y)) {
@@ -107,7 +107,7 @@ OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, dou
         }
 
         if (contains(frame.stage.bounds, x, y))
-            return {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId};
+            return {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId, .monitorId = frame.monitorId};
 
         return {};
     }
@@ -115,7 +115,7 @@ OverviewTarget HitTester::hitTest(const WorkspaceWallFrame& frame, double x, dou
     for (const auto& workspace : frame.workspaces) {
         for (const auto& window : workspace.windows) {
             if (contains(window.rect, x, y))
-                return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
+                return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId, .monitorId = frame.monitorId};
         }
     }
 
@@ -172,7 +172,7 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
         if (frame.focusedStage && current.workspaceId == frame.stage.workspaceId) {
             const auto window = std::ranges::find_if(frame.stage.windows, [](const WindowCard& card) { return selectable(card.rect); });
             if (window != frame.stage.windows.end())
-                return {.type = OverviewTargetType::Window, .workspaceId = window->workspaceId, .windowId = window->stableId};
+                return {.type = OverviewTargetType::Window, .workspaceId = window->workspaceId, .windowId = window->stableId, .monitorId = frame.monitorId};
         }
 
         const auto workspace = std::ranges::find_if(frame.workspaces, [current](const WorkspaceCard& card) {
@@ -181,7 +181,7 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
         if (workspace != frame.workspaces.end()) {
             const auto window = std::ranges::find_if(workspace->windows, [](const WindowCard& card) { return selectable(card.rect); });
             if (window != workspace->windows.end())
-                return {.type = OverviewTargetType::Window, .workspaceId = window->workspaceId, .windowId = window->stableId};
+                return {.type = OverviewTargetType::Window, .workspaceId = window->workspaceId, .windowId = window->stableId, .monitorId = frame.monitorId};
         }
     }
 
@@ -194,19 +194,19 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
                 if (direction == NavigationDirection::Down) {
                     const auto next = std::find_if(window + 1, frame.stage.windows.end(), [](const WindowCard& card) { return selectable(card.rect); });
                     if (next != frame.stage.windows.end())
-                        return {.type = OverviewTargetType::Window, .workspaceId = next->workspaceId, .windowId = next->stableId};
+                        return {.type = OverviewTargetType::Window, .workspaceId = next->workspaceId, .windowId = next->stableId, .monitorId = frame.monitorId};
                 }
                 if (direction == NavigationDirection::Up) {
                     auto previous = window;
                     while (previous != frame.stage.windows.begin()) {
                         --previous;
                         if (selectable(previous->rect))
-                            return {.type = OverviewTargetType::Window, .workspaceId = previous->workspaceId, .windowId = previous->stableId};
+                            return {.type = OverviewTargetType::Window, .workspaceId = previous->workspaceId, .windowId = previous->stableId, .monitorId = frame.monitorId};
                     }
-                    return {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId};
+                    return {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId, .monitorId = frame.monitorId};
                 }
 
-                current = {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId};
+                current = {.type = OverviewTargetType::Workspace, .workspaceId = frame.stage.workspaceId, .monitorId = frame.monitorId};
             }
         }
 
@@ -220,14 +220,14 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
             if (direction == NavigationDirection::Down) {
                 const auto next = std::find_if(window + 1, workspace.windows.end(), [](const WindowCard& card) { return selectable(card.rect); });
                 if (next != workspace.windows.end())
-                    return {.type = OverviewTargetType::Window, .workspaceId = next->workspaceId, .windowId = next->stableId};
+                    return {.type = OverviewTargetType::Window, .workspaceId = next->workspaceId, .windowId = next->stableId, .monitorId = frame.monitorId};
             }
             if (direction == NavigationDirection::Up) {
                 auto previous = window;
                 while (previous != workspace.windows.begin()) {
                     --previous;
                     if (selectable(previous->rect))
-                        return {.type = OverviewTargetType::Window, .workspaceId = previous->workspaceId, .windowId = previous->stableId};
+                        return {.type = OverviewTargetType::Window, .workspaceId = previous->workspaceId, .windowId = previous->stableId, .monitorId = frame.monitorId};
                 }
                 return {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId};
             }

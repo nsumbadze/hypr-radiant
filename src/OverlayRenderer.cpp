@@ -115,12 +115,8 @@ CHyprColor tintedSurface(CHyprColor surface, CHyprColor tint, double amount) {
 }
 
 const MonitorSnapshot* findMonitorSnapshot(const RadiantState& state, std::int64_t id) {
-    for (const auto& monitor : state.monitors) {
-        if (monitor.id == id)
-            return &monitor;
-    }
-
-    return nullptr;
+    const auto it = std::ranges::find(state.monitors, id, &MonitorSnapshot::id);
+    return it == state.monitors.end() ? nullptr : &*it;
 }
 
 CBox fillBoxForAspect(const CBox& box, double sourceWidth, double sourceHeight) {
@@ -165,14 +161,9 @@ PHLWINDOW findLiveWindow(std::uint64_t stableId) {
     if (!g_pCompositor)
         return nullptr;
 
-    for (const auto& window : g_pCompositor->m_windows) {
-        if (!window || window->m_stableID != stableId || !window->m_isMapped)
-            continue;
-
-        return window;
-    }
-
-    return nullptr;
+    const auto it = std::ranges::find_if(g_pCompositor->m_windows,
+        [stableId](const PHLWINDOW& window) { return window && window->m_stableID == stableId && window->m_isMapped; });
+    return it == g_pCompositor->m_windows.end() ? nullptr : *it;
 }
 
 SP<Render::ITexture> currentSurfaceTexture(const SP<CWLSurfaceResource>& surface) {
@@ -1676,16 +1667,13 @@ OverviewTarget OverlayRenderer::searchTargetAt(const WorkspaceWallFrame& frame, 
 }
 
 const WindowCard* OverlayRenderer::findWindowCard(std::uint64_t windowId) const noexcept {
+    const auto byId = [windowId](const WindowCard& card) { return card.stableId == windowId; };
     for (const auto& frame : m_frames) {
-        for (const auto& window : frame.stage.windows) {
-            if (window.stableId == windowId)
-                return &window;
-        }
+        if (const auto it = std::ranges::find_if(frame.stage.windows, byId); it != frame.stage.windows.end())
+            return &*it;
         for (const auto& workspace : frame.workspaces) {
-            for (const auto& window : workspace.windows) {
-                if (window.stableId == windowId)
-                    return &window;
-            }
+            if (const auto it = std::ranges::find_if(workspace.windows, byId); it != workspace.windows.end())
+                return &*it;
         }
     }
 
@@ -1694,10 +1682,9 @@ const WindowCard* OverlayRenderer::findWindowCard(std::uint64_t windowId) const 
 
 const WorkspaceCard* OverlayRenderer::findWorkspaceCard(std::int64_t workspaceId) const noexcept {
     for (const auto& frame : m_frames) {
-        for (const auto& workspace : frame.workspaces) {
-            if (workspace.workspaceId == workspaceId)
-                return &workspace;
-        }
+        const auto it = std::ranges::find(frame.workspaces, workspaceId, &WorkspaceCard::workspaceId);
+        if (it != frame.workspaces.end())
+            return &*it;
     }
 
     return nullptr;

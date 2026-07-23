@@ -44,6 +44,9 @@ void windowHitWinsOverWorkspaceHit() {
     assert(target.type == OverviewTargetType::Window);
     assert(target.workspaceId == 1);
     assert(target.windowId == 11);
+    // Window targets carry the frame's monitor like workspace targets do, so downstream code that
+    // reads monitorId cannot silently receive the -1 sentinel from a window hit.
+    assert(target.monitorId == 1);
 }
 
 void hoverInsideWindowReturnsWindowTarget() {
