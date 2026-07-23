@@ -11,6 +11,7 @@
 #include <hyprland/src/helpers/signal/Signal.hpp>
 #include <hyprutils/math/Region.hpp>
 
+#include <functional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -114,6 +115,11 @@ class OverlayRenderer {
     /// Drops the affordances that must not outlive a visible overlay — chiefly the pointer cursor
     /// override, which would otherwise leave a hand cursor on the desktop after closing.
     void releaseHoverAffordances();
+    /// Shared body of show()/showAppExpose(): both reset identical state and differed only in mode,
+    /// filter, initial selection and stage-entrance duration. `selectInitial` picks the opening
+    /// selection for the active frame.
+    void beginSession(RadiantState state, OverviewMode mode, std::string applicationFilter, int stageDurationMs,
+        const std::function<OverviewTarget(const WorkspaceWallFrame&)>& selectInitial);
 
     const RadiantConfig&                                  m_config;
     FadeAnimation                                      m_animation;

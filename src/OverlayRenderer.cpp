@@ -94,6 +94,35 @@ void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int roun
     g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(data));
 }
 
+// Single-stop border. Folds in the g_pHyprRenderer guard that four of the seven old call sites were
+// missing, so a border can never be the thing that dereferences a null renderer.
+void drawBorder(const CBox& box, CHyprColor color, int round, int borderSize) {
+    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
+        return;
+
+    CBorderPassElement::SBorderData border;
+    border.box        = box;
+    border.grad1      = Config::CGradientValueData{color};
+    border.a          = static_cast<float>(color.a);
+    border.round      = round;
+    border.borderSize = borderSize;
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+}
+
+// Two-stop gradient border at an angle — Hyprland's own border idiom, used by the dock rim.
+void drawBorder(const CBox& box, CHyprColor from, CHyprColor to, float angle, float alpha, int round, int borderSize) {
+    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
+        return;
+
+    CBorderPassElement::SBorderData border;
+    border.box        = box;
+    border.grad1      = Config::CGradientValueData{std::vector<CHyprColor>{from, to}, angle};
+    border.a          = alpha;
+    border.round      = round;
+    border.borderSize = borderSize;
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+}
+
 CHyprColor tintedSurface(CHyprColor surface, CHyprColor tint, double amount) {
     const auto mix = static_cast<float>(std::clamp(amount, 0.0, 1.0));
     surface.r = std::lerp(surface.r, tint.r, mix);
@@ -308,18 +337,21 @@ void OverlayRenderer::uninstall() {
     m_renderStageListener.reset();
 }
 
-void OverlayRenderer::show(RadiantState state) {
-    m_mode = OverviewMode::Spatial;
-    m_applicationFilter.clear();
-    m_state = std::move(state);
+void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::string applicationFilter, int stageDurationMs,
+    const std::function<OverviewTarget(const WorkspaceWallFrame&)>& selectInitial) {
+    m_mode              = mode;
+    m_applicationFilter = std::move(applicationFilter);
+    m_state             = std::move(state);
     resetPointerInteraction();
     m_previousFrames.clear();
     clearSearch();
     rebuildFrames();
 
+    // The else branch matters: without it an opening session inherits the previous one's monitor id
+    // and selected target, which showAppExpose used to do because it was a hand-copied variant.
     if (const auto* frame = activeMonitorFrame()) {
         m_selectedFrameMonitorId = frame->monitorId;
-        m_selectedTarget         = m_hitTester.initialSelection(*frame);
+        m_selectedTarget         = selectInitial(*frame);
     } else {
         m_selectedFrameMonitorId = -1;
         m_selectedTarget         = {};
@@ -328,52 +360,31 @@ void OverlayRenderer::show(RadiantState state) {
     m_textures.clear();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
-    m_closeButtonTransition.hideImmediate();
-    m_closeButtonHotTransition.hideImmediate();
-    m_closeButtonWindowId = 0;
-    m_closeButtonHot = false;
-    setPointerCursorOverride(false);
+    releaseHoverAffordances();
     m_animation.animateTo(true, m_config.animationDurationMs());
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
-    m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))));
+    m_stageTransition.animateTo(true, stageDurationMs);
     animateSelection();
     damageAllMonitors();
 }
 
+void OverlayRenderer::show(RadiantState state) {
+    beginSession(std::move(state), OverviewMode::Spatial, {},
+        std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))),
+        [this](const WorkspaceWallFrame& frame) { return m_hitTester.initialSelection(frame); });
+}
+
 void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationClass) {
-    m_mode = OverviewMode::AppExpose;
-    m_applicationFilter = std::move(applicationClass);
-    m_state = std::move(state);
-    resetPointerInteraction();
-    m_previousFrames.clear();
-    clearSearch();
-    rebuildFrames();
-
-    if (const auto* frame = activeMonitorFrame()) {
-        m_selectedFrameMonitorId = frame->monitorId;
-        if (!frame->stage.windows.empty()) {
-            const auto& window = frame->stage.windows.front();
-            m_selectedTarget = {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
-        } else {
-            m_selectedTarget = m_hitTester.initialSelection(*frame);
-        }
-    }
-
-    m_textures.clear();
-    m_shelfTransition.hideImmediate();
-    m_dockTransition.hideImmediate();
-    m_closeButtonTransition.hideImmediate();
-    m_closeButtonHotTransition.hideImmediate();
-    m_closeButtonWindowId = 0;
-    m_closeButtonHot = false;
-    setPointerCursorOverride(false);
-    m_animation.animateTo(true, m_config.animationDurationMs());
-    m_stageTransitionMonitorId = -1;
-    m_stageTransition.hideImmediate();
-    m_stageTransition.animateTo(true, m_config.animationDurationMs());
-    animateSelection();
-    damageAllMonitors();
+    beginSession(std::move(state), OverviewMode::AppExpose, std::move(applicationClass), m_config.animationDurationMs(),
+        [this](const WorkspaceWallFrame& frame) -> OverviewTarget {
+            // Exposé opens on the first matching window rather than the rail.
+            if (!frame.stage.windows.empty()) {
+                const auto& window = frame.stage.windows.front();
+                return {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId};
+            }
+            return m_hitTester.initialSelection(frame);
+        });
 }
 
 void OverlayRenderer::toggle(RadiantState state) {
@@ -381,6 +392,7 @@ void OverlayRenderer::toggle(RadiantState state) {
         m_state = std::move(state);
         rebuildFrames();
         clearSearch();
+        m_textures.clear();
         releaseHoverAffordances();
         m_animation.animateTo(false, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.67))));
         damageAllMonitors();
@@ -1113,14 +1125,8 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         drawRect(workspaceBox, Theme::cardFill(workspace.active, workspaceSelected, workspace.empty, static_cast<float>(contentAlpha)), damage, round);
 
         if (workspaceSelected || workspace.active) {
-            CBorderPassElement::SBorderData border;
-            border.box        = workspaceBox;
             const auto borderColor = Theme::cardBorder(workspace.active, workspaceSelected, static_cast<float>(contentAlpha));
-            border.grad1      = Config::CGradientValueData{borderColor};
-            border.a          = static_cast<float>(borderColor.a);
-            border.round      = round;
-            border.borderSize = 2;
-            g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+            drawBorder(workspaceBox, borderColor, round, 2);
         }
 
         if (workspace.active) {
@@ -1169,14 +1175,8 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             }
 
             if (windowSelected) {
-                CBorderPassElement::SBorderData border;
-                border.box        = CBox{windowBox.x - 5.0, windowBox.y - 5.0, windowBox.w + 10.0, windowBox.h + 10.0};
                 const auto borderColor = Theme::windowBorder(true, static_cast<float>(contentAlpha));
-                border.grad1      = Config::CGradientValueData{borderColor};
-                border.a          = static_cast<float>(borderColor.a);
-                border.round      = windowRound + 5;
-                border.borderSize = 3;
-                g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+                drawBorder(CBox{windowBox.x - 5.0, windowBox.y - 5.0, windowBox.w + 10.0, windowBox.h + 10.0}, borderColor, windowRound + 5, 3);
             }
         }
     }
@@ -1281,16 +1281,8 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             auto createFill = surfaceColor(selected ? 0.20F : 0.11F, railAlpha * (selected ? 0.93 : 0.76));
             createFill = tintedSurface(createFill, accent, selected ? 0.18 : 0.10);
             drawRect(cardBox, createFill, damage, radius, true);
-            if (g_pHyprRenderer) {
-                CBorderPassElement::SBorderData border;
-                border.box        = cardBox;
-                const auto ringStrength = selected ? 0.88 : 0.46;
-                border.grad1      = Config::CGradientValueData{withAlpha(accent, railAlpha * ringStrength)};
-                border.a          = static_cast<float>(accent.a * railAlpha * ringStrength);
-                border.round      = radius;
-                border.borderSize = selected ? 2 : 1;
-                g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
-            }
+            const auto ringStrength = selected ? 0.88 : 0.46;
+            drawBorder(cardBox, withAlpha(accent, railAlpha * ringStrength), radius, selected ? 2 : 1);
             const auto glyphBox = CBox{cardBox.x, cardBox.y + centered(cardBox.h, 36.0) - 7.0, cardBox.w, 36.0};
             renderCenteredLabel("+", glyphBox, Theme::titleSize() + 14, accent, railAlpha * (selected ? 1.0 : 0.78), damage);
             const auto captionBox = CBox{cardBox.x, cardBox.y + cardBox.h - 27.0, cardBox.w, 16.0};
@@ -1303,15 +1295,9 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             renderWindowPreview(window, previewBox, railAlpha, damage);
         }
 
-        if (g_pHyprRenderer && !workspace.createTarget) {
-            CBorderPassElement::SBorderData border;
-            border.box        = cardBox;
+        if (!workspace.createTarget) {
             const auto borderStrength = selected ? 0.95 : workspace.active ? 0.30 : 0.10;
-            border.grad1      = Config::CGradientValueData{withAlpha(accent, railAlpha * borderStrength)};
-            border.a          = static_cast<float>(accent.a * railAlpha * borderStrength);
-            border.round      = radius;
-            border.borderSize = selected ? 2 : 1;
-            g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+            drawBorder(cardBox, withAlpha(accent, railAlpha * borderStrength), radius, selected ? 2 : 1);
         }
 
         if (workspace.active && !selected && !workspace.createTarget) {
@@ -1392,13 +1378,8 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
             surfaceColor(0.60F, windowAlpha * 0.20), damage);
 
         if (selected) {
-            CBorderPassElement::SBorderData border;
-            border.box        = CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0};
-            border.grad1      = Config::CGradientValueData{withAlpha(accent, stageAlpha * 0.82)};
-            border.a          = static_cast<float>(accent.a * stageAlpha * 0.82);
-            border.round      = radius + 1;
-            border.borderSize = 1;
-            g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+            drawBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(accent, stageAlpha * 0.82),
+                radius + 1, 1);
 
             const std::string state = window.fullscreen ? "Full" : window.floating ? "Float" : "";
             if (!state.empty() && windowBox.w >= 112.0 && windowBox.h >= 56.0) {
@@ -1554,15 +1535,7 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         drawRect(CBox{dock.x + 3.0, dock.y + 5.0, dock.w - 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
         drawRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
 
-        if (g_pHyprRenderer) {
-            CBorderPassElement::SBorderData border;
-            border.box   = dock;
-            border.grad1 = Config::CGradientValueData{std::vector<CHyprColor>{withAlpha(rimLit, dockAlpha * 0.55), rimShade}, rimAngle};
-            border.a     = static_cast<float>(dockAlpha * 0.55);
-            border.round      = radius;
-            border.borderSize = 1;
-            g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
-        }
+        drawBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), rimShade, rimAngle, static_cast<float>(dockAlpha * 0.55), radius, 1);
 
         const auto pillBox = CBox{dock.x + pillInset, dock.y + pillInset, pillWidth, pillHeight};
         drawRect(pillBox, withAlpha(accent, dockAlpha * 0.95), damage, static_cast<int>(std::round(pillHeight / 2.0)), true);
@@ -1650,31 +1623,16 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
         withAlpha(Theme::shadowColor(), alpha), damage, Theme::searchRadius());
     drawRect(panelBox, withAlpha(tintedSurface(Theme::searchPanelColor(), background, 0.34), alpha), damage, Theme::searchRadius(), true);
 
-    CBorderPassElement::SBorderData border;
-    border.box        = panelBox;
-    const auto panelBorder = withAlpha(accent, alpha * 0.62);
-    border.grad1      = Config::CGradientValueData{panelBorder};
-    border.a          = static_cast<float>(panelBorder.a);
-    border.round      = Theme::searchRadius();
-    border.borderSize = 1;
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+    drawBorder(panelBox, withAlpha(accent, alpha * 0.62), Theme::searchRadius(), 1);
 
     drawRect(inputBox, withAlpha(tintedSurface(Theme::searchInputColor(), background, 0.28), alpha), damage, Theme::inputRadius());
 
-    const auto promptTexture = [this]() -> SP<Render::ITexture> {
-        if (!g_pHyprRenderer)
-            return nullptr;
-        const std::string text = ">";
-        const int         size = Theme::labelSize();
-        const int         maxWidth = 32;
-        const auto        key = std::format("{}:{}:{}", size, maxWidth, text);
-        auto              it = m_textures.find(key);
-        if (it == m_textures.end())
-            it = m_textures.emplace(key, g_pHyprRenderer->renderText(text, m_config.foregroundColor(), size, false, m_config.fontFamily(), maxWidth)).first;
-        return it->second;
-    }();
-    const auto promptWidth  = promptTexture && promptTexture->ok() ? promptTexture->m_size.x : 0.0;
-    const auto promptHeight = promptTexture && promptTexture->ok() ? promptTexture->m_size.y : 0.0;
+    // Measure through the shared cache rather than a second hand-rolled lookup with its own key
+    // format: the old IIFE inserted a differently-keyed entry for the same ">" the renderLabel below
+    // already caches.
+    const auto promptSize   = measureLabel(">", 32.0, Theme::labelSize(), m_config.foregroundColor());
+    const auto promptWidth  = promptSize.width;
+    const auto promptHeight = promptSize.height;
     const auto textY        = inputBox.y + std::round((inputBox.h - promptHeight) / 2.0);
     const auto promptX      = inputBox.x + 16.0;
     const auto queryX       = promptX + promptWidth + 10.0;
@@ -1796,8 +1754,11 @@ SP<Render::ITexture> OverlayRenderer::labelTexture(const std::string& text, doub
     // by rendered workspace names (one per workspace card), visible window labels (one per
     // window card), fixed helpers (overview title, type/search hints, panel title, WINDOW,
     // SPACE, no-results text, workspace secondary text, and footer), search result labels,
-    // and live search strings. The only per-keystroke key is std::format("{}_", m_searchQuery),
-    // and appendSearchChar() caps that at 64 query lengths; backspace reuses shorter keys.
+    // and live search strings. The search caret key std::format("{}_", m_searchQuery) is capped at 64
+    // *characters* but not at distinct strings, so a long typing session accumulates one texture per
+    // distinct prefix. That is bounded per open because clearSearchOrHide's close path and every
+    // session start clear m_textures; it is not bounded within a single open, which is acceptable
+    // given a realistic query count but is the one key here that is length- rather than set-bounded.
     // Result counts are bounded by the distinct match counts encountered. With W workspace cards,
     // V visible window cards, E empty non-compact workspace cards, and T <= W + V searchable
     // targets, a realistic session stays around 74 + E + 3W + 2V + T entries before duplicate
