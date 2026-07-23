@@ -1,6 +1,6 @@
 #pragma once
 
-#include <hypr-radiant/HitTester.hpp>
+#include <hypr-radiant/OverviewTarget.hpp>
 #include <hypr-radiant/OpeningInputGuard.hpp>
 
 #include <hyprland/src/helpers/signal/Signal.hpp>

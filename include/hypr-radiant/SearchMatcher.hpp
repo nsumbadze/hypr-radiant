@@ -1,6 +1,6 @@
 #pragma once
 
-#include <hypr-radiant/HitTester.hpp>
+#include <hypr-radiant/OverviewTarget.hpp>
 #include <hypr-radiant/WorkspaceWallLayout.hpp>
 
 #include <cstdint>
