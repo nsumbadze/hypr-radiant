@@ -721,14 +721,15 @@ void OverlayRenderer::updateCloseAffordance(double x, double y) {
             // Card to card the affordance is already established, so it tracks the pointer at full
             // size rather than replaying its entrance on every neighbour.
             m_closeButtonTransition.setProgress(1.0, true);
-        damageAllMonitors();
+        // The button lives on the monitor under the pointer, so only that screen needs repainting.
+        damageMonitorById(m_selectedFrameMonitorId);
     }
 
     if (hot != m_closeButtonHot) {
         m_closeButtonHot = hot;
         m_closeButtonHotTransition.animateTo(hot, CLOSE_HOT_MS);
         setPointerCursorOverride(hot);
-        damageAllMonitors();
+        damageMonitorById(m_selectedFrameMonitorId);
     }
 }
 
@@ -860,9 +861,23 @@ void OverlayRenderer::onRenderStage(eRenderStage stage) {
     if (alpha > 0.001F)
         renderCurrentMonitor(alpha);
 
-    if (m_animation.running() || m_stageTransition.running() || m_selectionTransition.running() || m_shelfTransition.running() ||
-        m_dockTransition.running() || m_closeButtonTransition.running() || m_closeButtonHotTransition.running())
+    // Keep scheduling frames while anything animates, but only for the monitors that actually change.
+    // The open/close fade and the shelf/dock reveals are single shared timelines that touch every
+    // frame, so they need every monitor; the stage push, selection highlight and close button are
+    // monitor-local. Damaging all monitors for a one-screen hover was making unrelated screens
+    // re-render every frame of a 140 ms button fade.
+    if (m_animation.running() || m_shelfTransition.running() || m_dockTransition.running()) {
         damageAllMonitors();
+    } else {
+        if (m_stageTransition.running()) {
+            if (m_stageTransitionMonitorId == -1)
+                damageAllMonitors();
+            else
+                damageMonitorById(m_stageTransitionMonitorId);
+        }
+        if (m_selectionTransition.running() || m_closeButtonTransition.running() || m_closeButtonHotTransition.running())
+            damageMonitorById(m_selectedFrameMonitorId);
+    }
 }
 
 void OverlayRenderer::renderCurrentMonitor(double alpha) {
