@@ -1,4 +1,4 @@
-#include <hypr-radiant/SearchMatcher.hpp>
+#include <hypr-radiant/overview/SearchMatcher.hpp>
 
 #include <cassert>
 #include <iostream>

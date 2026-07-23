@@ -1,4 +1,4 @@
-#include <hypr-radiant/FadeAnimation.hpp>
+#include <hypr-radiant/render/FadeAnimation.hpp>
 
 #include <cassert>
 #include <chrono>

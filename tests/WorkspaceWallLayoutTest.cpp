@@ -1,6 +1,6 @@
 #include <hypr-radiant/RadiantState.hpp>
-#include <hypr-radiant/SearchPanelGeometry.hpp>
-#include <hypr-radiant/WorkspaceWallLayout.hpp>
+#include <hypr-radiant/overview/SearchPanelGeometry.hpp>
+#include <hypr-radiant/overview/WorkspaceWallLayout.hpp>
 
 #include <algorithm>
 #include <cassert>

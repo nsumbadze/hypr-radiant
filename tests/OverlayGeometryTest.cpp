@@ -1,4 +1,4 @@
-#include <hypr-radiant/OverlayGeometry.hpp>
+#include <hypr-radiant/overview/OverlayGeometry.hpp>
 
 #include <cassert>
 #include <cmath>

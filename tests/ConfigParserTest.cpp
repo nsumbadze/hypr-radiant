@@ -1,4 +1,4 @@
-#include <hypr-radiant/Config.hpp>
+#include <hypr-radiant/config/Config.hpp>
 
 #include <cassert>
 #include <cmath>

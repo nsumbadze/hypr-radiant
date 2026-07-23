@@ -1,11 +1,11 @@
 #pragma once
 
-#include <hypr-radiant/ActivationController.hpp>
-#include <hypr-radiant/Config.hpp>
-#include <hypr-radiant/GestureController.hpp>
-#include <hypr-radiant/InputController.hpp>
-#include <hypr-radiant/OverlayRenderer.hpp>
-#include <hypr-radiant/StateCollector.hpp>
+#include <hypr-radiant/compositor/ActivationController.hpp>
+#include <hypr-radiant/config/Config.hpp>
+#include <hypr-radiant/input/GestureController.hpp>
+#include <hypr-radiant/input/InputController.hpp>
+#include <hypr-radiant/render/OverlayRenderer.hpp>
+#include <hypr-radiant/compositor/StateCollector.hpp>
 
 #include <hyprland/src/SharedDefs.hpp>
 #include <hyprland/src/helpers/signal/Signal.hpp>

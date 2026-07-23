@@ -1,4 +1,4 @@
-#include <hypr-radiant/HitTester.hpp>
+#include <hypr-radiant/overview/HitTester.hpp>
 
 #include <cassert>
 #include <iostream>

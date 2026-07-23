@@ -18,16 +18,16 @@ jobs:
       CLANG_TIDY: clang-tidy-22
       UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
       PURE_TIDY_FILES: >-
-        src/WorkspaceWallLayout.cpp
-        src/SearchPanelGeometry.cpp
-        src/HitTester.cpp
-        src/SearchMatcher.cpp
-        src/FadeAnimation.cpp
-        src/SwipeTracker.cpp
-        src/OpeningInputGuard.cpp
-        src/AppIdentity.cpp
-        src/StageTransform.cpp
-        src/OverlayGeometry.cpp
+        src/overview/WorkspaceWallLayout.cpp
+        src/overview/SearchPanelGeometry.cpp
+        src/overview/HitTester.cpp
+        src/overview/SearchMatcher.cpp
+        src/render/FadeAnimation.cpp
+        src/input/SwipeTracker.cpp
+        src/input/OpeningInputGuard.cpp
+        src/overview/AppIdentity.cpp
+        src/overview/StageTransform.cpp
+        src/overview/OverlayGeometry.cpp
         tests/WorkspaceWallLayoutTest.cpp
         tests/OverlayGeometryTest.cpp
         tests/HitTesterTest.cpp

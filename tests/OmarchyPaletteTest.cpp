@@ -1,4 +1,4 @@
-#include <hypr-radiant/OmarchyPalette.hpp>
+#include <hypr-radiant/config/OmarchyPalette.hpp>
 
 #include <cassert>
 #include <cmath>
