@@ -1,4 +1,4 @@
-#include <hypr-radiant/HitTester.hpp>
+#include <hypr-radiant/overview/HitTester.hpp>
 
 #include <cassert>
 #include <iostream>
@@ -44,6 +44,9 @@ void windowHitWinsOverWorkspaceHit() {
     assert(target.type == OverviewTargetType::Window);
     assert(target.workspaceId == 1);
     assert(target.windowId == 11);
+    // Window targets carry the frame's monitor like workspace targets do, so downstream code that
+    // reads monitorId cannot silently receive the -1 sentinel from a window hit.
+    assert(target.monitorId == 1);
 }
 
 void hoverInsideWindowReturnsWindowTarget() {
@@ -214,6 +217,71 @@ void horizontalWorkspaceNavigationWrapsAndSkipsCreateTarget() {
     assert(next.workspaceId == 1);
 }
 
+void horizontalWorkspaceNavigationSkipsEmptyWorkspaces() {
+    // Ctrl+wheel, the horizontal three-finger swipe and the arrow keys all step the rail through
+    // this path. Filled gap slots are rendered so the numbering reads correctly, but sweeping
+    // should carry past them to the next workspace that actually holds something.
+    WorkspaceWallFrame testFrame{.monitorId = 1, .bounds = {.width = 600, .height = 200}, .focusedStage = true};
+    testFrame.workspaces.push_back({.workspaceId = 1, .name = "1", .rect = {.x = 10, .y = 10, .width = 100, .height = 80}, .active = true, .empty = false});
+    testFrame.workspaces.push_back({.workspaceId = 2, .name = "2", .rect = {.x = 150, .y = 10, .width = 100, .height = 80}});
+    testFrame.workspaces.push_back({.workspaceId = 3, .name = "3", .rect = {.x = 290, .y = 10, .width = 100, .height = 80}, .empty = false});
+
+    const auto next = HitTester{}.moveSelection(
+        testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 1}, NavigationDirection::Right);
+    assert(next.type == OverviewTargetType::Workspace);
+    assert(next.workspaceId == 3);
+
+    const auto back = HitTester{}.moveSelection(
+        testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 3}, NavigationDirection::Left);
+    assert(back.type == OverviewTargetType::Workspace);
+    assert(back.workspaceId == 1);
+}
+
+void horizontalNavigationStillMovesWhenEveryWorkspaceIsEmpty() {
+    // Skipping empties must not strand the selection when there is nothing else to reach for.
+    WorkspaceWallFrame testFrame{.monitorId = 1, .bounds = {.width = 600, .height = 200}, .focusedStage = true};
+    testFrame.workspaces.push_back({.workspaceId = 1, .name = "1", .rect = {.x = 10, .y = 10, .width = 100, .height = 80}, .active = true});
+    testFrame.workspaces.push_back({.workspaceId = 2, .name = "2", .rect = {.x = 150, .y = 10, .width = 100, .height = 80}});
+
+    const auto next = HitTester{}.moveSelection(
+        testFrame, {.type = OverviewTargetType::Workspace, .workspaceId = 1}, NavigationDirection::Right);
+    assert(next.type == OverviewTargetType::Workspace);
+    assert(next.workspaceId == 2);
+}
+
+void closeButtonHotspotWinsOverTheWindowBeneathIt() {
+    auto testFrame = focusedFrame();
+    const auto& card = testFrame.stage.windows.front();
+    const auto button = closeButtonRect(card.rect);
+    assert(button.width > 0.0);
+
+    // Inside the hotspot the corner belongs to the button, not the card it sits on.
+    const auto onButton = HitTester{}.hitTest(testFrame, button.x + button.width / 2.0, button.y + button.height / 2.0);
+    assert(onButton.type == OverviewTargetType::CloseWindow);
+    assert(onButton.windowId == card.stableId);
+
+    // Clear of the corner and the card takes the hit again.
+    const auto offButton = HitTester{}.hitTest(testFrame, card.rect.x + card.rect.width / 2.0, card.rect.y + card.rect.height / 2.0);
+    assert(offButton.type == OverviewTargetType::Window);
+    assert(offButton.windowId == card.stableId);
+}
+
+void smallWindowCardsGetNoCloseButton() {
+    // The button would bury a thumbnail this size, so the card goes without one and stays wholly
+    // clickable rather than losing its corner to an affordance nobody could hit.
+    const auto tiny = closeButtonRect({.x = 0.0, .y = 0.0, .width = 60.0, .height = 60.0});
+    assert(tiny.width == 0.0);
+    assert(tiny.height == 0.0);
+
+    WorkspaceWallFrame testFrame{.monitorId = 1, .bounds = {.width = 400, .height = 300}, .focusedStage = true};
+    testFrame.stage.bounds = {.x = 0, .y = 0, .width = 400, .height = 300};
+    testFrame.stage.windows.push_back({.stableId = 7, .workspaceId = 1, .rect = {.x = 10, .y = 10, .width = 60, .height = 60}, .label = "Tiny"});
+
+    const auto corner = HitTester{}.hitTest(testFrame, 20.0, 20.0);
+    assert(corner.type == OverviewTargetType::Window);
+    assert(corner.windowId == 7);
+}
+
 void scaledGlobalPointerMapsToRenderCoordinates() {
     const auto point = mapGlobalPointToFrame(
         {.x = 100.0, .y = 50.0, .width = 1280.0, .height = 800.0},
@@ -257,6 +325,10 @@ int main() {
     focusedStageWindowsAreInteractive();
     focusedNavigationEntersStageAndReturnsToRail();
     horizontalWorkspaceNavigationWrapsAndSkipsCreateTarget();
+    horizontalWorkspaceNavigationSkipsEmptyWorkspaces();
+    horizontalNavigationStillMovesWhenEveryWorkspaceIsEmpty();
+    closeButtonHotspotWinsOverTheWindowBeneathIt();
+    smallWindowCardsGetNoCloseButton();
     scaledGlobalPointerMapsToRenderCoordinates();
     unscaledGlobalPointerOnlyRemovesMonitorOrigin();
     std::cout << "HitTesterTest passed\n";

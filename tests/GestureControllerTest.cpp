@@ -1,4 +1,4 @@
-#include <hypr-radiant/SwipeTracker.hpp>
+#include <hypr-radiant/input/SwipeTracker.hpp>
 
 #include <cassert>
 #include <iostream>

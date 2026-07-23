@@ -4,6 +4,7 @@
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
+#include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <memory>
@@ -68,15 +69,29 @@ bool RadiantPlugin::initialize() {
     }
 
     m_overlay.install();
-    m_input.install(
-        [this] { return m_overlay.active(); },
-        [this](double x, double y) { return m_overlay.hitTest(x, y); },
-        [this](OverviewTarget target) { activate(target, "keyboard activation"); },
-        [this](double x, double y) { m_overlay.pointerMoved(x, y); },
-        [this](bool pressed, double x, double y) {
+    // Re-collect whenever a window goes away while the overview is up. Without this the card for a
+    // closed window lingers as an empty surface, whether it was closed from the overview's own
+    // button or from a keybind behind it.
+    // Only destroy, not close: close fires on request and destroy on the window actually going
+    // away, so listening to both re-collected and re-rasterised every label twice per closed window.
+    // A window that refuses to close never destroys, and correctly never triggers a re-layout.
+    m_windowDestroyListener = Event::bus()->m_events.window.destroy.listen([this](PHLWINDOW) {
+        if (m_overlay.active())
+            m_overlay.refresh(m_stateCollector.collect());
+    });
+    m_input.install({
+        .active   = [this] { return m_overlay.active(); },
+        .activate = [this](OverviewTarget target) { activate(target, "keyboard activation"); },
+        .pointerMove = [this](double x, double y) { m_overlay.pointerMoved(x, y); },
+        .pointerButton = [this](bool pressed, double x, double y) {
             const auto action = m_overlay.pointerButton(pressed, x, y);
             if (action.type == PointerActionType::Activate) {
                 activate(action.target, "pointer activation");
+                return;
+            }
+            if (action.type == PointerActionType::CloseWindow) {
+                if (!m_activation.closeWindow(action.windowId))
+                    log::warn("close target disappeared before the request was sent");
                 return;
             }
             if (action.type != PointerActionType::MoveWindow && action.type != PointerActionType::CreateWorkspaceAndMoveWindow)
@@ -88,45 +103,44 @@ bool RadiantPlugin::initialize() {
             if (action.type == PointerActionType::CreateWorkspaceAndMoveWindow)
                 log::info("created workspace {} and moved window {}", action.target.workspaceId, action.windowId);
             m_input.deferActivation(POST_DROP_ACTIVATION_DELAY);
-            m_overlay.refresh(m_stateCollector.collect());
-        },
-        [this](char value) { m_overlay.appendSearchChar(value); },
-        [this] { m_overlay.backspaceSearch(); },
-        [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
-        [this](bool reveal) { m_overlay.setWorkspaceShelfVisible(reveal); },
-        [this] { return m_overlay.searchActive(); },
-        [this] { m_overlay.beginSearch(); },
-        [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
-        [this] {
+            m_overlay.refresh(m_stateCollector.collect()); },
+        .textInput = [this](char value) { m_overlay.appendSearchChar(value); },
+        .backspace = [this] { m_overlay.backspaceSearch(); },
+        .move = [this](NavigationDirection direction) { m_overlay.moveSelection(direction); },
+        // Scroll stays bound to the workspace shelf alone. The hint dock is pointer-only: scrolling
+        // down is already the close gesture, so revealing the dock on it fought that.
+        .shelfScroll = [this](bool reveal) { m_overlay.setWorkspaceShelfVisible(reveal); },
+        .searchActive = [this] { return m_overlay.searchActive(); },
+        .openSearch = [this] { m_overlay.beginSearch(); },
+        .jump = [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
+        .close = [this] {
             const auto wasActive = m_overlay.active();
             m_overlay.clearSearchOrHide();
             if (wasActive && !m_overlay.active()) {
                 recordTransition("closed by Escape", true);
                 m_input.releaseKeyboard();
-            }
-        },
-        [this] { m_overlay.toggleGroupedMode(); });
-    m_gestures.install(
-        [this] { return m_config.gestureEnabled(); },
-        [this] { return m_config.gestureFingers(); },
-        [this] { return m_config.gestureDistance(); },
-        [this] { return m_overlay.active(); },
-        [this] { return m_overlay.workspaceShelfVisible(); },
-        [this](SwipeAction action) {
+            } },
+        .toggleMode = [this] { m_overlay.toggleGroupedMode(); },
+    });
+    m_gestures.install({
+        .enabled = [this] { return m_config.gestureEnabled(); },
+        .fingers = [this] { return m_config.gestureFingers(); },
+        .distance = [this] { return m_config.gestureDistance(); },
+        .overviewActive = [this] { return m_overlay.active(); },
+        .shelfVisible = [this] { return m_overlay.workspaceShelfVisible(); },
+        .begin = [this](SwipeAction action) {
             if (action == SwipeAction::OpenOverview) {
                 m_config.refreshPalette();
                 m_overlay.beginGestureOpen(m_stateCollector.collect());
                 m_lastOpenedAt = Clock::now();
-                m_input.grabKeyboard(false);
-            }
-        },
-        [this](SwipeAction action, double progress) {
+                m_input.grabKeyboard(InputController::OpeningRelease::Skip);
+            } },
+        .update = [this](SwipeAction action, double progress) {
             if (action == SwipeAction::OpenOverview || action == SwipeAction::CloseOverview)
                 m_overlay.setGestureProgress(action == SwipeAction::OpenOverview, progress);
             else if (action == SwipeAction::RevealShelf || action == SwipeAction::HideShelf)
-                m_overlay.setWorkspaceShelfGestureProgress(action == SwipeAction::RevealShelf, progress);
-        },
-        [this](SwipeAction action, bool commit) {
+                m_overlay.setWorkspaceShelfGestureProgress(action == SwipeAction::RevealShelf, progress); },
+        .end = [this](SwipeAction action, bool commit) {
             if (action == SwipeAction::RevealShelf || action == SwipeAction::HideShelf) {
                 m_overlay.finishWorkspaceShelfGesture(action == SwipeAction::RevealShelf, commit);
                 return;
@@ -140,12 +154,12 @@ bool RadiantPlugin::initialize() {
             m_overlay.finishGesture(opening, commit);
             const auto remainsVisible = opening ? commit : !commit;
             if (remainsVisible)
-                m_input.grabKeyboard(false);
+                m_input.grabKeyboard(InputController::OpeningRelease::Skip);
             else {
                 recordTransition(opening ? "opening gesture cancelled" : "closed by gesture", true);
                 m_input.releaseKeyboard();
-            }
-        });
+            } },
+    });
     return true;
 }
 
@@ -168,6 +182,7 @@ SDispatchResult RadiantPlugin::showApplication(const std::string& args) {
 }
 
 void RadiantPlugin::shutdown() {
+    m_windowDestroyListener.reset();
     m_gestures.uninstall();
     m_input.uninstall();
     m_overlay.uninstall();
@@ -273,18 +288,18 @@ SDispatchResult RadiantPlugin::open(const std::string& args) {
 SDispatchResult RadiantPlugin::close(const std::string& args) {
     if (!args.empty())
         log::warn("radiant:close ignores dispatcher arguments: {}", args);
-    if (!m_overlay.active())
+    if (!m_overlay.active()) {
+        // Still release: this dispatcher is the way out if the grab ever outlives the overlay, and
+        // returning early would leave the keyboard captured with no overlay left to close.
+        m_input.releaseKeyboard();
         return {.passEvent = false, .success = true, .error = ""};
+    }
 
     m_config.refreshPalette();
     m_overlay.toggle(m_stateCollector.collect());
     m_input.releaseKeyboard();
     recordTransition("closed by explicit dispatcher", true);
     return {.passEvent = false, .success = true, .error = ""};
-}
-
-bool RadiantPlugin::active() const noexcept {
-    return m_overlay.active();
 }
 
 } // namespace hypr_radiant
@@ -309,105 +324,37 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         throw std::runtime_error{"hypr-radiant: failed to initialize"};
     }
 
-    const auto registered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_TOGGLE,
-        [](std::string args) -> SDispatchResult {
+    // Every dispatcher shares one wrapper: the null-plugin guard and the exception handling used to
+    // be copy-pasted six times, and two of them (shelf, status) had silently dropped the try/catch,
+    // so an exception there would have unwound into Hyprland. Registering through one helper makes
+    // that impossible to get inconsistent.
+    using PluginMethod = SDispatchResult (hypr_radiant::RadiantPlugin::*)(const std::string&);
+    const auto registerDispatcher = [](const char* name, PluginMethod method) {
+        return HyprlandAPI::addDispatcherV2(g_pluginHandle, name, [name, method](std::string args) -> SDispatchResult {
             try {
                 if (!g_plugin)
                     return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-
-                return g_plugin->toggle(args);
+                return (g_plugin.get()->*method)(args);
             } catch (const std::exception& error) {
-                hypr_radiant::log::error("radiant:toggle failed: {}", error.what());
+                hypr_radiant::log::error("{} failed: {}", name, error.what());
                 return {.passEvent = false, .success = false, .error = error.what()};
             } catch (...) {
-                hypr_radiant::log::error("radiant:toggle failed with an unknown error");
+                hypr_radiant::log::error("{} failed with an unknown error", name);
                 return {.passEvent = false, .success = false, .error = "unknown hypr-radiant dispatcher error"};
             }
         });
+    };
 
-    if (!registered) {
+    const bool allRegistered = registerDispatcher(DISPATCHER_TOGGLE, &hypr_radiant::RadiantPlugin::toggle)
+        && registerDispatcher(DISPATCHER_OPEN, &hypr_radiant::RadiantPlugin::open)
+        && registerDispatcher(DISPATCHER_CLOSE, &hypr_radiant::RadiantPlugin::close)
+        && registerDispatcher(DISPATCHER_APP, &hypr_radiant::RadiantPlugin::showApplication)
+        && registerDispatcher(DISPATCHER_SHELF, &hypr_radiant::RadiantPlugin::shelf)
+        && registerDispatcher(DISPATCHER_STATUS, &hypr_radiant::RadiantPlugin::status);
+
+    if (!allRegistered) {
         resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:toggle"};
-    }
-
-    const auto openRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_OPEN,
-        [](std::string args) -> SDispatchResult {
-            try {
-                if (!g_plugin)
-                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-                return g_plugin->open(args);
-            } catch (const std::exception& error) {
-                hypr_radiant::log::error("radiant:open failed: {}", error.what());
-                return {.passEvent = false, .success = false, .error = error.what()};
-            }
-        });
-    const auto closeRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_CLOSE,
-        [](std::string args) -> SDispatchResult {
-            try {
-                if (!g_plugin)
-                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-                return g_plugin->close(args);
-            } catch (const std::exception& error) {
-                hypr_radiant::log::error("radiant:close failed: {}", error.what());
-                return {.passEvent = false, .success = false, .error = error.what()};
-            }
-        });
-
-    if (!openRegistered || !closeRegistered) {
-        resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register explicit overview dispatchers"};
-    }
-
-    const auto appRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_APP,
-        [](std::string args) -> SDispatchResult {
-            try {
-                if (!g_plugin)
-                    return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-                return g_plugin->showApplication(args);
-            } catch (const std::exception& error) {
-                hypr_radiant::log::error("radiant:app failed: {}", error.what());
-                return {.passEvent = false, .success = false, .error = error.what()};
-            }
-        });
-
-    if (!appRegistered) {
-        resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:app"};
-    }
-
-    const auto shelfRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_SHELF,
-        [](std::string args) -> SDispatchResult {
-            if (!g_plugin)
-                return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-            return g_plugin->shelf(args);
-        });
-
-    if (!shelfRegistered) {
-        resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:shelf"};
-    }
-
-    const auto statusRegistered = HyprlandAPI::addDispatcherV2(
-        g_pluginHandle,
-        DISPATCHER_STATUS,
-        [](std::string args) -> SDispatchResult {
-            if (!g_plugin)
-                return {.passEvent = false, .success = false, .error = "hypr-radiant is not initialized"};
-            return g_plugin->status(args);
-        });
-    if (!statusRegistered) {
-        resetPluginState();
-        throw std::runtime_error{"hypr-radiant: failed to register dispatcher radiant:status"};
+        throw std::runtime_error{"hypr-radiant: failed to register dispatchers"};
     }
 
     hypr_radiant::log::info("loaded; overview and shelf dispatchers registered");

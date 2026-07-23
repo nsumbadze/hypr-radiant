@@ -1,6 +1,6 @@
 #include <hypr-radiant/RadiantState.hpp>
-#include <hypr-radiant/SearchPanelGeometry.hpp>
-#include <hypr-radiant/WorkspaceWallLayout.hpp>
+#include <hypr-radiant/overview/SearchPanelGeometry.hpp>
+#include <hypr-radiant/overview/WorkspaceWallLayout.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <vector>
 
 using namespace hypr_radiant;
 
@@ -16,8 +17,8 @@ namespace {
 RadiantState sampleState() {
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 2, .activeWorkspaceName = "2"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
+    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1});
     state.windows.push_back({
         .stableId = 10,
         .title = "Editor",
@@ -78,27 +79,72 @@ void focusedStageUsesRealWorkspacesPlusEmptyNext() {
     assert(frame.workspaces.at(1).active);
 }
 
-void focusedStageDoesNotGeneratePhantomWorkspacesForGaps() {
-    // Regression for B3: the old minimumWorkspaceSlots logic generated cards
-    // for every ID from 1..maxWorkspaceId, producing phantom workspaces when
-    // real IDs had gaps. The focused-stage branch must emit only real
-    // workspaces for the monitor plus one empty "next" workspace.
+void focusedStageFillsGapsWithEmptyWorkspaces() {
+    // Supersedes the old B3 regression, which asserted gaps stayed collapsed. A hole in the
+    // numbering is still reachable by keybind, so the rail renders it as an empty slot: hiding it
+    // both made those workspaces look unavailable and shifted every card sideways as they emptied.
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5, .activeWorkspaceName = "5"});
-    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 5, .name = "five", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1});
+    state.workspaces.push_back({.id = 5, .name = "five", .monitorId = 1});
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
-    assert(frame.workspaces.size() == 3);
-    assert(frame.workspaces.at(0).workspaceId == 1);
-    assert(frame.workspaces.at(1).workspaceId == 5);
-    assert(frame.workspaces.at(2).workspaceId == 6);
-    assert(frame.workspaces.at(2).createTarget);
-    assert(frame.workspaces.at(0).empty);
-    assert(frame.workspaces.at(1).empty);
-    assert(frame.workspaces.at(2).empty);
-    assert(frame.workspaces.at(1).active);
+    // 1 and 5 are real, 2-4 are filled gaps, 6 is the trailing create target.
+    assert(frame.workspaces.size() == 6);
+    for (std::size_t index = 0; index < frame.workspaces.size(); ++index)
+        assert(frame.workspaces.at(index).workspaceId == static_cast<std::int64_t>(index) + 1);
+    assert(frame.workspaces.at(5).createTarget);
+    assert(!frame.workspaces.at(3).createTarget);
+    for (const auto& card : frame.workspaces)
+        assert(card.empty);
+    assert(frame.workspaces.at(4).active);
+
+    // Filled slots stay in the rail's left-to-right run rather than stacking.
+    for (std::size_t index = 1; index < frame.workspaces.size(); ++index)
+        assert(frame.workspaces.at(index).rect.x > frame.workspaces.at(index - 1).rect.x);
+}
+
+void hugeWorkspaceIdDoesNotExplodeTheRail() {
+    // `hyprctl dispatch workspace 5000000` is legal, and the gap fill used to materialise a card per
+    // integer up to the highest live ID — one full window scan each — which hung the compositor and
+    // exhausted memory. Real workspaces stay listed; only the empty slots between them are bounded.
+    RadiantState state;
+    state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5000000, .activeWorkspaceName = "5000000"});
+    state.workspaces.push_back({.id = 1, .name = "one", .monitorId = 1});
+    state.workspaces.push_back({.id = 5000000, .name = "far", .monitorId = 1});
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
+
+    assert(frame.workspaces.size() < 128);
+    // Both real workspaces survive the cap.
+    const auto hasId = [&frame](std::int64_t id) {
+        return std::ranges::any_of(frame.workspaces, [id](const WorkspaceCard& card) { return card.workspaceId == id; });
+    };
+    assert(hasId(1));
+    assert(hasId(5000000));
+}
+
+void clientLabelsAreTruncated() {
+    // Titles are client-controlled and land in a Pango layout plus a texture-cache key, so an
+    // unbounded one becomes a multi-megabyte surface.
+    RadiantState state;
+    state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
+    state.windows.push_back({
+        .stableId = 1,
+        .title = std::string(64000, 'x'),
+        .className = "Test",
+        .geometry = {.size = {.width = 800, .height = 600}},
+        .workspaceId = 1,
+        .monitorId = 1,
+        .mapped = true,
+    });
+
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
+
+    assert(!frame.stage.windows.empty());
+    assert(frame.stage.windows.front().label.size() <= 256);
 }
 
 void focusedStageCardSpacingMatchesSpec() {
@@ -131,9 +177,9 @@ void focusedStageCardSpacingMatchesSpec() {
 void focusedStageEmptyNextWorkspaceGeometry() {
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 3, .activeWorkspaceName = "3"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 3, .name = "3", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
+    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1});
+    state.workspaces.push_back({.id = 3, .name = "3", .monitorId = 1});
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
@@ -207,10 +253,10 @@ void multiMonitorPerFrameBounds() {
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 2, .activeWorkspaceName = "2"});
     state.monitors.push_back({.id = 2, .name = "HDMI-A-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 5, .activeWorkspaceName = "5"});
 
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1"});
-    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1, .monitorName = "DP-1", .visible = true});
-    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 2, .monitorName = "HDMI-A-1"});
-    state.workspaces.push_back({.id = 5, .name = "5", .monitorId = 2, .monitorName = "HDMI-A-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
+    state.workspaces.push_back({.id = 2, .name = "2", .monitorId = 1});
+    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 2});
+    state.workspaces.push_back({.id = 5, .name = "5", .monitorId = 2});
 
     const auto frame1 = WorkspaceWallLayout{}.compute(state, state.monitors.at(0), {.width = 1920, .height = 1080}, stageOptions());
     const auto frame2 = WorkspaceWallLayout{}.compute(state, state.monitors.at(1), {.width = 1920, .height = 1080}, stageOptions());
@@ -222,13 +268,48 @@ void multiMonitorPerFrameBounds() {
     assert(frame1.workspaces.at(2).workspaceId == 6);
     assert(frame1.workspaces.at(2).createTarget);
 
+    // 3 is unclaimed so it fills in here, but 1 and 2 live on DP-1 and must not be offered on this
+    // rail: activating them would drag the workspace off the monitor it currently occupies.
     assert(frame2.monitorId == 2);
-    assert(frame2.workspaces.size() == 3);
-    assert(frame2.workspaces.at(0).workspaceId == 4);
-    assert(frame2.workspaces.at(1).workspaceId == 5);
-    assert(frame2.workspaces.at(2).workspaceId == 6);
-    assert(frame2.workspaces.at(2).createTarget);
-    assert(frame2.workspaces.at(2).empty);
+    assert(frame2.workspaces.size() == 4);
+    assert(frame2.workspaces.at(0).workspaceId == 3);
+    assert(frame2.workspaces.at(1).workspaceId == 4);
+    assert(frame2.workspaces.at(2).workspaceId == 5);
+    assert(frame2.workspaces.at(3).workspaceId == 6);
+    assert(frame2.workspaces.at(3).createTarget);
+    assert(frame2.workspaces.at(3).empty);
+}
+
+void searchPagingKeepsSelectionInView() {
+    std::vector<OverviewTarget> targets;
+    targets.reserve(10);
+    for (std::int64_t i = 0; i < 10; ++i)
+        targets.push_back({.type = OverviewTargetType::Window, .workspaceId = 1, .windowId = static_cast<std::uint64_t>(100 + i)});
+
+    const auto sel = [&](std::size_t i) { return targets[i]; };
+
+    // Fits entirely: always start at 0.
+    assert(visibleSearchStart(targets, sel(9), 10) == 0);
+    assert(visibleSearchStart(targets, sel(9), 20) == 0);
+
+    // Selection within the first window: no scroll yet.
+    assert(visibleSearchStart(targets, sel(0), 4) == 0);
+    assert(visibleSearchStart(targets, sel(3), 4) == 0);
+
+    // Selection past the window: it scrolls so the selected row is the last visible one, not off it.
+    assert(visibleSearchStart(targets, sel(4), 4) == 1); // rows 1..4 visible, 4 selected
+    assert(visibleSearchStart(targets, sel(6), 4) == 3);
+
+    // Selection at the very end clamps to the last full page rather than scrolling past it.
+    assert(visibleSearchStart(targets, sel(9), 4) == 6); // 10 - 4
+    const auto start = visibleSearchStart(targets, sel(9), 4);
+    assert(start + 4 == targets.size());
+
+    // A selection not present in the list is treated as index 0.
+    const OverviewTarget absent{.type = OverviewTargetType::Window, .workspaceId = 9, .windowId = 999};
+    assert(visibleSearchStart(targets, absent, 4) == 0);
+    assert(selectedSearchIndex(targets, absent) == 0);
+    assert(selectedSearchIndex(targets, sel(6)) == 6);
 }
 
 void searchPanelGeometryMatchesSpec() {
@@ -271,7 +352,7 @@ void searchPanelGeometryCapsAtScreenSize() {
 void tinyRenderSizeDoesNotProduceNegativeRects() {
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 20, .height = 20}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
     state.windows.push_back({.stableId = 2, .title = "Two", .workspaceId = 1, .monitorId = 1, .mapped = true});
     state.windows.push_back({.stableId = 1, .title = "One", .workspaceId = 1, .monitorId = 1, .mapped = true});
 
@@ -294,7 +375,7 @@ void tinyRenderSizeDoesNotProduceNegativeRects() {
 void sortsWindowsByStableId() {
     RadiantState state;
     state.monitors.push_back({.id = 1, .name = "DP-1", .geometry = {.size = {.width = 1920, .height = 1080}}, .activeWorkspaceId = 1, .activeWorkspaceName = "1"});
-    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1, .monitorName = "DP-1", .visible = true});
+    state.workspaces.push_back({.id = 1, .name = "1", .monitorId = 1});
     state.windows.push_back({.stableId = 30, .title = "Thirty", .workspaceId = 1, .monitorId = 1, .mapped = true});
     state.windows.push_back({.stableId = 10, .title = "Ten", .workspaceId = 1, .monitorId = 1, .mapped = true});
 
@@ -308,7 +389,7 @@ void sortsWindowsByStableId() {
 void fillsEmptySlotsAndFallsBackToClassName() {
     RadiantState state;
     state.monitors.push_back({.id = 7, .name = "HDMI-A-1", .geometry = {.size = {.width = 1280, .height = 720}}, .activeWorkspaceId = 4, .activeWorkspaceName = "4"});
-    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 7, .monitorName = "HDMI-A-1", .visible = true});
+    state.workspaces.push_back({.id = 4, .name = "4", .monitorId = 7});
     state.windows.push_back({.stableId = 44, .className = "Firefox", .workspaceId = 4, .monitorId = 7, .mapped = true});
 
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1280, .height = 720});
@@ -362,7 +443,7 @@ void appExposeFiltersAcrossLocalWorkspaces() {
 
 void newWorkspaceTargetAvoidsOtherMonitorIds() {
     auto state = sampleState();
-    state.workspaces.push_back({.id = 7, .name = "remote", .monitorId = 2, .monitorName = "HDMI-A-1"});
+    state.workspaces.push_back({.id = 7, .name = "remote", .monitorId = 2});
     const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 1920, .height = 1080}, stageOptions());
 
     assert(frame.workspaces.back().createTarget);
@@ -375,12 +456,15 @@ int main() {
     gridLayoutFillsMinimumSlots();
     polishedDefaultsLeaveBreathingRoom();
     focusedStageUsesRealWorkspacesPlusEmptyNext();
-    focusedStageDoesNotGeneratePhantomWorkspacesForGaps();
+    focusedStageFillsGapsWithEmptyWorkspaces();
+    hugeWorkspaceIdDoesNotExplodeTheRail();
+    clientLabelsAreTruncated();
     focusedStageCardSpacingMatchesSpec();
     focusedStageEmptyNextWorkspaceGeometry();
     focusedStageArrangesWindowsAsANonOverlappingLayer();
     focusedStageCentersOverflowAroundPreview();
     multiMonitorPerFrameBounds();
+    searchPagingKeepsSelectionInView();
     searchPanelGeometryMatchesSpec();
     searchPanelGeometryCapsAtScreenSize();
     tinyRenderSizeDoesNotProduceNegativeRects();

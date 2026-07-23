@@ -1,4 +1,4 @@
-#include <hypr-radiant/OpeningInputGuard.hpp>
+#include <hypr-radiant/input/OpeningInputGuard.hpp>
 
 #include <cassert>
 #include <iostream>

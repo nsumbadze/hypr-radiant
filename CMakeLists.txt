@@ -51,25 +51,27 @@ endfunction()
 
 if(HYPR_RADIANT_BUILD_PLUGIN)
     add_library(hypr-radiant MODULE
-        src/ActivationController.cpp
-        src/AppIdentity.cpp
-        src/Color.cpp
-        src/Config.cpp
-        src/FadeAnimation.cpp
-        src/OmarchyPalette.cpp
-        src/GestureController.cpp
-        src/SwipeTracker.cpp
-        src/HitTester.cpp
-        src/InputController.cpp
+        src/compositor/ActivationController.cpp
+        src/overview/AppIdentity.cpp
+        src/config/Color.cpp
+        src/config/Config.cpp
+        src/render/FadeAnimation.cpp
+        src/config/OmarchyPalette.cpp
+        src/input/GestureController.cpp
+        src/input/SwipeTracker.cpp
+        src/overview/HitTester.cpp
+        src/input/InputController.cpp
         src/main.cpp
-        src/OverlayRenderer.cpp
-        src/OpeningInputGuard.cpp
-        src/SearchMatcher.cpp
-        src/SearchPanelGeometry.cpp
-        src/StageTransform.cpp
-        src/WorkspaceWallLayout.cpp
-        src/StateCollector.cpp
-        src/Theme.cpp
+        src/render/OverlayRenderer.cpp
+        src/input/OpeningInputGuard.cpp
+        src/overview/SearchMatcher.cpp
+        src/overview/SearchPanelGeometry.cpp
+        src/overview/StageTransform.cpp
+        src/overview/OverlayGeometry.cpp
+        src/render/LabelRenderer.cpp
+        src/overview/WorkspaceWallLayout.cpp
+        src/compositor/StateCollector.cpp
+        src/render/Theme.cpp
     )
 
     target_include_directories(hypr-radiant
@@ -102,8 +104,8 @@ include(CTest)
 if(BUILD_TESTING)
     add_executable(hypr-radiant-layout-tests
         tests/WorkspaceWallLayoutTest.cpp
-        src/WorkspaceWallLayout.cpp
-        src/SearchPanelGeometry.cpp
+        src/overview/WorkspaceWallLayout.cpp
+        src/overview/SearchPanelGeometry.cpp
     )
 
     target_include_directories(hypr-radiant-layout-tests
@@ -120,7 +122,7 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-hit-tests
         tests/HitTesterTest.cpp
-        src/HitTester.cpp
+        src/overview/HitTester.cpp
     )
 
     target_include_directories(hypr-radiant-hit-tests
@@ -137,7 +139,7 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-search-tests
         tests/SearchMatcherTest.cpp
-        src/SearchMatcher.cpp
+        src/overview/SearchMatcher.cpp
     )
 
     target_include_directories(hypr-radiant-search-tests
@@ -156,9 +158,9 @@ if(BUILD_TESTING)
         add_executable(hypr-radiant-config-tests
             tests/ConfigParserTest.cpp
             tests/stubs/HyprlandConfigStub.cpp
-            src/Color.cpp
-            src/Config.cpp
-            src/OmarchyPalette.cpp
+            src/config/Color.cpp
+            src/config/Config.cpp
+            src/config/OmarchyPalette.cpp
         )
 
         target_include_directories(hypr-radiant-config-tests
@@ -180,7 +182,7 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-fade-tests
         tests/FadeAnimationTest.cpp
-        src/FadeAnimation.cpp
+        src/render/FadeAnimation.cpp
     )
 
     target_include_directories(hypr-radiant-fade-tests
@@ -197,7 +199,7 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-gesture-tests
         tests/GestureControllerTest.cpp
-        src/SwipeTracker.cpp
+        src/input/SwipeTracker.cpp
     )
     target_include_directories(hypr-radiant-gesture-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(hypr-radiant-gesture-tests PRIVATE cxx_std_23)
@@ -208,7 +210,7 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-input-guard-tests
         tests/OpeningInputGuardTest.cpp
-        src/OpeningInputGuard.cpp
+        src/input/OpeningInputGuard.cpp
     )
     target_include_directories(hypr-radiant-input-guard-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(hypr-radiant-input-guard-tests PRIVATE cxx_std_23)
@@ -219,8 +221,8 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-omarchy-palette-tests
         tests/OmarchyPaletteTest.cpp
-        src/Color.cpp
-        src/OmarchyPalette.cpp
+        src/config/Color.cpp
+        src/config/OmarchyPalette.cpp
     )
     target_include_directories(hypr-radiant-omarchy-palette-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(hypr-radiant-omarchy-palette-tests PRIVATE cxx_std_23)
@@ -231,7 +233,7 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-app-identity-tests
         tests/AppIdentityTest.cpp
-        src/AppIdentity.cpp
+        src/overview/AppIdentity.cpp
     )
     target_include_directories(hypr-radiant-app-identity-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(hypr-radiant-app-identity-tests PRIVATE cxx_std_23)
@@ -242,7 +244,7 @@ if(BUILD_TESTING)
 
     add_executable(hypr-radiant-stage-transform-tests
         tests/StageTransformTest.cpp
-        src/StageTransform.cpp
+        src/overview/StageTransform.cpp
     )
     target_include_directories(hypr-radiant-stage-transform-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
     target_compile_features(hypr-radiant-stage-transform-tests PRIVATE cxx_std_23)
@@ -250,4 +252,16 @@ if(BUILD_TESTING)
     hypr_radiant_enable_warnings(hypr-radiant-stage-transform-tests)
     hypr_radiant_enable_sanitizers(hypr-radiant-stage-transform-tests)
     add_test(NAME hypr-radiant-stage-transform-tests COMMAND hypr-radiant-stage-transform-tests)
+
+    add_executable(hypr-radiant-overlay-geometry-tests
+        tests/OverlayGeometryTest.cpp
+        src/overview/OverlayGeometry.cpp
+        src/overview/StageTransform.cpp
+    )
+    target_include_directories(hypr-radiant-overlay-geometry-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-overlay-geometry-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-overlay-geometry-tests PRIVATE -UNDEBUG -Wno-missing-field-initializers)
+    hypr_radiant_enable_warnings(hypr-radiant-overlay-geometry-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-overlay-geometry-tests)
+    add_test(NAME hypr-radiant-overlay-geometry-tests COMMAND hypr-radiant-overlay-geometry-tests)
 endif()
