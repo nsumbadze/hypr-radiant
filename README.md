@@ -1,50 +1,35 @@
 # hypr-radiant
 
-`hypr-radiant` is a native workspace overview for Hyprland 0.55.x.
-Its default stage layout combines live single-layer previews and translucent glass
-with Omarchy's theme-driven palette, monospace interface language, and
-keyboard-first workflow.
+A window overview for Hyprland. One keybind shows every window on every
+workspace, so you jump straight to the one you want instead of cycling through
+workspaces looking for it.
+
+It reads your Omarchy theme, so it should match the rest of your desktop without
+configuring anything.
+
+The windows of the current workspace spread out across the screen, and a
+workspace shelf slides in at the top edge when the pointer reaches it, so you can
+move between workspaces without leaving the overview.
+
+![The overview with the workspace shelf open](assets/stage.webp)
 
 ## Requirements
 
-- Hyprland 0.55.x with development headers matching the running compositor
+- Hyprland 0.55.x, with development headers matching the compositor you run
 - `hyprpm`
 - CMake 3.25 or newer
-- A C++23-capable compiler
+- A C++23 compiler
 - `pkg-config`
 
-If the plugin headers do not match the running Hyprland, hypr-radiant refuses to
-load, shows a notification, logs the mismatch, and Hyprland ejects the plugin.
+The plugin ABI is tied to the exact Hyprland build. If the headers do not match,
+the plugin refuses to load, sends a notification, and Hyprland unloads it again.
+Nothing breaks, but you do need to rebuild after a Hyprland update.
 
-## Build
+## Install
 
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-```
-
-The plugin is built as:
-
-```text
-build/hypr-radiant.so
-```
-
-## Install With hyprpm
-
-`hyprpm` needs superuser privileges to create its state/cache directory
-(`/var/cache/hyprpm/`) and install matching Hyprland headers. Make sure
-`sudo`, `doas`, or another supported superuser binary is available before
-running the commands below.
-
-From a clone of this repository:
-
-```sh
-hyprpm add "$PWD"
-hyprpm enable hypr-radiant
-hyprpm reload
-```
-
-From GitHub:
+`hyprpm` needs superuser rights the first time, since it creates
+`/var/cache/hyprpm/` and installs matching Hyprland headers. Make sure `sudo` or
+`doas` is available before you start.
 
 ```sh
 hyprpm add https://github.com/nsumbadze/hypr-radiant
@@ -52,7 +37,7 @@ hyprpm enable hypr-radiant
 hyprpm reload
 ```
 
-If the plugin is already installed and you rebuilt or updated it:
+After rebuilding or updating it:
 
 ```sh
 hyprpm update
@@ -67,78 +52,61 @@ hyprpm remove hypr-radiant
 hyprpm reload
 ```
 
-### Recovery and development unload
+## Usage
 
-If `hyprpm reload` loads the plugin and you need to unload it manually, or if
-you are testing a local build without `hyprpm`, use:
+Bind the toggle to whatever you like:
 
-```sh
-hyprctl plugin unload "$PWD/build/hypr-radiant.so"
+```ini
+bind = SUPER, TAB, exec, hyprctl dispatch radiant:toggle
 ```
 
-This was verified to unload the plugin cleanly from a nested Hyprland 0.55.2
-session.
+| Dispatcher | What it does |
+| --- | --- |
+| `radiant:toggle` | Open or close the overview |
+| `radiant:open` | Open it, only if it is closed |
+| `radiant:close` | Close it, only if it is open |
+| `radiant:shelf show\|hide\|toggle` | Control the workspace shelf |
+| `radiant:status` | Notification with the current state, for debugging |
 
-## Dispatcher
-
-After loading the plugin, run:
-
-```sh
-hyprctl dispatch radiant:toggle
-```
-
-To open App Exposé for the currently focused application:
-
-```sh
-hyprctl dispatch radiant:app
-```
-
-The command opens or closes the overview. The default `stage` layout expands the
-window stage across the screen and reveals a lightweight workspace shelf when
-the pointer reaches the top edge. Windows use a stable, organic Exposé layout:
-their aspect ratios and targets remain exact while scale and placement gain a
-subtle spatial variation. The `workspace_wall` layout retains the original grid.
+A three-finger swipe up opens it and a swipe down closes it. While it is open,
+swipe left or right to preview the next workspace. Set `gesture_enabled = false`
+if something else already owns that gesture.
 
 ## Controls
 
-- `hyprctl dispatch radiant:toggle`: open or close overview
-- `hyprctl dispatch radiant:open`: open overview only if it is closed
-- `hyprctl dispatch radiant:close`: close overview only if it is open
-- `hyprctl dispatch radiant:shelf show|hide|toggle`: control the workspace shelf
-- Move the pointer to the top edge or scroll up: reveal the workspace shelf
-- Leave the shelf or scroll down: hide it; scrolling down again closes via gesture
-- Move the pointer to the bottom edge: reveal the shortcut dock
-- Move the pointer away from the bottom edge: hide the dock again
-- Hover a rail workspace or stage window: move selection
-- Drag a stage window onto a rail card: move it to that workspace
-- Drag a stage window onto the trailing `+`: create a workspace and move it there
-- Click the trailing `+`: create and enter a workspace
-- `Tab`: toggle spatial and application-grouped views
-- `Left`/`Right`: move through the workspace shelf
-- `Down`: enter the highlighted workspace's stage windows or move forward
-- `Up`: move backward through stage windows or return to the rail
-- `/`: open the command palette, including all targets for an empty query
-- Type letters: open and filter search; digits filter once search is open
-- `1`–`9`: immediately activate that workspace when search is closed
-- `Backspace`: delete one search character
-- Click a rail workspace: switch workspace
-- Click a stage window: switch workspace and focus window
-- `Enter`: activate selection
-- `Esc`: close search and restore its previous selection, or close the overview
-- Three-finger swipe up/down: open or close the overview; while open, reveal or hide the shelf
-- Three-finger swipe left/right while open: preview the previous or next workspace
+With the mouse:
+
+- Hover a workspace or window to move the selection
+- Click a workspace to switch to it, click a window to focus it
+- Drag a window onto a workspace card to move it there
+- Drag a window onto the trailing `+`, or just click it, to create a workspace
+- Pointer at the top edge reveals the shelf, at the bottom edge the dock
+- Scrolling shows and hides the shelf, `Ctrl` + wheel steps through workspaces
+- Hover a window and click the button in its corner to close it
+
+With the keyboard:
+
+- `Left` / `Right` move along the workspace shelf
+- `Down` drops into the windows of the selected workspace, `Up` goes back
+- `1`–`9` jump straight to a workspace
+- Start typing to search windows by title or class
+- `/` opens search with every window listed
+- `Tab` switches between the spatial and application-grouped views
+- `Enter` activates the selection
+- `Esc` closes search first, the overview second
 
 ## Configuration
+
+All of it is optional. These are the defaults:
 
 ```ini
 plugin {
     radiant {
         opacity = 0.94
         animation_duration = 180
-        layout = stage
         accent_color = auto
-        background_color = 111c18
-        foreground_color = C1C497
+        background_color = auto
+        foreground_color = auto
         font_family = JetBrainsMono Nerd Font
         gesture_enabled = true
         gesture_fingers = 3
@@ -147,35 +115,56 @@ plugin {
 }
 ```
 
-- `opacity`: overlay opacity from `0.0` to `1.0`
-- `animation_duration`: fade duration in milliseconds from `0` to `2000`
-- `layout`: overview layout mode. Supported values are `stage` and `workspace_wall`.
-- `accent_color`: `auto` inherits the focused Hyprland window border; explicit
-  `#RRGGBB`, `#RRGGBBAA`, `rgb(RRGGBB)`, and `rgba(RRGGBBAA)` values override it.
-- `background_color` / `foreground_color`: portable RGB/RGBA palette values.
-- `font_family`: interface font; `JetBrainsMono Nerd Font` is the Omarchy default.
-- `gesture_enabled`: interactive vertical swipe capture; enabled by default.
-- `gesture_fingers`: `3` or `4` fingers.
-- `gesture_distance`: travel in logical pixels, clamped from `120` to `800`.
+| Option | Notes |
+| --- | --- |
+| `opacity` | Overlay opacity, `0.0` to `1.0` |
+| `animation_duration` | Fade duration in ms, `0` to `2000` |
+| `accent_color` | `auto` follows the focused window border; or `#RRGGBB`, `#RRGGBBAA`, `rgb()`, `rgba()` |
+| `background_color`, `foreground_color` | `auto` follows the Omarchy theme, or set them yourself |
+| `font_family` | Interface font |
+| `gesture_enabled` | Trackpad swipe capture |
+| `gesture_fingers` | `3` or `4` |
+| `gesture_distance` | Swipe travel in pixels, `120` to `800` |
 
-Set `gesture_enabled = false` if another Hyprland binding owns the same
-vertical three-finger gesture.
+If no Omarchy theme can be read, the colours fall back to a neutral grey. The
+palette is re-read every time the overview opens, so switching themes does not
+need a reload.
 
-## Test
-
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
-cmake --build build
-ctest --test-dir build --output-on-failure
-```
-
-For development without installing through `hyprpm`, build the plugin and load
-the generated shared object directly:
+## Building it yourself
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+```
+
+That gives you `build/hypr-radiant.so`. You can load it directly instead of
+going through `hyprpm`, which is much faster while working on it:
+
+```sh
 hyprctl plugin load "$PWD/build/hypr-radiant.so"
-hyprctl dispatch radiant:toggle
 hyprctl plugin unload "$PWD/build/hypr-radiant.so"
 ```
+
+Unloading is clean, so you can reload as often as you want.
+
+## Tests
+
+The layout, geometry, search, gesture and theme logic is kept separate from
+Hyprland, so most of it runs without a compositor:
+
+```sh
+cmake -S . -B build/test -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON -DHYPR_RADIANT_BUILD_PLUGIN=OFF
+cmake --build build/test
+ctest --test-dir build/test --output-on-failure
+```
+
+There is also a harness that starts a nested headless Hyprland, loads the
+plugin and takes screenshots, without touching your real session:
+
+```sh
+bash tests/harness/nested-session.sh run-happy-path
+```
+
+## License
+
+MIT, see [LICENSE](LICENSE).
