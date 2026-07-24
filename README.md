@@ -7,7 +7,11 @@ workspaces looking for it.
 It reads your Omarchy theme, so it should match the rest of your desktop without
 configuring anything.
 
-![The stage layout with the workspace shelf open](assets/stage.webp)
+The windows of the current workspace spread out across the screen, and a
+workspace shelf slides in at the top edge when the pointer reaches it, so you can
+move between workspaces without leaving the overview.
+
+![The overview with the workspace shelf open](assets/stage.webp)
 
 ## Requirements
 
@@ -61,29 +65,12 @@ bind = SUPER, TAB, exec, hyprctl dispatch radiant:toggle
 | `radiant:toggle` | Open or close the overview |
 | `radiant:open` | Open it, only if it is closed |
 | `radiant:close` | Close it, only if it is open |
-| `radiant:app` | App Exposé for the focused application |
 | `radiant:shelf show\|hide\|toggle` | Control the workspace shelf |
 | `radiant:status` | Notification with the current state, for debugging |
 
 A three-finger swipe up opens it and a swipe down closes it. While it is open,
 swipe left or right to preview the next workspace. Set `gesture_enabled = false`
 if something else already owns that gesture.
-
-## Layouts
-
-There are two, picked with `layout`.
-
-`stage` is the default. It spreads the windows of the current workspace across
-the screen and keeps a workspace shelf at the top edge, which slides in when the
-pointer goes there or when you scroll up. That is the screenshot above.
-
-`workspace_wall` shows all workspaces at once, as a grid of cards:
-
-![The workspace_wall layout](assets/workspaces.webp)
-
-`radiant:app` collects every window of the focused application:
-
-![App Exposé](assets/app-expose.webp)
 
 ## Controls
 
@@ -117,7 +104,6 @@ plugin {
     radiant {
         opacity = 0.94
         animation_duration = 180
-        layout = stage
         accent_color = auto
         background_color = auto
         foreground_color = auto
@@ -133,7 +119,6 @@ plugin {
 | --- | --- |
 | `opacity` | Overlay opacity, `0.0` to `1.0` |
 | `animation_duration` | Fade duration in ms, `0` to `2000` |
-| `layout` | `stage` or `workspace_wall` |
 | `accent_color` | `auto` follows the focused window border; or `#RRGGBB`, `#RRGGBBAA`, `rgb()`, `rgba()` |
 | `background_color`, `foreground_color` | `auto` follows the Omarchy theme, or set them yourself |
 | `font_family` | Interface font |
