@@ -117,6 +117,10 @@ void overviewGestureDefaultsAreDiscoverable() {
     assert(DEFAULT_GESTURE_DISTANCE == 300.0);
 }
 
+void overviewShortcutDefaultIsDiscoverable() {
+    assert(DEFAULT_SHORTCUT_ENABLED);
+}
+
 } // namespace
 
 int main() {
@@ -127,6 +131,7 @@ int main() {
     parsesAccentFormats();
     rejectsAutomaticAndInvalidAccents();
     overviewGestureDefaultsAreDiscoverable();
+    overviewShortcutDefaultIsDiscoverable();
     std::cout << "ConfigParserTest passed\n";
     return 0;
 }

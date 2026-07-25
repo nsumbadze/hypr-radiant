@@ -44,6 +44,9 @@ bool RadiantConfig::registerValues(HANDLE handle) {
     m_gestureDistance = makeShared<Config::Values::CFloatValue>(
         "plugin:radiant:gesture_distance", "Trackpad travel required to fully open the overview.", static_cast<float>(DEFAULT_GESTURE_DISTANCE),
         Config::Values::SFloatValueOptions{.min = 120.0F, .max = 800.0F});
+    m_shortcutEnabled = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:shortcut_enabled", "Register SUPER+A as the default overview shortcut.", DEFAULT_SHORTCUT_ENABLED ? 1 : 0,
+        Config::Values::SIntValueOptions{.min = 0, .max = 1});
 
     refreshPalette();
 
@@ -52,7 +55,7 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         HyprlandAPI::addConfigValueV2(handle, m_backgroundColor) && HyprlandAPI::addConfigValueV2(handle, m_foregroundColor) &&
         HyprlandAPI::addConfigValueV2(handle, m_fontFamily) &&
         HyprlandAPI::addConfigValueV2(handle, m_gestureEnabled) && HyprlandAPI::addConfigValueV2(handle, m_gestureFingers) &&
-        HyprlandAPI::addConfigValueV2(handle, m_gestureDistance);
+        HyprlandAPI::addConfigValueV2(handle, m_gestureDistance) && HyprlandAPI::addConfigValueV2(handle, m_shortcutEnabled);
 }
 
 bool RadiantConfig::gestureEnabled() const {
@@ -69,6 +72,10 @@ double RadiantConfig::gestureDistance() const {
     if (!m_gestureDistance)
         return DEFAULT_GESTURE_DISTANCE;
     return std::clamp(static_cast<double>(m_gestureDistance->value()), 120.0, 800.0);
+}
+
+bool RadiantConfig::shortcutEnabled() const {
+    return !m_shortcutEnabled ? DEFAULT_SHORTCUT_ENABLED : m_shortcutEnabled->value() != 0;
 }
 
 float RadiantConfig::opacity() const {

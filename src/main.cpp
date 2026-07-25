@@ -68,6 +68,7 @@ bool RadiantPlugin::initialize() {
         return false;
     }
 
+    m_shortcut.install([this] { return m_config.shortcutEnabled(); });
     m_overlay.install();
     // Re-collect whenever a window goes away while the overview is up. Without this the card for a
     // closed window lingers as an empty surface, whether it was closed from the overview's own
@@ -186,6 +187,7 @@ void RadiantPlugin::shutdown() {
     m_gestures.uninstall();
     m_input.uninstall();
     m_overlay.uninstall();
+    m_shortcut.uninstall();
 }
 
 void RadiantPlugin::activate(OverviewTarget target, std::string_view source) {

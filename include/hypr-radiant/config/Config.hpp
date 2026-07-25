@@ -16,6 +16,7 @@ namespace hypr_radiant {
 inline constexpr bool DEFAULT_GESTURE_ENABLED = true;
 inline constexpr int DEFAULT_GESTURE_FINGERS = 3;
 inline constexpr double DEFAULT_GESTURE_DISTANCE = 300.0;
+inline constexpr bool DEFAULT_SHORTCUT_ENABLED = true;
 
 enum class LayoutMode {
     Stage,
@@ -43,6 +44,7 @@ class RadiantConfig {
     [[nodiscard]] bool            gestureEnabled() const;
     [[nodiscard]] int             gestureFingers() const;
     [[nodiscard]] double          gestureDistance() const;
+    [[nodiscard]] bool            shortcutEnabled() const;
 
   private:
     SP<Config::Values::CFloatValue>  m_opacity;
@@ -55,6 +57,7 @@ class RadiantConfig {
     SP<Config::Values::CIntValue>    m_gestureEnabled;
     SP<Config::Values::CIntValue>    m_gestureFingers;
     SP<Config::Values::CFloatValue>  m_gestureDistance;
+    SP<Config::Values::CIntValue>    m_shortcutEnabled;
     OmarchyPalette                   m_palette;
 };
 
