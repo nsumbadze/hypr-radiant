@@ -1287,7 +1287,9 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
                     withAlpha(Theme::shadowColor(), reveal * 0.42), damage, dot);
                 // Rests as a neutral surface and crossfades into the ctx.accent under the pointer.
                 const auto fill = tintedSurface(surfaceColor(0.34F, 1.0), ctx.accent, hotProgress * 0.94);
-                drawRect(closeBox, withAlpha(fill, reveal * 0.94), damage, dot, true);
+                // Blur is rectangular before Hyprland applies the corner mask, which leaves a
+                // grey square around this fully round control on hover.
+                drawRect(closeBox, withAlpha(fill, reveal * 0.94), damage, dot);
 
                 const auto glyphColor = tintedSurface(m_config.foregroundColor(), m_config.backgroundColor(), hotProgress);
                 const auto glyphSize  = m_labels.measure(CLOSE_GLYPH, GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor);
