@@ -37,6 +37,10 @@ hyprpm enable hypr-radiant
 hyprpm reload
 ```
 
+`hyprpm enable` keeps the plugin enabled when Hyprland restarts. The plugin
+registers its default shortcut whenever it loads, so no separate keybind is
+needed after a restart.
+
 After rebuilding or updating it:
 
 ```sh
@@ -54,9 +58,19 @@ hyprpm reload
 
 ## Usage
 
-Bind the toggle to whatever you like:
+Press `SUPER+A` to open or close the overview. A three-finger swipe up opens it
+and a swipe down closes it.
+
+The plugin leaves an existing `SUPER+A` binding untouched. To use a different
+shortcut, disable the built-in one and bind the toggle yourself:
 
 ```ini
+plugin {
+    radiant {
+        shortcut_enabled = false
+    }
+}
+
 bind = SUPER, TAB, exec, hyprctl dispatch radiant:toggle
 ```
 
@@ -68,9 +82,8 @@ bind = SUPER, TAB, exec, hyprctl dispatch radiant:toggle
 | `radiant:shelf show\|hide\|toggle` | Control the workspace shelf |
 | `radiant:status` | Notification with the current state, for debugging |
 
-A three-finger swipe up opens it and a swipe down closes it. While it is open,
-swipe left or right to preview the next workspace. Set `gesture_enabled = false`
-if something else already owns that gesture.
+While it is open, swipe left or right to preview the next workspace. Set
+`gesture_enabled = false` if something else already owns that gesture.
 
 ## Controls
 
@@ -108,6 +121,7 @@ plugin {
         background_color = auto
         foreground_color = auto
         font_family = JetBrainsMono Nerd Font
+        shortcut_enabled = true
         gesture_enabled = true
         gesture_fingers = 3
         gesture_distance = 300
@@ -122,6 +136,7 @@ plugin {
 | `accent_color` | `auto` follows the focused window border; or `#RRGGBB`, `#RRGGBBAA`, `rgb()`, `rgba()` |
 | `background_color`, `foreground_color` | `auto` follows the Omarchy theme, or set them yourself |
 | `font_family` | Interface font |
+| `shortcut_enabled` | Register `SUPER+A` when it is not already bound |
 | `gesture_enabled` | Trackpad swipe capture |
 | `gesture_fingers` | `3` or `4` |
 | `gesture_distance` | Swipe travel in pixels, `120` to `800` |
@@ -145,7 +160,9 @@ hyprctl plugin load "$PWD/build/hypr-radiant.so"
 hyprctl plugin unload "$PWD/build/hypr-radiant.so"
 ```
 
-Unloading is clean, so you can reload as often as you want.
+Unloading is clean, so you can reload as often as you want. Direct loading is
+temporary and does not survive a Hyprland restart; use the `hyprpm` installation
+above for persistent loading.
 
 ## Tests
 

@@ -4,6 +4,7 @@
 #include <hypr-radiant/config/Config.hpp>
 #include <hypr-radiant/input/GestureController.hpp>
 #include <hypr-radiant/input/InputController.hpp>
+#include <hypr-radiant/input/ShortcutController.hpp>
 #include <hypr-radiant/render/OverlayRenderer.hpp>
 #include <hypr-radiant/compositor/StateCollector.hpp>
 
@@ -34,11 +35,12 @@ class RadiantPlugin {
     using Clock = std::chrono::steady_clock;
 
     void activate(OverviewTarget target, std::string_view source);
-    void recordTransition(std::string message, bool notify = false);
+    void recordTransition(std::string message);
 
     HANDLE          m_handle = nullptr;
     ActivationController m_activation;
     RadiantConfig     m_config;
+    ShortcutController m_shortcut;
     InputController m_input;
     GestureController m_gestures;
     StateCollector  m_stateCollector;

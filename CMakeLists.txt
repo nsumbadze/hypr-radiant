@@ -64,6 +64,7 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
         src/main.cpp
         src/render/OverlayRenderer.cpp
         src/input/OpeningInputGuard.cpp
+        src/input/ShortcutController.cpp
         src/overview/SearchMatcher.cpp
         src/overview/SearchPanelGeometry.cpp
         src/overview/StageTransform.cpp

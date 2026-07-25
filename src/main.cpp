@@ -68,6 +68,7 @@ bool RadiantPlugin::initialize() {
         return false;
     }
 
+    m_shortcut.install([this] { return m_config.shortcutEnabled(); });
     m_overlay.install();
     // Re-collect whenever a window goes away while the overview is up. Without this the card for a
     // closed window lingers as an empty surface, whether it was closed from the overview's own
@@ -117,7 +118,7 @@ bool RadiantPlugin::initialize() {
             const auto wasActive = m_overlay.active();
             m_overlay.clearSearchOrHide();
             if (wasActive && !m_overlay.active()) {
-                recordTransition("closed by Escape", true);
+                recordTransition("closed by Escape");
                 m_input.releaseKeyboard();
             } },
         .toggleMode = [this] { m_overlay.toggleGroupedMode(); },
@@ -156,7 +157,7 @@ bool RadiantPlugin::initialize() {
             if (remainsVisible)
                 m_input.grabKeyboard(InputController::OpeningRelease::Skip);
             else {
-                recordTransition(opening ? "opening gesture cancelled" : "closed by gesture", true);
+                recordTransition(opening ? "opening gesture cancelled" : "closed by gesture");
                 m_input.releaseKeyboard();
             } },
     });
@@ -186,6 +187,7 @@ void RadiantPlugin::shutdown() {
     m_gestures.uninstall();
     m_input.uninstall();
     m_overlay.uninstall();
+    m_shortcut.uninstall();
 }
 
 void RadiantPlugin::activate(OverviewTarget target, std::string_view source) {
@@ -202,14 +204,12 @@ void RadiantPlugin::activate(OverviewTarget target, std::string_view source) {
 
     m_input.releaseKeyboard();
     m_overlay.hideImmediate();
-    recordTransition(std::format("closed by {}", source), true);
+    recordTransition(std::format("closed by {}", source));
 }
 
-void RadiantPlugin::recordTransition(std::string message, bool notify) {
+void RadiantPlugin::recordTransition(std::string message) {
     m_lastTransition = std::move(message);
     log::info("{}", m_lastTransition);
-    if (notify)
-        HyprlandAPI::addNotification(m_handle, std::format("[hypr-radiant] {}", m_lastTransition), CHyprColor{0.31F, 0.58F, 0.46F, 1.0F}, 5000);
 }
 
 SDispatchResult RadiantPlugin::status(const std::string&) {
@@ -262,7 +262,7 @@ SDispatchResult RadiantPlugin::toggle(const std::string& args) {
         m_lastOpenedAt = now;
         m_input.grabKeyboard();
     } else if (wasActive && !m_overlay.active()) {
-        recordTransition("closed by dispatcher toggle", true);
+        recordTransition("closed by dispatcher toggle");
         m_input.releaseKeyboard();
     }
 
@@ -298,7 +298,7 @@ SDispatchResult RadiantPlugin::close(const std::string& args) {
     m_config.refreshPalette();
     m_overlay.toggle(m_stateCollector.collect());
     m_input.releaseKeyboard();
-    recordTransition("closed by explicit dispatcher", true);
+    recordTransition("closed by explicit dispatcher");
     return {.passEvent = false, .success = true, .error = ""};
 }
 
