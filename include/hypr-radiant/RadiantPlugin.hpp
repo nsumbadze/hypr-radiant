@@ -35,7 +35,7 @@ class RadiantPlugin {
     using Clock = std::chrono::steady_clock;
 
     void activate(OverviewTarget target, std::string_view source);
-    void recordTransition(std::string message, bool notify = false);
+    void recordTransition(std::string message);
 
     HANDLE          m_handle = nullptr;
     ActivationController m_activation;
