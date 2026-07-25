@@ -10,6 +10,7 @@
 
 #include <hyprland/src/SharedDefs.hpp>
 #include <hyprland/src/helpers/signal/Signal.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <chrono>
@@ -35,6 +36,8 @@ class RadiantPlugin {
     using Clock = std::chrono::steady_clock;
 
     void activate(OverviewTarget target, std::string_view source);
+    void beginWindowClose(std::uint64_t windowId);
+    void cancelPendingWindowClose(bool restoreCard);
     void recordTransition(std::string message);
 
     HANDLE          m_handle = nullptr;
@@ -49,6 +52,9 @@ class RadiantPlugin {
     // as soon as the compositor reports one gone, however it was closed.
     CHyprSignalListener m_windowDestroyListener;
     Clock::time_point m_lastOpenedAt = Clock::time_point::min();
+    SP<CEventLoopTimer> m_windowCloseTimer;
+    std::uint64_t    m_pendingCloseWindowId = 0;
+    bool             m_closeRequestSent = false;
     std::string       m_lastTransition = "plugin loaded";
 };
 

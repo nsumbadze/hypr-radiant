@@ -5,6 +5,7 @@
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <memory>
@@ -26,6 +27,7 @@ constexpr auto PLUGIN_AUTHOR      = "Nika Sumbadze (@nsumbadze)";
 constexpr auto PLUGIN_VERSION     = "0.3.0-dev";
 constexpr auto TOGGLE_GUARD_DELAY = std::chrono::milliseconds{300};
 constexpr auto POST_DROP_ACTIVATION_DELAY = std::chrono::milliseconds{320};
+constexpr auto CLOSE_RESPONSE_DELAY = std::chrono::milliseconds{140};
 
 HANDLE g_pluginHandle = nullptr;
 std::unique_ptr<hypr_radiant::RadiantPlugin> g_plugin;
@@ -76,7 +78,9 @@ bool RadiantPlugin::initialize() {
     // Only destroy, not close: close fires on request and destroy on the window actually going
     // away, so listening to both re-collected and re-rasterised every label twice per closed window.
     // A window that refuses to close never destroys, and correctly never triggers a re-layout.
-    m_windowDestroyListener = Event::bus()->m_events.window.destroy.listen([this](PHLWINDOW) {
+    m_windowDestroyListener = Event::bus()->m_events.window.destroy.listen([this](PHLWINDOW window) {
+        if (window && window->m_stableID == m_pendingCloseWindowId)
+            cancelPendingWindowClose(false);
         if (m_overlay.active())
             m_overlay.refresh(m_stateCollector.collect());
     });
@@ -91,8 +95,7 @@ bool RadiantPlugin::initialize() {
                 return;
             }
             if (action.type == PointerActionType::CloseWindow) {
-                if (!m_activation.closeWindow(action.windowId))
-                    log::warn("close target disappeared before the request was sent");
+                beginWindowClose(action.windowId);
                 return;
             }
             if (action.type != PointerActionType::MoveWindow && action.type != PointerActionType::CreateWorkspaceAndMoveWindow)
@@ -183,11 +186,77 @@ SDispatchResult RadiantPlugin::showApplication(const std::string& args) {
 }
 
 void RadiantPlugin::shutdown() {
+    cancelPendingWindowClose(false);
     m_windowDestroyListener.reset();
     m_gestures.uninstall();
     m_input.uninstall();
     m_overlay.uninstall();
     m_shortcut.uninstall();
+}
+
+void RadiantPlugin::beginWindowClose(std::uint64_t windowId) {
+    if (m_pendingCloseWindowId != 0)
+        return;
+
+    const auto duration = m_overlay.beginWindowClose(windowId);
+    if (!duration)
+        return;
+
+    m_input.deferActivation(*duration + CLOSE_RESPONSE_DELAY);
+
+    if (duration->count() == 0 || !g_pEventLoopManager) {
+        if (!m_activation.closeWindow(windowId))
+            log::warn("close target disappeared before the request was sent");
+        m_overlay.completeWindowClose(windowId);
+        return;
+    }
+
+    m_pendingCloseWindowId = windowId;
+    m_closeRequestSent     = false;
+    m_windowCloseTimer     = makeShared<CEventLoopTimer>(
+        *duration,
+        [this, windowId](SP<CEventLoopTimer> self, void*) {
+            if (windowId != m_pendingCloseWindowId)
+                return;
+
+            if (!m_closeRequestSent) {
+                m_closeRequestSent = true;
+                if (!m_activation.closeWindow(windowId)) {
+                    log::warn("close target disappeared before the request was sent");
+                    cancelPendingWindowClose(true);
+                    return;
+                }
+
+                // Most clients disappear before this fires. If one refuses the polite close or
+                // opens a save prompt, bring its card back instead of leaving a permanent hole.
+                self->updateTimeout(CLOSE_RESPONSE_DELAY);
+                return;
+            }
+
+            cancelPendingWindowClose(true);
+        },
+        nullptr);
+    g_pEventLoopManager->addTimer(m_windowCloseTimer);
+}
+
+void RadiantPlugin::cancelPendingWindowClose(bool restoreCard) {
+    const auto windowId = m_pendingCloseWindowId;
+    if (m_windowCloseTimer) {
+        m_windowCloseTimer->cancel();
+        if (g_pEventLoopManager)
+            g_pEventLoopManager->removeTimer(m_windowCloseTimer);
+        m_windowCloseTimer.reset();
+    }
+
+    m_pendingCloseWindowId = 0;
+    m_closeRequestSent     = false;
+
+    if (windowId == 0)
+        return;
+    if (restoreCard)
+        m_overlay.cancelWindowClose(windowId);
+    else
+        m_overlay.completeWindowClose(windowId);
 }
 
 void RadiantPlugin::activate(OverviewTarget target, std::string_view source) {

@@ -483,6 +483,11 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
     } else if (!m_dragging) {
         const auto releasedTarget = hitTest(x, y);
         if (sameTarget(releasedTarget, m_pointerDownTarget)) {
+            if (releasedTarget.windowId == m_closingWindowId) {
+                resetPointerInteraction();
+                damageAllMonitors();
+                return {};
+            }
             // Press and release both landed on the same close button, so this is a close rather
             // than an activation. Anything else falls through to focusing the target.
             action = releasedTarget.type == OverviewTargetType::CloseWindow
@@ -494,6 +499,57 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
     resetPointerInteraction();
     damageAllMonitors();
     return action;
+}
+
+std::optional<std::chrono::milliseconds> OverlayRenderer::beginWindowClose(std::uint64_t windowId) {
+    if (windowId == 0 || m_closingWindowId != 0 || !active())
+        return std::nullopt;
+
+    const auto frame = std::ranges::find_if(m_frames, [windowId](const WorkspaceWallFrame& candidate) {
+        return std::ranges::any_of(candidate.stage.windows, [windowId](const WindowCard& window) {
+            return window.stableId == windowId;
+        });
+    });
+    if (frame == m_frames.end())
+        return std::nullopt;
+
+    const auto configuredDuration = m_config.animationDurationMs();
+    auto       durationMs         = 0;
+    if (configuredDuration > 0)
+        durationMs = std::clamp(static_cast<int>(std::round(configuredDuration * 0.82)), 110, 220);
+
+    m_closingWindowId        = windowId;
+    m_closingWindowMonitorId = frame->monitorId;
+    m_windowCloseTransition.setProgress(1.0, true);
+    m_windowCloseTransition.animateTo(false, durationMs);
+    releaseHoverAffordances();
+    damageMonitorById(m_closingWindowMonitorId);
+    return std::chrono::milliseconds{durationMs};
+}
+
+void OverlayRenderer::cancelWindowClose(std::uint64_t windowId) {
+    if (windowId == 0 || windowId != m_closingWindowId)
+        return;
+
+    if (!active() || !findWindowCard(windowId)) {
+        completeWindowClose(windowId);
+        return;
+    }
+
+    const auto restoreDuration = std::max(80, static_cast<int>(std::round(m_config.animationDurationMs() * 0.55)));
+    m_windowCloseTransition.animateTo(true, restoreDuration);
+    damageMonitorById(m_closingWindowMonitorId);
+}
+
+void OverlayRenderer::completeWindowClose(std::uint64_t windowId) {
+    if (windowId == 0 || windowId != m_closingWindowId)
+        return;
+
+    const auto monitorId = m_closingWindowMonitorId;
+    m_windowCloseTransition.hideImmediate();
+    m_closingWindowId        = 0;
+    m_closingWindowMonitorId = -1;
+    damageMonitorById(monitorId);
 }
 
 void OverlayRenderer::refresh(RadiantState state) {
@@ -695,6 +751,7 @@ void OverlayRenderer::hideImmediate() {
     m_animation.hideImmediate();
     m_stageTransition.hideImmediate();
     m_selectionTransition.hideImmediate();
+    m_windowCloseTransition.hideImmediate();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
     releaseHoverAffordances();
@@ -705,6 +762,8 @@ void OverlayRenderer::hideImmediate() {
     m_selectedTarget = {};
     m_selectedFrameMonitorId = -1;
     m_stageTransitionMonitorId = -1;
+    m_closingWindowId        = 0;
+    m_closingWindowMonitorId = -1;
     clearSearch();
     resetPointerInteraction();
 
@@ -768,6 +827,9 @@ void OverlayRenderer::onRenderStage(eRenderStage stage) {
     if (stage != RENDER_LAST_MOMENT || !m_animation.renderable())
         return;
 
+    if (m_closingWindowId != 0 && m_windowCloseTransition.targetVisible() && !m_windowCloseTransition.running())
+        completeWindowClose(m_closingWindowId);
+
     const auto alpha = std::clamp(static_cast<float>(m_animation.value()), 0.0F, 1.0F);
 
     if (alpha > 0.001F)
@@ -789,6 +851,8 @@ void OverlayRenderer::onRenderStage(eRenderStage stage) {
         }
         if (m_selectionTransition.running() || m_closeButtonTransition.running() || m_closeButtonHotTransition.running())
             damageMonitorById(m_selectedFrameMonitorId);
+        if (m_windowCloseTransition.running())
+            damageMonitorById(m_closingWindowMonitorId);
     }
 }
 
@@ -1207,20 +1271,24 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
             continue;
         const auto selected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
             m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
+        const auto closeTransition = window.stableId == m_closingWindowId ? std::clamp(m_windowCloseTransition.value(), 0.0, 1.0) : 1.0;
+        const auto cardAlpha       = ctx.stageAlpha * closeTransition;
         auto displayRect = remapStageRect(window.rect, frame.stage.bounds, ctx.pushedStageBounds);
         if (selected)
             displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.014, ctx.selectionTransition), -3.0 * ctx.selectionTransition);
+        if (closeTransition < 1.0)
+            displayRect = windowDismissalRect(displayRect, closeTransition);
         const auto windowBox = boxFor(displayRect);
         const auto radius = Theme::windowRadius();
 
         if (window.appGroupStart && m_mode != OverviewMode::Grouped) {
             m_labels.renderColored(appGlyph(window.appClass), displayRect.x + 2.0, displayRect.y - 22.0,
-                18.0, Theme::hintSize(), ctx.accent, ctx.stageAlpha * 0.92, damage);
+                18.0, Theme::hintSize(), ctx.accent, cardAlpha * 0.92, damage);
             m_labels.render(window.appClass, displayRect.x + 24.0, displayRect.y - 22.0,
-                std::max(1.0, displayRect.width - 26.0), Theme::hintSize(), ctx.stageAlpha * 0.68, damage);
+                std::max(1.0, displayRect.width - 26.0), Theme::hintSize(), cardAlpha * 0.68, damage);
         }
 
-        const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? ctx.stageAlpha * 0.30 : ctx.stageAlpha;
+        const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? cardAlpha * 0.30 : cardAlpha;
         const auto lift = selected ? ctx.selectionTransition : 0.0;
         // Two shadow layers: a wide ambient one plus a tighter contact shadow, so cards float
         // instead of sitting flat on the backdrop.
@@ -1230,7 +1298,7 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
             withAlpha(Theme::shadowColor(), windowAlpha * (0.62 + lift * 0.20)), damage, radius + 2);
         if (selected) {
             drawRect(CBox{windowBox.x - 8.0, windowBox.y - 8.0, windowBox.w + 16.0, windowBox.h + 16.0},
-                withAlpha(ctx.accent, ctx.stageAlpha * 0.10 * ctx.selectionTransition), damage, radius + 8);
+                withAlpha(ctx.accent, cardAlpha * 0.10 * ctx.selectionTransition), damage, radius + 8);
         }
         drawRect(windowBox, withAlpha(ctx.stageSurface, windowAlpha), damage, radius);
         renderWindowPreview(window, windowBox, windowAlpha, damage);
@@ -1240,15 +1308,15 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
             surfaceColor(0.60F, windowAlpha * 0.20), damage);
 
         if (selected) {
-            drawBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(ctx.accent, ctx.stageAlpha * 0.82),
+            drawBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(ctx.accent, cardAlpha * 0.82),
                 radius + 1, 1);
 
             const std::string state = window.fullscreen ? "Full" : window.floating ? "Float" : "";
             if (!state.empty() && windowBox.w >= 112.0 && windowBox.h >= 56.0) {
                 const auto badge = CBox{windowBox.x + 10.0, windowBox.y + 10.0, 64.0, 22.0};
-                drawRect(badge, withAlpha(ctx.railSurface, ctx.stageAlpha * 0.88), damage, 7, true);
-                drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(ctx.accent, ctx.stageAlpha), damage, 2);
-                m_labels.render(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), ctx.stageAlpha * 0.92, damage);
+                drawRect(badge, withAlpha(ctx.railSurface, cardAlpha * 0.88), damage, 7, true);
+                drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(ctx.accent, cardAlpha), damage, 2);
+                m_labels.render(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), cardAlpha * 0.92, damage);
             }
         }
 
@@ -1276,7 +1344,7 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
                 const auto scaled   = scaledAroundCenter(closeRect, std::lerp(0.82, 1.0, closeProgress), 0.0);
                 const auto closeBox = boxFor(remapStageRect(scaled, frame.stage.bounds, ctx.pushedStageBounds));
                 const auto dot      = static_cast<int>(std::round(closeBox.w / 2.0));
-                const auto reveal   = ctx.stageAlpha * closeProgress;
+                const auto reveal   = cardAlpha * closeProgress;
 
                 // Hot reads as a halo outside the button instead of extra size: decoration can
                 // safely overhang the hotspot, geometry cannot.
@@ -1307,14 +1375,14 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
         const auto titleY = std::min(windowBox.y + windowBox.h + 8.0, ctx.displayedStageBounds.y + ctx.displayedStageBounds.height - 26.0);
         const auto titleBox = CBox{titleX, titleY, titleWidth, 26.0};
         auto titleSurface = tintedSurface(ctx.railSurface, ctx.accent, selected ? 0.18 : 0.04);
-        drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), ctx.stageAlpha * 0.52), damage, 9);
-        drawRect(titleBox, withAlpha(titleSurface, ctx.stageAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
+        drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), cardAlpha * 0.52), damage, 9);
+        drawRect(titleBox, withAlpha(titleSurface, cardAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
         if (selected)
-            drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(ctx.accent, ctx.stageAlpha * 0.64), damage, 1);
+            drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(ctx.accent, cardAlpha * 0.64), damage, 1);
         m_labels.renderColored(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
-            18.0, Theme::hintSize(), ctx.accent, ctx.stageAlpha * (selected ? 1.0 : 0.82), damage);
+            18.0, Theme::hintSize(), ctx.accent, cardAlpha * (selected ? 1.0 : 0.82), damage);
         m_labels.render(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
-            std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), ctx.stageAlpha * (selected ? 1.0 : 0.76), damage);
+            std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), cardAlpha * (selected ? 1.0 : 0.76), damage);
     }
 
     if (m_dragging) {
