@@ -12,7 +12,9 @@
 #include <hyprland/src/helpers/signal/Signal.hpp>
 #include <hyprutils/math/Region.hpp>
 
+#include <chrono>
 #include <functional>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -57,6 +59,9 @@ class OverlayRenderer {
     void finishWorkspaceShelfGesture(bool revealing, bool commit);
     void pointerMoved(double x, double y);
     [[nodiscard]] PointerAction pointerButton(bool pressed, double x, double y);
+    [[nodiscard]] std::optional<std::chrono::milliseconds> beginWindowClose(std::uint64_t windowId);
+    void cancelWindowClose(std::uint64_t windowId);
+    void completeWindowClose(std::uint64_t windowId);
     void refresh(RadiantState state);
     void beginGestureOpen(RadiantState state);
     void setGestureProgress(bool opening, double progress);
@@ -134,6 +139,7 @@ class OverlayRenderer {
     FadeAnimation                                      m_dockTransition;
     FadeAnimation                                      m_closeButtonTransition;
     FadeAnimation                                      m_closeButtonHotTransition;
+    FadeAnimation                                      m_windowCloseTransition;
     CHyprSignalListener                                m_renderStageListener;
     CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;
@@ -151,6 +157,8 @@ class OverlayRenderer {
     bool                                                  m_pointerInsideShelfBand = false;
     bool                                                  m_pointerInsideDockBand = false;
     std::uint64_t                                         m_closeButtonWindowId = 0;
+    std::uint64_t                                         m_closingWindowId = 0;
+    std::int64_t                                          m_closingWindowMonitorId = -1;
     bool                                                  m_closeButtonHot = false;
     bool                                                  m_pointerCursorActive = false;
     std::string                                           m_searchQuery;

@@ -17,6 +17,10 @@ namespace hypr_radiant {
 /// Scales a rect about its own centre, optionally nudged down by `offsetY`.
 [[nodiscard]] LayoutRect scaledAroundCenter(const LayoutRect& rect, double scale, double offsetY = 0.0);
 
+/// Shrinks a closing window toward its centre while letting it settle slightly downward.
+/// `progress` is 1 for the untouched card and 0 for the fully dismissed card.
+[[nodiscard]] LayoutRect windowDismissalRect(const LayoutRect& rect, double progress);
+
 /// Per-component linear interpolation between two rects.
 [[nodiscard]] LayoutRect interpolatedRect(const LayoutRect& from, const LayoutRect& to, double progress);
 

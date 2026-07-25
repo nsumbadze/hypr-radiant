@@ -31,6 +31,11 @@ LayoutRect scaledAroundCenter(const LayoutRect& rect, double scale, double offse
     };
 }
 
+LayoutRect windowDismissalRect(const LayoutRect& rect, double progress) {
+    const auto clamped = std::clamp(progress, 0.0, 1.0);
+    return scaledAroundCenter(rect, std::lerp(0.84, 1.0, clamped), 5.0 * (1.0 - clamped));
+}
+
 LayoutRect interpolatedRect(const LayoutRect& from, const LayoutRect& to, double progress) {
     return {
         .x      = std::lerp(from.x, to.x, progress),

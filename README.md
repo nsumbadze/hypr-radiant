@@ -147,16 +147,19 @@ need a reload.
 
 ## Building it yourself
 
+Build and reload the development plugin in one command:
+
 ```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+    && cmake --build build --target hypr-radiant -j"$(nproc)" \
+    && (hyprctl plugin unload "$PWD/build/hypr-radiant.so" 2>/dev/null || true) \
+    && hyprctl plugin load "$PWD/build/hypr-radiant.so"
 ```
 
-That gives you `build/hypr-radiant.so`. You can load it directly instead of
-going through `hyprpm`, which is much faster while working on it:
+That gives you `build/hypr-radiant.so` and loads it directly instead of going
+through `hyprpm`, which is much faster while working on it. To unload it:
 
 ```sh
-hyprctl plugin load "$PWD/build/hypr-radiant.so"
 hyprctl plugin unload "$PWD/build/hypr-radiant.so"
 ```
 

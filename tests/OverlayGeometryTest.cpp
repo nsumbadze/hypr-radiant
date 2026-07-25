@@ -55,6 +55,24 @@ void scaleKeepsTheCenterFixed() {
     assert(near(nudged.width, rect.width)); // scale 1.0 leaves size untouched
 }
 
+void windowDismissalShrinksAndSettles() {
+    const LayoutRect rect{.x = 100.0, .y = 200.0, .width = 200.0, .height = 100.0};
+    const auto open   = windowDismissalRect(rect, 1.0);
+    const auto midway = windowDismissalRect(rect, 0.5);
+    const auto closed = windowDismissalRect(rect, 0.0);
+
+    assert(near(open.x, rect.x) && near(open.y, rect.y));
+    assert(near(open.width, rect.width) && near(open.height, rect.height));
+    assert(midway.width < open.width && midway.width > closed.width);
+    assert(midway.y > open.y);
+    assert(near(closed.width, rect.width * 0.84));
+    assert(near(closed.height, rect.height * 0.84));
+    assert(near(closed.y + closed.height / 2.0, rect.y + rect.height / 2.0 + 5.0));
+
+    const auto clamped = windowDismissalRect(rect, -10.0);
+    assert(near(clamped.x, closed.x) && near(clamped.width, closed.width));
+}
+
 void interpolationHitsBothEnds() {
     const LayoutRect from{.x = 0.0, .y = 0.0, .width = 10.0, .height = 10.0};
     const LayoutRect to{.x = 100.0, .y = 50.0, .width = 30.0, .height = 20.0};
@@ -128,6 +146,7 @@ int main() {
     containsIsHalfOpenAndRejectsZeroArea();
     intersectsMatchesOverlap();
     scaleKeepsTheCenterFixed();
+    windowDismissalShrinksAndSettles();
     interpolationHitsBothEnds();
     remapRectRoundTripsThroughItsInverse();
     collapsedStageFillsTheSpaceTheShelfVacates();
