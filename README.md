@@ -32,14 +32,30 @@ Nothing breaks, but you do need to rebuild after a Hyprland update.
 `doas` is available before you start.
 
 ```sh
+hyprpm update
 hyprpm add https://github.com/nsumbadze/hypr-radiant
 hyprpm enable hypr-radiant
 hyprpm reload
 ```
 
-`hyprpm enable` keeps the plugin enabled when Hyprland restarts. The plugin
-registers its default shortcut whenever it loads, so no separate keybind is
-needed after a restart.
+`hyprpm enable` saves the plugin's enabled state. To load enabled plugins
+automatically whenever Hyprland starts, add this once to `hyprland.lua`:
+
+```lua
+hl.on("hyprland.start", function()
+    hl.exec_cmd("hyprpm reload -n")
+end)
+```
+
+Omarchy currently uses Hyprland's legacy configuration syntax. Put the
+equivalent line in `~/.config/hypr/autostart.conf`:
+
+```ini
+exec-once = hyprpm reload -n
+```
+
+The plugin registers its default shortcut whenever it loads, so no separate
+keybind is needed after a restart.
 
 After rebuilding or updating it:
 
@@ -79,11 +95,42 @@ bind = SUPER, TAB, exec, hyprctl dispatch radiant:toggle
 | `radiant:toggle` | Open or close the overview |
 | `radiant:open` | Open it, only if it is closed |
 | `radiant:close` | Close it, only if it is open |
+| `radiant:preferences` | Open the overview preferences |
+| `radiant:app` | App Exposé for the focused application |
 | `radiant:shelf show\|hide\|toggle` | Control the workspace shelf |
 | `radiant:status` | Notification with the current state, for debugging |
 
 While it is open, swipe left or right to preview the next workspace. Set
 `gesture_enabled = false` if something else already owns that gesture.
+
+## Preferences
+
+Point at the bottom edge and choose `SETTINGS`, or press `Ctrl+,` while the
+overview is open. The native Omarchy-style panel controls:
+
+- Stage or Workspace Wall
+- Spatial or application-grouped window arrangement
+- Theme accent or an explicit green, blue or violet accent
+- Default, reduced or disabled motion
+- App Exposé for the focused application
+
+Changes are saved immediately to
+`~/.config/hypr-radiant/preferences.conf` (or `$XDG_CONFIG_HOME` when set) and
+survive plugin and Hyprland restarts. `THEME` follows the active Omarchy
+`colors.toml`; it is re-read whenever the overview opens.
+
+## Views
+
+Stage is the default. It spreads the current workspace across the screen and
+keeps a workspace shelf at the top edge.
+
+Workspace Wall shows all workspaces at once as a grid of cards:
+
+![The Workspace Wall view](assets/workspaces.webp)
+
+App Exposé collects every window belonging to the focused application:
+
+![App Exposé](assets/app-expose.webp)
 
 ## Controls
 
@@ -94,6 +141,7 @@ With the mouse:
 - Drag a window onto a workspace card to move it there
 - Drag a window onto the trailing `+`, or just click it, to create a workspace
 - Pointer at the top edge reveals the shelf, at the bottom edge the dock
+- Choose `SETTINGS` in the bottom dock to change persistent preferences
 - Scrolling shows and hides the shelf, `Ctrl` + wheel steps through workspaces
 - Hover a window and click the button in its corner to close it
 
@@ -105,6 +153,7 @@ With the keyboard:
 - Start typing to search windows by title or class
 - `/` opens search with every window listed
 - `Tab` switches between the spatial and application-grouped views
+- `Ctrl+,` opens or closes preferences
 - `Enter` activates the selection
 - `Esc` closes search first, the overview second
 
@@ -117,6 +166,7 @@ plugin {
     radiant {
         opacity = 0.94
         animation_duration = 180
+        layout = stage
         accent_color = auto
         background_color = auto
         foreground_color = auto
@@ -133,7 +183,8 @@ plugin {
 | --- | --- |
 | `opacity` | Overlay opacity, `0.0` to `1.0` |
 | `animation_duration` | Fade duration in ms, `0` to `2000` |
-| `accent_color` | `auto` follows the focused window border; or `#RRGGBB`, `#RRGGBBAA`, `rgb()`, `rgba()` |
+| `layout` | `stage` or `workspace_wall` |
+| `accent_color` | `auto` follows the Omarchy theme; or `#RRGGBB`, `#RRGGBBAA`, `rgb()`, `rgba()` |
 | `background_color`, `foreground_color` | `auto` follows the Omarchy theme, or set them yourself |
 | `font_family` | Interface font |
 | `shortcut_enabled` | Register `SUPER+A` when it is not already bound |
@@ -144,6 +195,10 @@ plugin {
 If no Omarchy theme can be read, the colours fall back to a neutral grey. The
 palette is re-read every time the overview opens, so switching themes does not
 need a reload.
+
+The settings panel starts by following these Hyprland values. Choosing Stage or
+Wall saves that view as the preference; `THEME` and `DEFAULT` return accent and
+motion to their Hyprland/Omarchy-backed values.
 
 ## Building it yourself
 
@@ -165,7 +220,7 @@ hyprctl plugin unload "$PWD/build/hypr-radiant.so"
 
 Unloading is clean, so you can reload as often as you want. Direct loading is
 temporary and does not survive a Hyprland restart; use the `hyprpm` installation
-above for persistent loading.
+and startup line above for persistent loading.
 
 ## Tests
 
