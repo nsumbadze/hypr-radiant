@@ -57,6 +57,7 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
         src/config/Config.cpp
         src/render/FadeAnimation.cpp
         src/config/OmarchyPalette.cpp
+        src/config/Preferences.cpp
         src/input/GestureController.cpp
         src/input/SwipeTracker.cpp
         src/overview/HitTester.cpp
@@ -66,9 +67,11 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
         src/input/OpeningInputGuard.cpp
         src/input/ShortcutController.cpp
         src/overview/SearchMatcher.cpp
+        src/overview/SearchSuggestions.cpp
         src/overview/SearchPanelGeometry.cpp
         src/overview/StageTransform.cpp
         src/overview/OverlayGeometry.cpp
+        src/overview/PreferencesPanelGeometry.cpp
         src/render/LabelRenderer.cpp
         src/overview/WorkspaceWallLayout.cpp
         src/compositor/StateCollector.cpp
@@ -141,6 +144,7 @@ if(BUILD_TESTING)
     add_executable(hypr-radiant-search-tests
         tests/SearchMatcherTest.cpp
         src/overview/SearchMatcher.cpp
+        src/overview/SearchSuggestions.cpp
     )
 
     target_include_directories(hypr-radiant-search-tests
@@ -232,6 +236,17 @@ if(BUILD_TESTING)
     hypr_radiant_enable_sanitizers(hypr-radiant-omarchy-palette-tests)
     add_test(NAME hypr-radiant-omarchy-palette-tests COMMAND hypr-radiant-omarchy-palette-tests)
 
+    add_executable(hypr-radiant-preferences-tests
+        tests/PreferencesTest.cpp
+        src/config/Preferences.cpp
+    )
+    target_include_directories(hypr-radiant-preferences-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-preferences-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-preferences-tests PRIVATE -UNDEBUG)
+    hypr_radiant_enable_warnings(hypr-radiant-preferences-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-preferences-tests)
+    add_test(NAME hypr-radiant-preferences-tests COMMAND hypr-radiant-preferences-tests)
+
     add_executable(hypr-radiant-app-identity-tests
         tests/AppIdentityTest.cpp
         src/overview/AppIdentity.cpp
@@ -265,4 +280,15 @@ if(BUILD_TESTING)
     hypr_radiant_enable_warnings(hypr-radiant-overlay-geometry-tests)
     hypr_radiant_enable_sanitizers(hypr-radiant-overlay-geometry-tests)
     add_test(NAME hypr-radiant-overlay-geometry-tests COMMAND hypr-radiant-overlay-geometry-tests)
+
+    add_executable(hypr-radiant-preferences-panel-tests
+        tests/PreferencesPanelGeometryTest.cpp
+        src/overview/PreferencesPanelGeometry.cpp
+    )
+    target_include_directories(hypr-radiant-preferences-panel-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-preferences-panel-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-preferences-panel-tests PRIVATE -UNDEBUG)
+    hypr_radiant_enable_warnings(hypr-radiant-preferences-panel-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-preferences-panel-tests)
+    add_test(NAME hypr-radiant-preferences-panel-tests COMMAND hypr-radiant-preferences-panel-tests)
 endif()

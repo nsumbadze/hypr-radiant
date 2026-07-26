@@ -2,6 +2,7 @@
 
 #include <hypr-radiant/compositor/ActivationController.hpp>
 #include <hypr-radiant/config/Config.hpp>
+#include <hypr-radiant/config/Preferences.hpp>
 #include <hypr-radiant/input/GestureController.hpp>
 #include <hypr-radiant/input/InputController.hpp>
 #include <hypr-radiant/input/ShortcutController.hpp>
@@ -29,6 +30,7 @@ class RadiantPlugin {
     SDispatchResult close(const std::string& args);
     SDispatchResult toggle(const std::string& args);
     SDispatchResult showApplication(const std::string& args);
+    SDispatchResult preferences(const std::string& args);
     SDispatchResult shelf(const std::string& args);
     SDispatchResult status(const std::string& args);
 
@@ -43,6 +45,7 @@ class RadiantPlugin {
     HANDLE          m_handle = nullptr;
     ActivationController m_activation;
     RadiantConfig     m_config;
+    PreferencesStore  m_preferences;
     ShortcutController m_shortcut;
     InputController m_input;
     GestureController m_gestures;
@@ -51,6 +54,8 @@ class RadiantPlugin {
     // A window closing while the overview is up leaves its card behind, so the layout is re-flowed
     // as soon as the compositor reports one gone, however it was closed.
     CHyprSignalListener m_windowDestroyListener;
+    // Lock UI must always win the final render stage and receive keyboard input.
+    CHyprSignalListener m_sessionLockGuardListener;
     Clock::time_point m_lastOpenedAt = Clock::time_point::min();
     SP<CEventLoopTimer> m_windowCloseTimer;
     std::uint64_t    m_pendingCloseWindowId = 0;

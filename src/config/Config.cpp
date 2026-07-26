@@ -26,7 +26,7 @@ bool RadiantConfig::registerValues(HANDLE handle) {
 
     m_accentColor = makeShared<Config::Values::CStringValue>(
         "plugin:radiant:accent_color",
-        "Overview accent color, or auto to inherit the focused Hyprland border.",
+        "Overview accent color, or auto to follow the active Omarchy theme.",
         "auto");
     m_backgroundColor = makeShared<Config::Values::CStringValue>(
         "plugin:radiant:background_color", "Overview glass background color, or auto to follow the Omarchy theme.", "auto");

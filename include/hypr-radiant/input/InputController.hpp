@@ -4,6 +4,7 @@
 #include <hypr-radiant/input/OpeningInputGuard.hpp>
 
 #include <hyprland/src/helpers/signal/Signal.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 
 #include <chrono>
@@ -31,24 +32,26 @@ class InputController {
     using JumpFn     = std::function<void(std::int64_t)>;
     using CloseFn    = std::function<void()>;
     using ToggleModeFn = std::function<void()>;
+    using TogglePreferencesFn = std::function<void()>;
 
     // One named field per callback: the previous 13 positional std::functions were transposable at
     // the call site — two same-typed lambdas 30 lines apart compiled fine while silently swapping,
     // say, Tab and Escape. Designated initialisers make order irrelevant.
     struct Callbacks {
         ActiveFn        active;
-        ActivateFn      activate;
-        PointerMoveFn   pointerMove;
-        PointerButtonFn pointerButton;
-        TextInputFn     textInput;
-        BackspaceFn     backspace;
-        MoveFn          move;
-        ShelfScrollFn   shelfScroll;
-        SearchActiveFn  searchActive;
-        OpenSearchFn    openSearch;
-        JumpFn          jump;
-        CloseFn         close;
-        ToggleModeFn    toggleMode;
+        ActivateFn          activate;
+        PointerMoveFn       pointerMove;
+        PointerButtonFn     pointerButton;
+        TextInputFn         textInput;
+        BackspaceFn         backspace;
+        MoveFn              move;
+        ShelfScrollFn       shelfScroll;
+        SearchActiveFn      searchActive;
+        OpenSearchFn        openSearch;
+        JumpFn              jump;
+        CloseFn             close;
+        ToggleModeFn        toggleMode;
+        TogglePreferencesFn togglePreferences;
     };
 
     void install(Callbacks callbacks);
@@ -65,6 +68,8 @@ class InputController {
   private:
     [[nodiscard]] bool inputArmed() const noexcept;
     [[nodiscard]] bool activationArmed() const noexcept;
+    void               startBackspaceRepeat();
+    void               stopBackspaceRepeat();
 
     using Clock = std::chrono::steady_clock;
 
@@ -81,11 +86,13 @@ class InputController {
     JumpFn              m_jump;
     CloseFn             m_close;
     ToggleModeFn        m_toggleMode;
+    TogglePreferencesFn m_togglePreferences;
     CHyprSignalListener m_mouseMoveListener;
     CHyprSignalListener m_mouseButtonListener;
     CHyprSignalListener m_mouseAxisListener;
     CHyprSignalListener m_keyListener;
     SP<CSeatGrab>       m_seatGrab;
+    SP<CEventLoopTimer> m_backspaceRepeatTimer;
     double              m_scrollAccumulator = 0.0;
     Clock::time_point   m_acceptInputAfter = Clock::time_point::min();
     Clock::time_point   m_acceptActivationAfter = Clock::time_point::min();

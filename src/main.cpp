@@ -6,6 +6,7 @@
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <memory>
@@ -20,6 +21,7 @@ constexpr auto DISPATCHER_TOGGLE  = "radiant:toggle";
 constexpr auto DISPATCHER_OPEN    = "radiant:open";
 constexpr auto DISPATCHER_CLOSE   = "radiant:close";
 constexpr auto DISPATCHER_APP     = "radiant:app";
+constexpr auto DISPATCHER_PREFERENCES = "radiant:preferences";
 constexpr auto DISPATCHER_SHELF   = "radiant:shelf";
 constexpr auto DISPATCHER_STATUS  = "radiant:status";
 constexpr auto PLUGIN_DESCRIPTION = "Native workspace overview with live previews and search.";
@@ -62,13 +64,14 @@ void assertCompatibleHeaders() {
 
 namespace hypr_radiant {
 
-RadiantPlugin::RadiantPlugin(HANDLE handle) : m_handle(handle), m_overlay(m_config) {}
+RadiantPlugin::RadiantPlugin(HANDLE handle) : m_handle(handle), m_overlay(m_config, m_preferences) {}
 
 bool RadiantPlugin::initialize() {
     if (!m_config.registerValues(m_handle)) {
         log::error("failed to register config values");
         return false;
     }
+    m_preferences.load();
 
     m_shortcut.install([this] { return m_config.shortcutEnabled(); });
     m_overlay.install();
@@ -84,9 +87,25 @@ bool RadiantPlugin::initialize() {
         if (m_overlay.active())
             m_overlay.refresh(m_stateCollector.collect());
     });
+    m_sessionLockGuardListener = Event::bus()->m_events.tick.listen([this] {
+        if (!g_pSessionLockManager || !g_pSessionLockManager->isSessionLocked())
+            return;
+
+        const auto wasActive = m_overlay.active();
+        m_overlay.hideImmediate();
+        m_input.releaseKeyboard();
+        if (wasActive)
+            recordTransition("closed for session lock");
+    });
     m_input.install({
         .active   = [this] { return m_overlay.active(); },
-        .activate = [this](OverviewTarget target) { activate(target, "keyboard activation"); },
+        .activate = [this](OverviewTarget target) {
+            if (m_overlay.preferencesVisible()) {
+                if (m_overlay.activatePreference().type == PointerActionType::ShowAppExpose)
+                    showApplication({});
+                return;
+            }
+            activate(target, "keyboard activation"); },
         .pointerMove = [this](double x, double y) { m_overlay.pointerMoved(x, y); },
         .pointerButton = [this](bool pressed, double x, double y) {
             const auto action = m_overlay.pointerButton(pressed, x, y);
@@ -96,6 +115,10 @@ bool RadiantPlugin::initialize() {
             }
             if (action.type == PointerActionType::CloseWindow) {
                 beginWindowClose(action.windowId);
+                return;
+            }
+            if (action.type == PointerActionType::ShowAppExpose) {
+                showApplication({});
                 return;
             }
             if (action.type != PointerActionType::MoveWindow && action.type != PointerActionType::CreateWorkspaceAndMoveWindow)
@@ -116,7 +139,9 @@ bool RadiantPlugin::initialize() {
         .shelfScroll = [this](bool reveal) { m_overlay.setWorkspaceShelfVisible(reveal); },
         .searchActive = [this] { return m_overlay.searchActive(); },
         .openSearch = [this] { m_overlay.beginSearch(); },
-        .jump = [this](std::int64_t workspaceId) { activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
+        .jump = [this](std::int64_t workspaceId) {
+            if (!m_overlay.preferencesVisible())
+                activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
         .close = [this] {
             const auto wasActive = m_overlay.active();
             m_overlay.clearSearchOrHide();
@@ -125,6 +150,7 @@ bool RadiantPlugin::initialize() {
                 m_input.releaseKeyboard();
             } },
         .toggleMode = [this] { m_overlay.toggleGroupedMode(); },
+        .togglePreferences = [this] { m_overlay.togglePreferences(); },
     });
     m_gestures.install({
         .enabled = [this] { return m_config.gestureEnabled(); },
@@ -185,8 +211,24 @@ SDispatchResult RadiantPlugin::showApplication(const std::string& args) {
     return {.passEvent = false, .success = true, .error = ""};
 }
 
+SDispatchResult RadiantPlugin::preferences(const std::string& args) {
+    if (!args.empty())
+        log::warn("radiant:preferences ignores dispatcher arguments: {}", args);
+
+    if (!m_overlay.active()) {
+        m_config.refreshPalette();
+        m_overlay.show(m_stateCollector.collect());
+        m_lastOpenedAt = Clock::now();
+        m_input.grabKeyboard();
+        recordTransition("opened preferences by dispatcher");
+    }
+    m_overlay.togglePreferences();
+    return {.passEvent = false, .success = true, .error = ""};
+}
+
 void RadiantPlugin::shutdown() {
     cancelPendingWindowClose(false);
+    m_sessionLockGuardListener.reset();
     m_windowDestroyListener.reset();
     m_gestures.uninstall();
     m_input.uninstall();
@@ -266,13 +308,21 @@ void RadiantPlugin::activate(OverviewTarget target, std::string_view source) {
     if (target.type == OverviewTargetType::None)
         return;
 
+    if (target.type == OverviewTargetType::Application) {
+        target.type = OverviewTargetType::Window;
+    }
+
+    // Workspace changes also perform a focus hand-off. Drop Radiant's seat grab and final-stage
+    // overlay first so Hyprland can complete that hand-off against the real desktop surface.
+    m_input.releaseKeyboard();
+    m_overlay.hideImmediate();
+
     if (!m_activation.activate(target)) {
-        log::warn("overview activation target disappeared or was invalid");
+        log::warn("overview activation target disappeared or was invalid (type={}, workspace={}, window={})",
+            static_cast<int>(target.type), target.workspaceId, target.windowId);
         return;
     }
 
-    m_input.releaseKeyboard();
-    m_overlay.hideImmediate();
     recordTransition(std::format("closed by {}", source));
 }
 
@@ -418,6 +468,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         && registerDispatcher(DISPATCHER_OPEN, &hypr_radiant::RadiantPlugin::open)
         && registerDispatcher(DISPATCHER_CLOSE, &hypr_radiant::RadiantPlugin::close)
         && registerDispatcher(DISPATCHER_APP, &hypr_radiant::RadiantPlugin::showApplication)
+        && registerDispatcher(DISPATCHER_PREFERENCES, &hypr_radiant::RadiantPlugin::preferences)
         && registerDispatcher(DISPATCHER_SHELF, &hypr_radiant::RadiantPlugin::shelf)
         && registerDispatcher(DISPATCHER_STATUS, &hypr_radiant::RadiantPlugin::status);
 

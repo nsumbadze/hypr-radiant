@@ -67,7 +67,10 @@ void LabelRenderer::renderColored(
     data.tex      = tex;
     data.box      = CBox{std::round(x), std::round(y), std::min(tex->m_size.x, maxWidth), tex->m_size.y};
     data.overallA = static_cast<float>(std::clamp(alpha, 0.0, 1.0));
-    data.damage   = damage;
+    // This texture is a complete cached label, not a compositor surface with local damage.
+    // Supplying monitor-space damage here made CTexPassElement interpret unrelated coordinates
+    // inside the tiny text texture, so individual glyph slices disappeared between frames.
+    (void)damage;
 
     g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
 }

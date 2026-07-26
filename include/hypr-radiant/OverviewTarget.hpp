@@ -8,6 +8,7 @@ enum class OverviewTargetType {
     None,
     Workspace,
     Window,
+    Application,
     NewWorkspace,
     CloseWindow,
 };

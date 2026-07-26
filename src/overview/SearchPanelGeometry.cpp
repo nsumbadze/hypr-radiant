@@ -27,7 +27,10 @@ SearchPanelGeometry computeSearchPanelGeometry(const WorkspaceWallFrame& frame, 
         1,
         static_cast<std::size_t>(std::max(0.0, maxPanelHeight - fixedHeight + rowGap) / (rowHeight + rowGap)));
     const auto capacity = std::max<std::size_t>(1, std::min({resultCount, maxCapacity, std::size_t{6}}));
-    const auto rowsHeight = resultCount == 0 ? 0.0 : static_cast<double>(capacity) * rowHeight + static_cast<double>(capacity - 1) * rowGap;
+    // Empty search still needs a real result row. Collapsing to fixedHeight placed both empty-state
+    // lines on top of the footer and let the second line wrap beyond the panel.
+    const auto rowsHeight = resultCount == 0 ? 72.0 :
+        static_cast<double>(capacity) * rowHeight + static_cast<double>(capacity - 1) * rowGap;
     const auto panelHeight = std::min(maxPanelHeight, std::max(std::min(136.0, maxPanelHeight), fixedHeight + rowsHeight));
     const auto panelX   = centered(frame.bounds.width, panelWidth);
     const auto preferredY = frame.bounds.height * 0.35 - panelHeight / 2.0;
