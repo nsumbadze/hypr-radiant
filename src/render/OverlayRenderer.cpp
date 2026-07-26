@@ -84,6 +84,20 @@ void drawBorder(const CBox& box, CHyprColor color, int round, int borderSize) {
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
 }
 
+// Two-stop gradient border at an angle — Hyprland's own border idiom, used by the dock rim.
+void drawBorder(const CBox& box, CHyprColor from, CHyprColor to, float angle, float alpha, int round, int borderSize) {
+    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
+        return;
+
+    CBorderPassElement::SBorderData border;
+    border.box        = box;
+    border.grad1      = Config::CGradientValueData{std::vector<CHyprColor>{from, to}, angle};
+    border.a          = alpha;
+    border.round      = round;
+    border.borderSize = borderSize;
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+}
+
 CHyprColor withAlpha(CHyprColor color, double multiplier) {
     color.a *= multiplier;
     return color;
@@ -454,7 +468,6 @@ void OverlayRenderer::pointerMoved(double x, double y) {
             m_pointerInsideDockBand = insideDockBand;
         }
     }
-    m_settingsButtonHot = settingsButtonAt(x, y);
     updateCloseAffordance(x, y);
     if (!m_pointerDown) {
         selectTargetAt(x, y);
@@ -491,9 +504,6 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
             m_pointerDownPreference = preferenceControlAt(x, y);
             return {};
         }
-        m_pointerDownSettingsButton = settingsButtonAt(x, y, &m_preferencesMonitorId);
-        if (m_pointerDownSettingsButton)
-            return {};
         m_pointerDownTarget = hitTest(x, y);
         m_dragTarget = {};
         return {};
@@ -509,14 +519,6 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
         resetPointerInteraction();
         damageAllMonitors();
         return action;
-    }
-
-    if (m_pointerDownSettingsButton) {
-        const auto releasedOnButton = settingsButtonAt(x, y);
-        resetPointerInteraction();
-        if (releasedOnButton)
-            togglePreferences();
-        return {};
     }
 
     pointerMoved(x, y);
@@ -783,7 +785,7 @@ void OverlayRenderer::updateCloseAffordance(double x, double y) {
         m_closeButtonHotTransition.animateTo(hot, CLOSE_HOT_MS);
         damageMonitorById(m_selectedFrameMonitorId);
     }
-    setPointerCursorOverride(hot || m_settingsButtonHot);
+    setPointerCursorOverride(hot);
 }
 
 void OverlayRenderer::setPointerCursorOverride(bool pointerCursor) {
@@ -802,7 +804,6 @@ void OverlayRenderer::releaseHoverAffordances() {
     m_closeButtonHotTransition.hideImmediate();
     m_closeButtonWindowId = 0;
     m_closeButtonHot      = false;
-    m_settingsButtonHot   = false;
     setPointerCursorOverride(false);
 }
 
@@ -846,7 +847,6 @@ void OverlayRenderer::hideImmediate() {
     m_frames.clear();
     m_previousFrames.clear();
     m_frameBoundsByMonitor.clear();
-    m_settingsButtonByMonitor.clear();
     m_labels.clear();
     m_selectedTarget = {};
     m_selectedFrameMonitorId = -1;
@@ -870,7 +870,6 @@ void OverlayRenderer::resetPointerInteraction() {
     m_pointerDown = false;
     m_dragging = false;
     m_pointerDownPreference = {};
-    m_pointerDownSettingsButton = false;
 }
 
 void OverlayRenderer::animateSelection() {
@@ -999,7 +998,6 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
 void OverlayRenderer::rebuildFrames() {
     m_frames.clear();
     m_frameBoundsByMonitor.clear();
-    m_settingsButtonByMonitor.clear();
 
     if (g_pCompositor) {
         for (const auto& monitor : g_pCompositor->m_monitors) {
@@ -1285,51 +1283,35 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double contentAlpha, CHyprColor accent, const CRegion& damage) {
     const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
     if (!m_searchActive && dockProgress > 0.001) {
-        // A shortcut dock: a small frosted capsule that rides up from the bottom edge, lit
-        // along its rim by a two-stop gradient the way Hyprland lights a window border. It stays
-        // hidden until the pointer reaches the bottom edge, so the stage is uncluttered by
-        // shortcuts you already know.
         const auto dockAlpha = contentAlpha * dockProgress;
-        const auto modeLabel = effectiveLayoutMode() == LayoutMode::WorkspaceWall ? "WORKSPACES" :
-            m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
-        constexpr auto settingsLabel = "SETTINGS";
 
         struct DeckHint {
             const char* keys;
             const char* action;
         };
-        // Only bindings that actually exist: every letter key falls through to search, so there is
-        // no hjkl to advertise.
-        static constexpr std::array<DeckHint, 5> HINTS{{
+        static constexpr std::array<DeckHint, 6> HINTS{{
                 {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
                 {"\xe2\x86\x91\xe2\x86\x93", "window"},
-                {"\xe2\x87\xa5", "group"},
+                {"tab", "apps/spatial"},
                 {"\xe2\x86\xb5", "open"},
                 {"/", "find"},
+                {"ctrl+,", "settings"},
             }};
 
-        constexpr auto dockHeight   = 30.0;
-        constexpr auto dockPadR     = 15.0;
-        constexpr auto pillInset    = 4.0;
-        constexpr auto pillPadX     = 11.0;
-        constexpr auto pillGap      = 13.0;
+        constexpr auto dockHeight   = 26.0;
+        constexpr auto dockPadX     = 15.0;
         constexpr auto keysGap      = 6.0;
         constexpr auto pairGap      = 15.0;
         constexpr auto measureWidth = 240.0;
         constexpr auto riseDistance = 14.0;
+        constexpr auto rimAngle     = 2.62F;
 
         const auto foreground = m_config.foregroundColor();
-        // Hint keys use a softened accent so they remain legible without competing with active
-        // controls in the deliberately restrained Omarchy-style dock.
-        const auto rimLit   = tintedSurface(accent, foreground, 0.42);
+        const auto railSurface = surfaceColor(0.10F, 0.72);
+        const auto rimLit      = tintedSurface(accent, foreground, 0.42);
+        const auto rimShade    = withAlpha(accent, 0.16);
 
-        const auto pillHeight = dockHeight - pillInset * 2.0;
-        const auto modeSize   = m_labels.measure(modeLabel, measureWidth, Theme::hintSize(), foreground);
-        const auto pillWidth  = modeSize.width + pillPadX * 2.0;
-        const auto settingsSize = m_labels.measure(settingsLabel, measureWidth, Theme::hintSize(), foreground);
-        const auto settingsWidth = settingsSize.width + pillPadX * 2.0;
-
-        auto contentWidth = pillInset + pillWidth + pillGap + settingsWidth + pillGap;
+        auto contentWidth = dockPadX;
         std::array<double, HINTS.size()> keyWidths{};
         std::array<double, HINTS.size()> actionWidths{};
         for (std::size_t i = 0; i < HINTS.size(); ++i) {
@@ -1337,37 +1319,22 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
             actionWidths[i] = m_labels.measure(HINTS[i].action, measureWidth, Theme::hintSize(), foreground).width;
             contentWidth += keyWidths[i] + keysGap + actionWidths[i] + (i + 1 < HINTS.size() ? pairGap : 0.0);
         }
-        contentWidth += dockPadR;
+        contentWidth += dockPadX;
 
         const auto dockWidth = std::min(std::max(1.0, frame.bounds.width - 64.0), contentWidth);
-        // Rides up into place, so the reveal reads as the dock arriving rather than fading in.
         const auto dockY = frame.bounds.height - 34.0 - dockHeight + (1.0 - dockProgress) * riseDistance;
         const auto dock  = CBox{centered(frame.bounds.width, dockWidth), dockY, dockWidth, dockHeight};
-        constexpr auto radius = 0;
+        const auto radius = static_cast<int>(std::round(dockHeight / 2.0));
 
-        drawRect(CBox{dock.x + 5.0, dock.y + 7.0, dock.w, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.48), damage);
-        drawRect(dock, withAlpha(m_config.backgroundColor(), dockAlpha * 0.94), damage, radius, true);
-        drawBorder(dock, withAlpha(foreground, dockAlpha * 0.46), radius, 1);
+        drawRect(CBox{dock.x - 3.0, dock.y + 9.0, dock.w + 6.0, dock.h},
+            withAlpha(Theme::shadowColor(), dockAlpha * 0.40), damage, radius + 6);
+        drawRect(CBox{dock.x + 3.0, dock.y + 5.0, dock.w - 6.0, dock.h},
+            withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
+        drawRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
+        drawBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), rimShade, rimAngle,
+            static_cast<float>(dockAlpha * 0.55), radius, 1);
 
-        const auto pillBox = CBox{dock.x + pillInset, dock.y + pillInset, pillWidth, pillHeight};
-        drawRect(pillBox, withAlpha(foreground, dockAlpha * 0.07), damage, 0, true);
-        m_labels.renderCentered(modeLabel, pillBox, Theme::hintSize(), accent, dockAlpha, damage);
-
-        const auto settingsBox = CBox{pillBox.x + pillBox.w + pillGap, pillBox.y, settingsWidth, pillHeight};
-        m_settingsButtonByMonitor[frame.monitorId] = {
-            .x = settingsBox.x,
-            .y = settingsBox.y,
-            .width = settingsBox.w,
-            .height = settingsBox.h,
-        };
-        const auto settingsActive = m_preferencesVisible && frame.monitorId == m_preferencesMonitorId;
-        drawRect(settingsBox, withAlpha(foreground, dockAlpha * (settingsActive || m_settingsButtonHot ? 0.11 : 0.04)), damage);
-        drawBorder(settingsBox, withAlpha(settingsActive || m_settingsButtonHot ? accent : foreground,
-            dockAlpha * (settingsActive || m_settingsButtonHot ? 0.64 : 0.12)), 0, 1);
-        m_labels.renderCentered(settingsLabel, settingsBox, Theme::hintSize(),
-            settingsActive || m_settingsButtonHot ? accent : foreground, dockAlpha * (settingsActive || m_settingsButtonHot ? 1.0 : 0.54), damage);
-
-        auto cursorX = settingsBox.x + settingsBox.w + pillGap;
+        auto cursorX = dock.x + dockPadX;
         for (std::size_t i = 0; i < HINTS.size(); ++i) {
             const auto keySize    = m_labels.measure(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground);
             const auto actionSize = m_labels.measure(HINTS[i].action, measureWidth, Theme::hintSize(), foreground);
@@ -1378,8 +1345,6 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
                 Theme::hintSize(), foreground, dockAlpha * 0.58, damage);
             cursorX += actionWidths[i] + pairGap;
         }
-    } else {
-        m_settingsButtonByMonitor.erase(frame.monitorId);
     }
 }
 
@@ -2058,23 +2023,6 @@ const WorkspaceWallFrame* OverlayRenderer::activeMonitorFrame() const noexcept {
         return nullptr;
 
     return &m_frames.front();
-}
-
-bool OverlayRenderer::settingsButtonAt(double x, double y, std::int64_t* monitorId) const {
-    double localX = x;
-    double localY = y;
-    const auto* frame = frameForPoint(x, y, localX, localY);
-    if (!frame)
-        return false;
-
-    const auto found = m_settingsButtonByMonitor.find(frame->monitorId);
-    if (found == m_settingsButtonByMonitor.end())
-        return false;
-    const auto& rect = found->second;
-    const auto inside = localX >= rect.x && localY >= rect.y && localX < rect.x + rect.width && localY < rect.y + rect.height;
-    if (inside && monitorId)
-        *monitorId = frame->monitorId;
-    return inside;
 }
 
 PreferenceHit OverlayRenderer::preferenceControlAt(double x, double y) const {
