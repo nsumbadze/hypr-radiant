@@ -105,8 +105,7 @@ bool RadiantPlugin::initialize() {
                     showApplication({});
                 return;
             }
-            activate(target, "keyboard activation");
-        },
+            activate(target, "keyboard activation"); },
         .pointerMove = [this](double x, double y) { m_overlay.pointerMoved(x, y); },
         .pointerButton = [this](bool pressed, double x, double y) {
             const auto action = m_overlay.pointerButton(pressed, x, y);
@@ -142,8 +141,7 @@ bool RadiantPlugin::initialize() {
         .openSearch = [this] { m_overlay.beginSearch(); },
         .jump = [this](std::int64_t workspaceId) {
             if (!m_overlay.preferencesVisible())
-                activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation");
-        },
+                activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
         .close = [this] {
             const auto wasActive = m_overlay.active();
             m_overlay.clearSearchOrHide();

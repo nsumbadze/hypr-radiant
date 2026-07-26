@@ -51,13 +51,13 @@ std::vector<SearchSuggestion> buildSearchSuggestions(const RadiantState& state, 
             const auto [entry, inserted] = applicationByClass.try_emplace(key, applications.size());
             if (inserted) {
                 applications.push_back({
-                    .kind = SearchSuggestionKind::Application,
+                    .kind   = SearchSuggestionKind::Application,
                     .target = {
                         .type = OverviewTargetType::Application,
                         .workspaceId = window.workspaceId,
                         .windowId = window.stableId,
                         .monitorId = window.monitorId,
-                    },
+                               },
                     .label = appLabel(window.className),
                     .context = {},
                     .appClass = window.className,
@@ -70,7 +70,7 @@ std::vector<SearchSuggestion> buildSearchSuggestions(const RadiantState& state, 
         const auto title = window.title.empty() ? appLabel(window.className) : window.title;
         if (searchable(matcher, query, title, window.className)) {
             windows.push_back({
-                .kind = SearchSuggestionKind::Window,
+                .kind   = SearchSuggestionKind::Window,
                 .target = {
                     .type = OverviewTargetType::Window,
                     .workspaceId = window.workspaceId,
@@ -99,14 +99,14 @@ std::vector<SearchSuggestion> buildSearchSuggestions(const RadiantState& state, 
         if (!searchable(matcher, query, workspace.name, number))
             continue;
         workspaces.push_back({
-            .kind = SearchSuggestionKind::Workspace,
+            .kind   = SearchSuggestionKind::Workspace,
             .target = {
                 .type = OverviewTargetType::Workspace,
                 .workspaceId = workspace.id,
                 .monitorId = workspace.monitorId,
             },
             .label = workspace.name.empty() ? std::format("Workspace {}", workspace.id) : std::format("Workspace {}", workspace.name),
-            .context = "switch workspace",
+            .context  = "switch workspace",
             .appClass = {},
             .windowCount = 0,
         });

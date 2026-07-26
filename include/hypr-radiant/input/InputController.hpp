@@ -39,18 +39,18 @@ class InputController {
     // say, Tab and Escape. Designated initialisers make order irrelevant.
     struct Callbacks {
         ActiveFn        active;
-        ActivateFn      activate;
-        PointerMoveFn   pointerMove;
-        PointerButtonFn pointerButton;
-        TextInputFn     textInput;
-        BackspaceFn     backspace;
-        MoveFn          move;
-        ShelfScrollFn   shelfScroll;
-        SearchActiveFn  searchActive;
-        OpenSearchFn    openSearch;
-        JumpFn          jump;
-        CloseFn         close;
-        ToggleModeFn    toggleMode;
+        ActivateFn          activate;
+        PointerMoveFn       pointerMove;
+        PointerButtonFn     pointerButton;
+        TextInputFn         textInput;
+        BackspaceFn         backspace;
+        MoveFn              move;
+        ShelfScrollFn       shelfScroll;
+        SearchActiveFn      searchActive;
+        OpenSearchFn        openSearch;
+        JumpFn              jump;
+        CloseFn             close;
+        ToggleModeFn        toggleMode;
         TogglePreferencesFn togglePreferences;
     };
 

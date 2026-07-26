@@ -43,8 +43,8 @@ PreferencesPanelFrame computePreferencesPanel(const LayoutRect& monitorBounds) {
             .width  = 26.0,
             .height = 26.0,
         },
-        .rows = {},
-        .options = {},
+        .rows            = {},
+        .options         = {},
         .appExposeButton = {},
     };
     for (std::size_t i = 0; i < frame.rows.size(); ++i) {
@@ -71,7 +71,7 @@ PreferencesPanelFrame computePreferencesPanel(const LayoutRect& monitorBounds) {
         for (int value = 0; value < optionCount; ++value) {
             frame.options[optionIndex++] = {
                 .control = row.control,
-                .value = value,
+                .value   = value,
                 .rect = {
                     .x = optionsX + static_cast<double>(value) * (optionWidth + optionGap),
                     .y = row.rect.y + 7.0,

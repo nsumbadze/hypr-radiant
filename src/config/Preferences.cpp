@@ -56,9 +56,12 @@ void parseLine(PreferencesState& preferences, std::string_view line) {
 
 std::string_view value(WorkspaceViewPreference preference) {
     switch (preference) {
-        case WorkspaceViewPreference::Stage: return "stage";
-        case WorkspaceViewPreference::WorkspaceWall: return "workspace_wall";
-        case WorkspaceViewPreference::FollowConfig: return "config";
+    case WorkspaceViewPreference::Stage:
+        return "stage";
+    case WorkspaceViewPreference::WorkspaceWall:
+        return "workspace_wall";
+    case WorkspaceViewPreference::FollowConfig:
+        return "config";
     }
     return "config";
 }
@@ -69,19 +72,26 @@ std::string_view value(WindowViewPreference preference) {
 
 std::string_view value(AccentPreference preference) {
     switch (preference) {
-        case AccentPreference::Green: return "green";
-        case AccentPreference::Blue: return "blue";
-        case AccentPreference::Violet: return "violet";
-        case AccentPreference::FollowConfig: return "config";
+    case AccentPreference::Green:
+        return "green";
+    case AccentPreference::Blue:
+        return "blue";
+    case AccentPreference::Violet:
+        return "violet";
+    case AccentPreference::FollowConfig:
+        return "config";
     }
     return "config";
 }
 
 std::string_view value(MotionPreference preference) {
     switch (preference) {
-        case MotionPreference::Reduced: return "reduced";
-        case MotionPreference::Off: return "off";
-        case MotionPreference::FollowConfig: return "config";
+    case MotionPreference::Reduced:
+        return "reduced";
+    case MotionPreference::Off:
+        return "off";
+    case MotionPreference::FollowConfig:
+        return "config";
     }
     return "config";
 }
@@ -169,9 +179,12 @@ const std::filesystem::path& PreferencesStore::path() const noexcept {
 
 std::string_view label(WorkspaceViewPreference preference) {
     switch (preference) {
-        case WorkspaceViewPreference::Stage: return "STAGE";
-        case WorkspaceViewPreference::WorkspaceWall: return "WALL";
-        case WorkspaceViewPreference::FollowConfig: return "CONFIG";
+    case WorkspaceViewPreference::Stage:
+        return "STAGE";
+    case WorkspaceViewPreference::WorkspaceWall:
+        return "WALL";
+    case WorkspaceViewPreference::FollowConfig:
+        return "CONFIG";
     }
     return "CONFIG";
 }
@@ -182,19 +195,26 @@ std::string_view label(WindowViewPreference preference) {
 
 std::string_view label(AccentPreference preference) {
     switch (preference) {
-        case AccentPreference::Green: return "GREEN";
-        case AccentPreference::Blue: return "BLUE";
-        case AccentPreference::Violet: return "VIOLET";
-        case AccentPreference::FollowConfig: return "THEME";
+    case AccentPreference::Green:
+        return "GREEN";
+    case AccentPreference::Blue:
+        return "BLUE";
+    case AccentPreference::Violet:
+        return "VIOLET";
+    case AccentPreference::FollowConfig:
+        return "THEME";
     }
     return "THEME";
 }
 
 std::string_view label(MotionPreference preference) {
     switch (preference) {
-        case MotionPreference::Reduced: return "REDUCED";
-        case MotionPreference::Off: return "OFF";
-        case MotionPreference::FollowConfig: return "DEFAULT";
+    case MotionPreference::Reduced:
+        return "REDUCED";
+    case MotionPreference::Off:
+        return "OFF";
+    case MotionPreference::FollowConfig:
+        return "DEFAULT";
     }
     return "DEFAULT";
 }

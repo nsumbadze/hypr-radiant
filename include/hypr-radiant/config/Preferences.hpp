@@ -34,8 +34,8 @@ enum class MotionPreference {
 struct PreferencesState {
     WorkspaceViewPreference workspaceView = WorkspaceViewPreference::FollowConfig;
     WindowViewPreference    windowView    = WindowViewPreference::Spatial;
-    AccentPreference        accent        = AccentPreference::FollowConfig;
-    MotionPreference        motion        = MotionPreference::FollowConfig;
+    AccentPreference accent = AccentPreference::FollowConfig;
+    MotionPreference motion = MotionPreference::FollowConfig;
 
     bool operator==(const PreferencesState&) const = default;
 };

@@ -516,8 +516,7 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
 
     if (m_preferencesVisible) {
         const auto released = preferenceControlAt(x, y);
-        const auto action = released.control != PreferenceControl::None && released == m_pointerDownPreference ?
-            applyPreference(released.control, released.value) : PointerAction{};
+        const auto action = released.control != PreferenceControl::None && released == m_pointerDownPreference ? applyPreference(released.control, released.value) : PointerAction{};
         resetPointerInteraction();
         damageAllMonitors();
         return action;
@@ -1403,28 +1402,31 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
 
     const auto activeOption = [this](PreferenceControl control) {
         switch (control) {
-            case PreferenceControl::WorkspaceView: return effectiveLayoutMode() == LayoutMode::WorkspaceWall ? 1 : 0;
+        case PreferenceControl::WorkspaceView:
+            return effectiveLayoutMode() == LayoutMode::WorkspaceWall ? 1 : 0;
             case PreferenceControl::WindowView: return m_preferences.state().windowView == WindowViewPreference::Grouped ? 1 : 0;
             case PreferenceControl::Accent: return static_cast<int>(m_preferences.state().accent);
-            case PreferenceControl::None:
-            case PreferenceControl::AppExpose:
-            case PreferenceControl::Close:
-                return -1;
+        case PreferenceControl::None:
+        case PreferenceControl::AppExpose:
+        case PreferenceControl::Close:
+            return -1;
         }
         return -1;
     };
     const auto optionLabel = [](PreferenceControl control, int value) -> std::string {
         switch (control) {
-            case PreferenceControl::WorkspaceView: return value == 0 ? "STAGE" : "WALL";
-            case PreferenceControl::WindowView: return value == 0 ? "SPATIAL" : "GROUPED";
-            case PreferenceControl::Accent: {
+        case PreferenceControl::WorkspaceView:
+            return value == 0 ? "STAGE" : "WALL";
+        case PreferenceControl::WindowView:
+            return value == 0 ? "SPATIAL" : "GROUPED";
+        case PreferenceControl::Accent: {
                 static constexpr std::array labels{"THEME", "GREEN", "BLUE", "VIOLET"};
                 return labels[static_cast<std::size_t>(std::clamp(value, 0, 3))];
-            }
-            case PreferenceControl::None:
-            case PreferenceControl::AppExpose:
-            case PreferenceControl::Close:
-                return {};
+        }
+        case PreferenceControl::None:
+        case PreferenceControl::AppExpose:
+        case PreferenceControl::Close:
+            return {};
         }
         return {};
     };
@@ -1859,10 +1861,15 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
                 withAlpha(accent, alpha), damage, 2);
         }
 
-        const auto typeLabel = suggestion.kind == SearchSuggestionKind::Application ? "APP" :
-            suggestion.kind == SearchSuggestionKind::Window ? "WIN" : "WS";
-        const auto actionLabel = suggestion.kind == SearchSuggestionKind::Application ? "OPEN" :
-            suggestion.kind == SearchSuggestionKind::Window ? "FOCUS" : "SWITCH";
+        auto typeLabel   = "WS";
+        auto actionLabel = "SWITCH";
+        if (suggestion.kind == SearchSuggestionKind::Application) {
+            typeLabel   = "APP";
+            actionLabel = "OPEN";
+        } else if (suggestion.kind == SearchSuggestionKind::Window) {
+            typeLabel   = "WIN";
+            actionLabel = "FOCUS";
+        }
         const auto glyph = suggestion.kind == SearchSuggestionKind::Workspace ?
             std::format("#{}", target.workspaceId) : appGlyph(suggestion.appClass);
         const auto textX = row.x + 76.0;
@@ -2047,38 +2054,37 @@ PointerAction OverlayRenderer::applyPreference(PreferenceControl control, int va
 
     auto& state = m_preferences.state();
     switch (control) {
-        case PreferenceControl::WorkspaceView:
-            if (value == 0)
+    case PreferenceControl::WorkspaceView:
+        if (value == 0)
                 state.workspaceView = WorkspaceViewPreference::Stage;
-            else if (value == 1)
+        else if (value == 1)
                 state.workspaceView = WorkspaceViewPreference::WorkspaceWall;
-            else
-                state.workspaceView = effectiveLayoutMode() == LayoutMode::Stage ?
-                    WorkspaceViewPreference::WorkspaceWall : WorkspaceViewPreference::Stage;
-            break;
-        case PreferenceControl::WindowView:
-            if (value == 0)
+        else
+                state.workspaceView = effectiveLayoutMode() == LayoutMode::Stage ? WorkspaceViewPreference::WorkspaceWall : WorkspaceViewPreference::Stage;
+        break;
+    case PreferenceControl::WindowView:
+        if (value == 0)
                 state.windowView = WindowViewPreference::Spatial;
-            else if (value == 1)
+        else if (value == 1)
                 state.windowView = WindowViewPreference::Grouped;
-            else
+        else
                 state.windowView = state.windowView == WindowViewPreference::Grouped ? WindowViewPreference::Spatial : WindowViewPreference::Grouped;
-            break;
-        case PreferenceControl::Accent:
-            if (value >= 0 && value <= 3)
+        break;
+    case PreferenceControl::Accent:
+        if (value >= 0 && value <= 3)
                 state.accent = static_cast<AccentPreference>(value);
-            else
+        else
                 switch (state.accent) {
                     case AccentPreference::FollowConfig: state.accent = AccentPreference::Green; break;
                     case AccentPreference::Green: state.accent = AccentPreference::Blue; break;
                     case AccentPreference::Blue: state.accent = AccentPreference::Violet; break;
                     case AccentPreference::Violet: state.accent = AccentPreference::FollowConfig; break;
-                }
-            break;
-        case PreferenceControl::None:
-        case PreferenceControl::AppExpose:
-        case PreferenceControl::Close:
-            return {};
+            }
+        break;
+    case PreferenceControl::None:
+    case PreferenceControl::AppExpose:
+    case PreferenceControl::Close:
+        return {};
     }
 
     if (!m_preferences.save())
@@ -2109,10 +2115,14 @@ void OverlayRenderer::rebuildAfterPreferenceChange() {
 
 CHyprColor OverlayRenderer::resolvedAccentColor() const {
     switch (m_preferences.state().accent) {
-        case AccentPreference::Green: return {0.31F, 0.66F, 0.48F, 1.0F};
-        case AccentPreference::Blue: return {0.24F, 0.63F, 0.96F, 1.0F};
-        case AccentPreference::Violet: return {0.67F, 0.46F, 0.94F, 1.0F};
-        case AccentPreference::FollowConfig: break;
+    case AccentPreference::Green:
+        return {0.31F, 0.66F, 0.48F, 1.0F};
+    case AccentPreference::Blue:
+        return {0.24F, 0.63F, 0.96F, 1.0F};
+    case AccentPreference::Violet:
+        return {0.67F, 0.46F, 0.94F, 1.0F};
+    case AccentPreference::FollowConfig:
+        break;
     }
 
     if (const auto configured = m_config.accentColorOverride())
@@ -2126,8 +2136,10 @@ CHyprColor OverlayRenderer::resolvedAccentColor() const {
 
 LayoutMode OverlayRenderer::effectiveLayoutMode() const {
     switch (m_preferences.state().workspaceView) {
-        case WorkspaceViewPreference::Stage: return LayoutMode::Stage;
-        case WorkspaceViewPreference::WorkspaceWall: return LayoutMode::WorkspaceWall;
+    case WorkspaceViewPreference::Stage:
+        return LayoutMode::Stage;
+    case WorkspaceViewPreference::WorkspaceWall:
+        return LayoutMode::WorkspaceWall;
         case WorkspaceViewPreference::FollowConfig: return m_config.layoutMode();
     }
     return m_config.layoutMode();
@@ -2137,8 +2149,10 @@ int OverlayRenderer::effectiveAnimationDurationMs() const {
     const auto configured = m_config.animationDurationMs();
     switch (m_preferences.state().motion) {
         case MotionPreference::Reduced: return std::min(configured, 90);
-        case MotionPreference::Off: return 0;
-        case MotionPreference::FollowConfig: return configured;
+    case MotionPreference::Off:
+        return 0;
+    case MotionPreference::FollowConfig:
+        return configured;
     }
     return configured;
 }
