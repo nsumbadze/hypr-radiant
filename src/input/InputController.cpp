@@ -17,7 +17,6 @@ namespace hypr_radiant {
 namespace {
 
 constexpr auto INPUT_ARM_DELAY = std::chrono::milliseconds{220};
-constexpr auto ACTIVATION_ARM_DELAY = std::chrono::milliseconds{700};
 constexpr auto FALLBACK_REPEAT_DELAY = std::chrono::milliseconds{400};
 constexpr auto FALLBACK_REPEAT_RATE  = 25;
 
@@ -285,12 +284,8 @@ void InputController::grabKeyboard(OpeningRelease openingRelease) {
     const auto wait = openingRelease == OpeningRelease::Wait;
     const auto now = Clock::now();
     m_acceptInputAfter = now + INPUT_ARM_DELAY;
-    m_acceptActivationAfter = now + ACTIVATION_ARM_DELAY;
+    m_acceptActivationAfter = m_acceptInputAfter;
     m_openingInputGuard.arm(wait);
-    if (wait) {
-        m_openingInputGuard.suppressKeyUntilRelease(KEY_ENTER);
-        m_openingInputGuard.suppressKeyUntilRelease(KEY_KPENTER);
-    }
     if (m_seatGrab && g_pSeatManager)
         g_pSeatManager->setGrab(m_seatGrab);
 }
