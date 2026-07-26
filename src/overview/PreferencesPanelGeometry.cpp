@@ -13,7 +13,7 @@ bool contains(const LayoutRect& rect, double x, double y) {
 
 PreferencesPanelFrame computePreferencesPanel(const LayoutRect& monitorBounds) {
     constexpr auto preferredWidth  = 720.0;
-    constexpr auto preferredHeight = 446.0;
+    constexpr auto preferredHeight = 390.0;
     constexpr auto outerMargin     = 28.0;
     constexpr auto rowHeight       = 46.0;
 
@@ -28,20 +28,19 @@ PreferencesPanelFrame computePreferencesPanel(const LayoutRect& monitorBounds) {
 
     const auto rowX     = panel.x + 28.0;
     const auto rowWidth = std::max(1.0, panel.width - 56.0);
-    const std::array rowOffsets{102.0, 157.0, 242.0, 297.0};
+    const std::array rowOffsets{102.0, 157.0, 242.0};
     const std::array controls{
         PreferenceControl::WorkspaceView,
         PreferenceControl::WindowView,
         PreferenceControl::Accent,
-        PreferenceControl::Motion,
     };
 
     PreferencesPanelFrame frame{
         .panel = panel,
         .closeButton = {
-            .x      = panel.x + panel.width - 88.0,
+            .x      = panel.x + panel.width - 48.0,
             .y      = panel.y + 20.0,
-            .width  = 66.0,
+            .width  = 26.0,
             .height = 26.0,
         },
         .rows = {},
@@ -60,7 +59,7 @@ PreferencesPanelFrame computePreferencesPanel(const LayoutRect& monitorBounds) {
         };
     }
 
-    constexpr std::array optionCounts{2, 2, 4, 3};
+    constexpr std::array optionCounts{2, 2, 4};
     std::size_t optionIndex = 0;
     for (std::size_t rowIndex = 0; rowIndex < frame.rows.size(); ++rowIndex) {
         const auto& row = frame.rows[rowIndex];

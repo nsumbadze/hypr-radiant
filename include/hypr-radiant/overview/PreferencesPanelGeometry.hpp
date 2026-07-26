@@ -11,7 +11,6 @@ enum class PreferenceControl {
     WorkspaceView,
     WindowView,
     Accent,
-    Motion,
     AppExpose,
     Close,
 };
@@ -37,8 +36,8 @@ struct PreferenceHit {
 struct PreferencesPanelFrame {
     LayoutRect                   panel;
     LayoutRect                   closeButton;
-    std::array<PreferenceRow, 4> rows;
-    std::array<PreferenceOption, 11> options;
+    std::array<PreferenceRow, 3> rows;
+    std::array<PreferenceOption, 8> options;
     LayoutRect                   appExposeButton;
 };
 

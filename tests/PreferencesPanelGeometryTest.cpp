@@ -10,9 +10,9 @@ namespace {
 void centersPreferredPanelOnLargeMonitor() {
     const auto frame = computePreferencesPanel({.width = 1920.0, .height = 1080.0});
     assert(frame.panel.width == 720.0);
-    assert(frame.panel.height == 446.0);
+    assert(frame.panel.height == 390.0);
     assert(frame.panel.x == 600.0);
-    assert(frame.panel.y == 317.0);
+    assert(frame.panel.y == 345.0);
 }
 
 void staysInsideSmallMonitor() {

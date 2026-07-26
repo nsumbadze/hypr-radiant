@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstddef>
 #include <format>
+#include <span>
 #include <stdexcept>
 #include <utility>
 #include <vector>
@@ -324,7 +325,6 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
             PreferenceControl::WorkspaceView,
             PreferenceControl::WindowView,
             PreferenceControl::Accent,
-            PreferenceControl::Motion,
             PreferenceControl::AppExpose,
         };
         const auto current = std::ranges::find(controls, m_selectedPreference);
@@ -1289,7 +1289,7 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
             const char* keys;
             const char* action;
         };
-        static constexpr std::array<DeckHint, 6> HINTS{{
+        static constexpr std::array<DeckHint, 6> STAGE_HINTS{{
                 {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
                 {"\xe2\x86\x91\xe2\x86\x93", "window"},
                 {"tab", "apps/spatial"},
@@ -1297,6 +1297,15 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
                 {"/", "find"},
                 {"ctrl+,", "settings"},
             }};
+        static constexpr std::array<DeckHint, 5> WALL_HINTS{{
+                {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
+                {"\xe2\x86\x91\xe2\x86\x93", "window"},
+                {"\xe2\x86\xb5", "open"},
+                {"/", "find"},
+                {"ctrl+,", "settings"},
+            }};
+        const auto hints = effectiveLayoutMode() == LayoutMode::WorkspaceWall ?
+            std::span<const DeckHint>{WALL_HINTS} : std::span<const DeckHint>{STAGE_HINTS};
 
         constexpr auto dockHeight   = 26.0;
         constexpr auto dockPadX     = 15.0;
@@ -1312,12 +1321,12 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
         const auto rimShade    = withAlpha(accent, 0.16);
 
         auto contentWidth = dockPadX;
-        std::array<double, HINTS.size()> keyWidths{};
-        std::array<double, HINTS.size()> actionWidths{};
-        for (std::size_t i = 0; i < HINTS.size(); ++i) {
-            keyWidths[i]    = m_labels.measure(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground).width;
-            actionWidths[i] = m_labels.measure(HINTS[i].action, measureWidth, Theme::hintSize(), foreground).width;
-            contentWidth += keyWidths[i] + keysGap + actionWidths[i] + (i + 1 < HINTS.size() ? pairGap : 0.0);
+        std::array<double, STAGE_HINTS.size()> keyWidths{};
+        std::array<double, STAGE_HINTS.size()> actionWidths{};
+        for (std::size_t i = 0; i < hints.size(); ++i) {
+            keyWidths[i]    = m_labels.measure(hints[i].keys, measureWidth, Theme::hintSize(), foreground).width;
+            actionWidths[i] = m_labels.measure(hints[i].action, measureWidth, Theme::hintSize(), foreground).width;
+            contentWidth += keyWidths[i] + keysGap + actionWidths[i] + (i + 1 < hints.size() ? pairGap : 0.0);
         }
         contentWidth += dockPadX;
 
@@ -1335,13 +1344,13 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
             static_cast<float>(dockAlpha * 0.55), radius, 1);
 
         auto cursorX = dock.x + dockPadX;
-        for (std::size_t i = 0; i < HINTS.size(); ++i) {
-            const auto keySize    = m_labels.measure(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground);
-            const auto actionSize = m_labels.measure(HINTS[i].action, measureWidth, Theme::hintSize(), foreground);
-            m_labels.renderColored(HINTS[i].keys, cursorX, dock.y + centered(dock.h, keySize.height), measureWidth,
+        for (std::size_t i = 0; i < hints.size(); ++i) {
+            const auto keySize    = m_labels.measure(hints[i].keys, measureWidth, Theme::hintSize(), foreground);
+            const auto actionSize = m_labels.measure(hints[i].action, measureWidth, Theme::hintSize(), foreground);
+            m_labels.renderColored(hints[i].keys, cursorX, dock.y + centered(dock.h, keySize.height), measureWidth,
                 Theme::hintSize(), rimLit, dockAlpha * 0.96, damage);
             cursorX += keyWidths[i] + keysGap;
-            m_labels.renderColored(HINTS[i].action, cursorX, dock.y + centered(dock.h, actionSize.height), measureWidth,
+            m_labels.renderColored(hints[i].action, cursorX, dock.y + centered(dock.h, actionSize.height), measureWidth,
                 Theme::hintSize(), foreground, dockAlpha * 0.58, damage);
             cursorX += actionWidths[i] + pairGap;
         }
@@ -1394,7 +1403,6 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
         "01  workspace.layout",
         "02  windows.arrangement",
         "03  interface.accent",
-        "04  motion.profile",
     };
 
     for (std::size_t i = 0; i < geometry.rows.size(); ++i) {
@@ -1415,7 +1423,6 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             case PreferenceControl::WorkspaceView: return effectiveLayoutMode() == LayoutMode::WorkspaceWall ? 1 : 0;
             case PreferenceControl::WindowView: return m_preferences.state().windowView == WindowViewPreference::Grouped ? 1 : 0;
             case PreferenceControl::Accent: return static_cast<int>(m_preferences.state().accent);
-            case PreferenceControl::Motion: return static_cast<int>(m_preferences.state().motion);
             case PreferenceControl::None:
             case PreferenceControl::AppExpose:
             case PreferenceControl::Close:
@@ -1430,10 +1437,6 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             case PreferenceControl::Accent: {
                 static constexpr std::array labels{"THEME", "GREEN", "BLUE", "VIOLET"};
                 return labels[static_cast<std::size_t>(std::clamp(value, 0, 3))];
-            }
-            case PreferenceControl::Motion: {
-                static constexpr std::array labels{"DEFAULT", "REDUCED", "OFF"};
-                return labels[static_cast<std::size_t>(std::clamp(value, 0, 2))];
             }
             case PreferenceControl::None:
             case PreferenceControl::AppExpose:
@@ -2071,16 +2074,6 @@ PointerAction OverlayRenderer::applyPreference(PreferenceControl control, int va
                     case AccentPreference::Green: state.accent = AccentPreference::Blue; break;
                     case AccentPreference::Blue: state.accent = AccentPreference::Violet; break;
                     case AccentPreference::Violet: state.accent = AccentPreference::FollowConfig; break;
-                }
-            break;
-        case PreferenceControl::Motion:
-            if (value >= 0 && value <= 2)
-                state.motion = static_cast<MotionPreference>(value);
-            else
-                switch (state.motion) {
-                    case MotionPreference::FollowConfig: state.motion = MotionPreference::Reduced; break;
-                    case MotionPreference::Reduced: state.motion = MotionPreference::Off; break;
-                    case MotionPreference::Off: state.motion = MotionPreference::FollowConfig; break;
                 }
             break;
         case PreferenceControl::None:
