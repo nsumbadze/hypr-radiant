@@ -310,13 +310,21 @@ void RadiantPlugin::activate(OverviewTarget target, std::string_view source) {
     if (target.type == OverviewTargetType::None)
         return;
 
+    if (target.type == OverviewTargetType::Application) {
+        target.type = OverviewTargetType::Window;
+    }
+
+    // Workspace changes also perform a focus hand-off. Drop Radiant's seat grab and final-stage
+    // overlay first so Hyprland can complete that hand-off against the real desktop surface.
+    m_input.releaseKeyboard();
+    m_overlay.hideImmediate();
+
     if (!m_activation.activate(target)) {
-        log::warn("overview activation target disappeared or was invalid");
+        log::warn("overview activation target disappeared or was invalid (type={}, workspace={}, window={})",
+            static_cast<int>(target.type), target.workspaceId, target.windowId);
         return;
     }
 
-    m_input.releaseKeyboard();
-    m_overlay.hideImmediate();
     recordTransition(std::format("closed by {}", source));
 }
 

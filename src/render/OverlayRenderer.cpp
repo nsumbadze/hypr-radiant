@@ -523,6 +523,10 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
         return action;
     }
 
+    // Capture the release before pointerMoved() is allowed to preview another workspace and rebuild
+    // the rail. Otherwise the card can animate away from the release coordinate between press and
+    // release, turning a deliberate workspace click into a selection-only hover.
+    const auto stableReleasedTarget = hitTest(x, y);
     pointerMoved(x, y);
     PointerAction action;
     if (m_dragging && m_dragTarget.type != OverviewTargetType::None) {
@@ -532,7 +536,19 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
             .windowId = m_pointerDownTarget.windowId,
         };
     } else if (!m_dragging) {
-        const auto releasedTarget = hitTest(x, y);
+        const auto pointerTravel = std::hypot(
+            x - m_pointerDownPosition.x,
+            y - m_pointerDownPosition.y);
+        if (m_pointerDownTarget.type == OverviewTargetType::Workspace && pointerTravel < 8.0) {
+            action = {.type = PointerActionType::Activate, .target = m_pointerDownTarget};
+            resetPointerInteraction();
+            damageAllMonitors();
+            return action;
+        }
+
+        const auto releasedTarget =
+            m_pointerDownTarget.type == OverviewTargetType::Workspace && sameTarget(stableReleasedTarget, m_pointerDownTarget) ?
+            stableReleasedTarget : hitTest(x, y);
         if (sameTarget(releasedTarget, m_pointerDownTarget)) {
             if (releasedTarget.windowId == m_closingWindowId) {
                 resetPointerInteraction();
