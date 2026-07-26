@@ -1893,9 +1893,13 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
     }
 
     if (targets.empty()) {
-        m_labels.render("No results", inputBox.x + 4.0, geometry.resultsY + 18.0, inputBox.w - 8.0, Theme::titleSize(), alpha * 0.78, damage);
-        m_labels.render("Try another window title, workspace name, or number", inputBox.x + 4.0, geometry.resultsY + 48.0,
-            inputBox.w - 8.0, Theme::hintSize(), alpha * 0.48, damage);
+        const auto emptyBox = CBox{inputBox.x, geometry.resultsY, inputBox.w, 64.0};
+        drawRect(emptyBox, Theme::searchRowFill(false, static_cast<float>(alpha)), damage, Theme::inputRadius());
+        drawRect(CBox{emptyBox.x, emptyBox.y + 12.0, 3.0, emptyBox.h - 24.0}, withAlpha(accent, alpha * 0.42), damage, 2);
+        m_labels.render("NO MATCHES", emptyBox.x + 18.0, emptyBox.y + 12.0,
+            emptyBox.w - 36.0, Theme::labelSize(), alpha * 0.78, damage);
+        m_labels.render("Keep typing, or press Esc to clear", emptyBox.x + 18.0, emptyBox.y + 37.0,
+            emptyBox.w - 36.0, Theme::hintSize(), alpha * 0.48, damage);
     }
 
     m_labels.render("\xe2\x86\x91\xe2\x86\x93 select \xc2\xb7 Enter activate \xc2\xb7 Esc clear",

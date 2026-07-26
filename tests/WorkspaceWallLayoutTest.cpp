@@ -334,6 +334,16 @@ void searchPanelGeometryMatchesSpec() {
     assert(std::abs((geom.panelY + geom.panelH / 2.0) - (1080.0 * 0.35)) < 0.5);
 }
 
+void emptySearchPanelReservesResultSpace() {
+    WorkspaceWallFrame frame;
+    frame.bounds = {.x = 0.0, .y = 0.0, .width = 1920.0, .height = 1080.0};
+
+    const auto geom = computeSearchPanelGeometry(frame, 0);
+
+    assert(geom.panelH == 200.0);
+    assert(geom.resultsY + 64.0 <= geom.panelY + geom.panelH - 32.0);
+}
+
 void searchPanelGeometryCapsAtScreenSize() {
     WorkspaceWallFrame frame;
     frame.bounds = {.x = 0.0, .y = 0.0, .width = 600.0, .height = 400.0};
@@ -466,6 +476,7 @@ int main() {
     multiMonitorPerFrameBounds();
     searchPagingKeepsSelectionInView();
     searchPanelGeometryMatchesSpec();
+    emptySearchPanelReservesResultSpace();
     searchPanelGeometryCapsAtScreenSize();
     tinyRenderSizeDoesNotProduceNegativeRects();
     sortsWindowsByStableId();
