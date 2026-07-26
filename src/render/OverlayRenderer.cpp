@@ -1378,7 +1378,7 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
     const auto closeSelected = m_selectedPreference == PreferenceControl::Close;
     drawRect(closeBox, withAlpha(foreground, panelAlpha * (closeSelected ? 0.12 : 0.05)), damage);
     drawBorder(closeBox, withAlpha(foreground, panelAlpha * 0.20), 0, 1);
-    m_labels.renderCentered("[ctrl+,]", closeBox, Theme::badgeSize(),
+    m_labels.renderCentered("X", closeBox, Theme::hintSize(),
         closeSelected ? accent : foreground, panelAlpha * (closeSelected ? 1.0 : 0.58), damage);
 
     m_labels.renderColored("OVERVIEW", geometry.panel.x + 30.0, geometry.rows[0].rect.y - 23.0,
@@ -1471,9 +1471,6 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
     m_labels.renderColored("↑↓ navigate   ←→ change   enter apply   ctrl+, close",
         geometry.panel.x + 28.0, geometry.panel.y + geometry.panel.height - 25.0,
         geometry.panel.width - 210.0, Theme::badgeSize(), foreground, panelAlpha * 0.30, damage);
-    m_labels.renderColored("● preferences.conf saved",
-        geometry.panel.x + geometry.panel.width - 174.0, geometry.panel.y + geometry.panel.height - 25.0,
-        150.0, Theme::badgeSize(), accent, panelAlpha * 0.58, damage);
 }
 
 void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const StageContext& ctx, const CRegion& damage) {
@@ -1523,18 +1520,9 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
         if (selected) {
             drawBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(ctx.accent, cardAlpha * 0.82),
                 radius + 1, 1);
-
-            const std::string state = window.fullscreen ? "Full" : window.floating ? "Float" : "";
-            if (!state.empty() && windowBox.w >= 112.0 && windowBox.h >= 56.0) {
-                const auto badge = CBox{windowBox.x + 10.0, windowBox.y + 10.0, 64.0, 22.0};
-                drawRect(badge, withAlpha(ctx.railSurface, cardAlpha * 0.88), damage, 7, true);
-                drawRect(CBox{badge.x + 8.0, badge.y + 10.0, 4.0, 4.0}, withAlpha(ctx.accent, cardAlpha), damage, 2);
-                m_labels.render(state, badge.x + 18.0, badge.y + 5.0, 40.0, Theme::badgeSize(), cardAlpha * 0.92, damage);
-            }
         }
 
-        // Top-right corner, opposite the state badge so the two never collide. Drawn after the
-        // preview so it sits over the thumbnail rather than under it.
+        // Drawn after the preview so it sits over the thumbnail rather than under it.
         const auto closeProgress = window.stableId == m_closeButtonWindowId ? std::clamp(m_closeButtonTransition.value(), 0.0, 1.0) : 0.0;
         if (closeProgress > 0.001) {
             // Built from the layout-space card and mapped through the same stage remap the hit test
