@@ -105,13 +105,11 @@ While it is open, swipe left or right to preview the next workspace. Set
 
 ## Preferences
 
-Point at the bottom edge and choose `SETTINGS`, or press `Ctrl+,` while the
-overview is open. The native Omarchy-style panel controls:
+Press `Ctrl+,` while the overview is open. The native Omarchy-style panel controls:
 
 - Stage or Workspace Wall
 - Spatial or application-grouped window arrangement
 - Theme accent or an explicit green, blue or violet accent
-- Default, reduced or disabled motion
 - App Exposé for the focused application
 
 Changes are saved immediately to
@@ -141,7 +139,6 @@ With the mouse:
 - Drag a window onto a workspace card to move it there
 - Drag a window onto the trailing `+`, or just click it, to create a workspace
 - Pointer at the top edge reveals the shelf, at the bottom edge the dock
-- Choose `SETTINGS` in the bottom dock to change persistent preferences
 - Scrolling shows and hides the shelf, `Ctrl` + wheel steps through workspaces
 - Hover a window and click the button in its corner to close it
 
@@ -197,8 +194,8 @@ palette is re-read every time the overview opens, so switching themes does not
 need a reload.
 
 The settings panel starts by following these Hyprland values. Choosing Stage or
-Wall saves that view as the preference; `THEME` and `DEFAULT` return accent and
-motion to their Hyprland/Omarchy-backed values.
+Wall saves that view as the preference; `THEME` returns the accent to its
+Hyprland/Omarchy-backed value.
 
 ## Building it yourself
 
