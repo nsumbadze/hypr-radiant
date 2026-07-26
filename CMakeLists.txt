@@ -67,6 +67,7 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
         src/input/OpeningInputGuard.cpp
         src/input/ShortcutController.cpp
         src/overview/SearchMatcher.cpp
+        src/overview/SearchSuggestions.cpp
         src/overview/SearchPanelGeometry.cpp
         src/overview/StageTransform.cpp
         src/overview/OverlayGeometry.cpp
@@ -143,6 +144,7 @@ if(BUILD_TESTING)
     add_executable(hypr-radiant-search-tests
         tests/SearchMatcherTest.cpp
         src/overview/SearchMatcher.cpp
+        src/overview/SearchSuggestions.cpp
     )
 
     target_include_directories(hypr-radiant-search-tests
