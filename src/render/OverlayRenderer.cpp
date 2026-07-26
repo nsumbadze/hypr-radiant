@@ -83,20 +83,6 @@ void drawBorder(const CBox& box, CHyprColor color, int round, int borderSize) {
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
 }
 
-// Two-stop gradient border at an angle — Hyprland's own border idiom, used by the dock rim.
-void drawBorder(const CBox& box, CHyprColor from, CHyprColor to, float angle, float alpha, int round, int borderSize) {
-    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
-        return;
-
-    CBorderPassElement::SBorderData border;
-    border.box        = box;
-    border.grad1      = Config::CGradientValueData{std::vector<CHyprColor>{from, to}, angle};
-    border.a          = alpha;
-    border.round      = round;
-    border.borderSize = borderSize;
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
-}
-
 CHyprColor withAlpha(CHyprColor color, double multiplier) {
     color.a *= multiplier;
     return color;
@@ -227,7 +213,8 @@ WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorks
 
 } // namespace
 
-OverlayRenderer::OverlayRenderer(const RadiantConfig& config) : m_config(config), m_labels(config) {}
+OverlayRenderer::OverlayRenderer(const RadiantConfig& config, PreferencesStore& preferences) :
+    m_config(config), m_preferences(preferences), m_labels(config) {}
 
 void OverlayRenderer::install() {
     if (!Event::bus())
@@ -254,6 +241,8 @@ void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::s
     m_mode              = mode;
     m_applicationFilter = std::move(applicationFilter);
     m_state             = std::move(state);
+    m_preferencesVisible = false;
+    m_preferencesMonitorId = -1;
     resetPointerInteraction();
     m_previousFrames.clear();
     clearSearch();
@@ -273,7 +262,7 @@ void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::s
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
     releaseHoverAffordances();
-    m_animation.animateTo(true, m_config.animationDurationMs());
+    m_animation.animateTo(true, effectiveAnimationDurationMs());
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, stageDurationMs);
@@ -282,13 +271,13 @@ void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::s
 }
 
 void OverlayRenderer::show(RadiantState state) {
-    beginSession(std::move(state), OverviewMode::Spatial, {},
-        std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.78))),
+    beginSession(std::move(state), defaultOverviewMode(), {},
+        std::max(0, static_cast<int>(std::round(effectiveAnimationDurationMs() * 0.78))),
         [this](const WorkspaceWallFrame& frame) { return m_hitTester.initialSelection(frame); });
 }
 
 void OverlayRenderer::showAppExpose(RadiantState state, std::string applicationClass) {
-    beginSession(std::move(state), OverviewMode::AppExpose, std::move(applicationClass), m_config.animationDurationMs(),
+    beginSession(std::move(state), OverviewMode::AppExpose, std::move(applicationClass), effectiveAnimationDurationMs(),
         [this](const WorkspaceWallFrame& frame) -> OverviewTarget {
             // Exposé opens on the first matching window rather than the rail.
             if (!frame.stage.windows.empty()) {
@@ -306,7 +295,7 @@ void OverlayRenderer::toggle(RadiantState state) {
         clearSearch();
         m_labels.clear();
         releaseHoverAffordances();
-        m_animation.animateTo(false, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.67))));
+        m_animation.animateTo(false, std::max(0, static_cast<int>(std::round(effectiveAnimationDurationMs() * 0.67))));
         damageAllMonitors();
         return;
     }
@@ -315,6 +304,27 @@ void OverlayRenderer::toggle(RadiantState state) {
 }
 
 void OverlayRenderer::moveSelection(NavigationDirection direction) {
+    if (m_preferencesVisible) {
+        static constexpr std::array controls{
+            PreferenceControl::WorkspaceView,
+            PreferenceControl::WindowView,
+            PreferenceControl::Accent,
+            PreferenceControl::Motion,
+            PreferenceControl::AppExpose,
+        };
+        const auto current = std::ranges::find(controls, m_selectedPreference);
+        auto index = current == controls.end() ? std::size_t{0} : static_cast<std::size_t>(std::distance(controls.begin(), current));
+        if (direction == NavigationDirection::Up)
+            index = index == 0 ? controls.size() - 1 : index - 1;
+        else if (direction == NavigationDirection::Down)
+            index = (index + 1) % controls.size();
+        else if (m_selectedPreference != PreferenceControl::AppExpose)
+            (void)applyPreference(m_selectedPreference);
+        m_selectedPreference = controls[index];
+        damageMonitorById(m_preferencesMonitorId);
+        return;
+    }
+
     if (m_searchActive) {
         moveSearchSelection(direction);
         return;
@@ -332,13 +342,13 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
     m_selectedFrameMonitorId = frameMonitorId;
     if (!sameTarget(previousTarget, m_selectedTarget))
         animateSelection();
-    if (m_config.layoutMode() == LayoutMode::Stage && m_selectedTarget.workspaceId != previousWorkspace) {
+    if (effectiveLayoutMode() == LayoutMode::Stage && m_selectedTarget.workspaceId != previousWorkspace) {
         m_previousFrames = m_frames;
         rebuildFrames();
         m_stageTransitionMonitorId = frameMonitorId;
         m_stageTransition.hideImmediate();
         // Longer than the open animation: the depth push needs room to read as movement.
-        m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * WORKSPACE_PUSH_SCALE))));
+        m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(effectiveAnimationDurationMs() * WORKSPACE_PUSH_SCALE))));
     }
     damageMonitorById(frameMonitorId);
 }
@@ -350,7 +360,7 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     if (!frame)
         return;
 
-    if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage) {
+    if (!m_searchActive && effectiveLayoutMode() == LayoutMode::Stage) {
         const auto mapped = mapDisplayedStagePoint(*frame, {.x = localX, .y = localY}, workspaceShelfVisible());
         localX = mapped.x;
         localY = mapped.y;
@@ -376,7 +386,7 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
     m_selectedTarget = target;
     m_selectedFrameMonitorId = frameMonitorId;
     animateSelection();
-    if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage && target.workspaceId != previousWorkspace) {
+    if (!m_searchActive && effectiveLayoutMode() == LayoutMode::Stage && target.workspaceId != previousWorkspace) {
         // A push still in flight on this monitor means the pointer is skimming the rail rather than
         // settling on a card. Restarting from zero for every card it crosses meant a fast sweep
         // across a long rail cancelled each push before it was visible, so the depth move played
@@ -393,7 +403,7 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
             m_stageTransitionMonitorId = frameMonitorId;
             m_stageTransition.hideImmediate();
             // Longer than the open animation: the depth push needs room to read as movement.
-            m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * WORKSPACE_PUSH_SCALE))));
+            m_stageTransition.animateTo(true, std::max(0, static_cast<int>(std::round(effectiveAnimationDurationMs() * WORKSPACE_PUSH_SCALE))));
         }
     }
     // Hovering only repaints the monitor under the pointer, plus whichever monitor lost the
@@ -405,21 +415,32 @@ void OverlayRenderer::selectTargetAt(double x, double y) {
 
 void OverlayRenderer::pointerMoved(double x, double y) {
     m_pointerPosition = {.x = x, .y = y};
-    if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage) {
+    if (m_preferencesVisible) {
+        const auto hit = preferenceControlAt(x, y);
+        if (hit.control != PreferenceControl::None)
+            m_selectedPreference = hit.control;
+        setPointerCursorOverride(hit.control != PreferenceControl::None);
+        damageMonitorById(m_preferencesMonitorId);
+        return;
+    }
+
+    if (!m_searchActive) {
         double localX = x;
         double localY = y;
         if (const auto* frame = frameForPoint(x, y, localX, localY)) {
             constexpr auto revealEdge = 12.0;
-            const auto shelfBottom     = frame->rail.bounds.y + frame->rail.bounds.height + 20.0;
-            const auto insideShelfBand = localY <= shelfBottom;
-            if (localY <= frame->bounds.y + revealEdge)
-                setWorkspaceShelfVisible(true);
-            // Retract only when the pointer actually leaves the shelf. Hiding on any move below it
-            // made a scroll-revealed shelf vanish the moment the pointer twitched, then reappear
-            // once it reached the top edge.
-            else if (!m_pointerDown && m_pointerInsideShelfBand && !insideShelfBand)
-                setWorkspaceShelfVisible(false);
-            m_pointerInsideShelfBand = insideShelfBand;
+            if (effectiveLayoutMode() == LayoutMode::Stage) {
+                const auto shelfBottom     = frame->rail.bounds.y + frame->rail.bounds.height + 20.0;
+                const auto insideShelfBand = localY <= shelfBottom;
+                if (localY <= frame->bounds.y + revealEdge)
+                    setWorkspaceShelfVisible(true);
+                // Retract only when the pointer actually leaves the shelf. Hiding on any move below it
+                // made a scroll-revealed shelf vanish the moment the pointer twitched, then reappear
+                // once it reached the top edge.
+                else if (!m_pointerDown && m_pointerInsideShelfBand && !insideShelfBand)
+                    setWorkspaceShelfVisible(false);
+                m_pointerInsideShelfBand = insideShelfBand;
+            }
 
             // Mirror of the shelf at the other edge: the dock lives off-screen until the pointer
             // reaches the bottom, then retracts once it leaves the band it occupies.
@@ -432,6 +453,7 @@ void OverlayRenderer::pointerMoved(double x, double y) {
             m_pointerInsideDockBand = insideDockBand;
         }
     }
+    m_settingsButtonHot = settingsButtonAt(x, y);
     updateCloseAffordance(x, y);
     if (!m_pointerDown) {
         selectTargetAt(x, y);
@@ -464,6 +486,13 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
         m_dragging = false;
         m_pointerDownPosition = {.x = x, .y = y};
         m_pointerPosition = m_pointerDownPosition;
+        if (m_preferencesVisible) {
+            m_pointerDownPreference = preferenceControlAt(x, y);
+            return {};
+        }
+        m_pointerDownSettingsButton = settingsButtonAt(x, y, &m_preferencesMonitorId);
+        if (m_pointerDownSettingsButton)
+            return {};
         m_pointerDownTarget = hitTest(x, y);
         m_dragTarget = {};
         return {};
@@ -471,6 +500,23 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
 
     if (!m_pointerDown)
         return {};
+
+    if (m_preferencesVisible) {
+        const auto released = preferenceControlAt(x, y);
+        const auto action = released.control != PreferenceControl::None && released == m_pointerDownPreference ?
+            applyPreference(released.control, released.value) : PointerAction{};
+        resetPointerInteraction();
+        damageAllMonitors();
+        return action;
+    }
+
+    if (m_pointerDownSettingsButton) {
+        const auto releasedOnButton = settingsButtonAt(x, y);
+        resetPointerInteraction();
+        if (releasedOnButton)
+            togglePreferences();
+        return {};
+    }
 
     pointerMoved(x, y);
     PointerAction action;
@@ -558,7 +604,7 @@ void OverlayRenderer::refresh(RadiantState state) {
     rebuildFrames();
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
-    m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    m_stageTransition.animateTo(true, effectiveAnimationDurationMs());
     animateSelection();
     m_labels.clear();
     damageAllMonitors();
@@ -582,12 +628,15 @@ void OverlayRenderer::finishGesture(bool opening, bool commit) {
     const auto visible = opening ? commit : !commit;
     if (!visible)
         releaseHoverAffordances();
-    m_animation.animateTo(visible, m_config.animationDurationMs());
-    m_stageTransition.animateTo(visible, m_config.animationDurationMs());
+    m_animation.animateTo(visible, effectiveAnimationDurationMs());
+    m_stageTransition.animateTo(visible, effectiveAnimationDurationMs());
     damageAllMonitors();
 }
 
 void OverlayRenderer::appendSearchChar(char value) {
+    if (m_preferencesVisible)
+        return;
+
     if (m_searchQuery.size() >= 64)
         return;
 
@@ -601,7 +650,7 @@ void OverlayRenderer::appendSearchChar(char value) {
 }
 
 void OverlayRenderer::beginSearch() {
-    if (m_searchActive)
+    if (m_searchActive || m_preferencesVisible)
         return;
 
     m_searchActive       = true;
@@ -623,6 +672,11 @@ void OverlayRenderer::backspaceSearch() {
 }
 
 void OverlayRenderer::clearSearchOrHide() {
+    if (m_preferencesVisible) {
+        togglePreferences();
+        return;
+    }
+
     if (m_searchActive) {
         clearSearch();
         m_selectedTarget         = m_preSearchTarget;
@@ -640,7 +694,7 @@ void OverlayRenderer::clearSearchOrHide() {
 }
 
 void OverlayRenderer::toggleGroupedMode() {
-    if (m_config.layoutMode() != LayoutMode::Stage || m_searchActive)
+    if (effectiveLayoutMode() != LayoutMode::Stage || m_searchActive || m_preferencesVisible)
         return;
 
     m_mode = m_mode == OverviewMode::Grouped ? OverviewMode::Spatial : OverviewMode::Grouped;
@@ -653,24 +707,54 @@ void OverlayRenderer::toggleGroupedMode() {
     }
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
-    m_stageTransition.animateTo(true, m_config.animationDurationMs());
+    m_stageTransition.animateTo(true, effectiveAnimationDurationMs());
     animateSelection();
     m_labels.clear();
     damageAllMonitors();
 }
 
-void OverlayRenderer::setWorkspaceShelfVisible(bool visible) {
-    if (m_config.layoutMode() != LayoutMode::Stage || !active() || m_shelfTransition.targetVisible() == visible)
+void OverlayRenderer::togglePreferences() {
+    if (!active() || m_searchActive)
         return;
 
-    m_shelfTransition.animateTo(visible, std::max(90, static_cast<int>(std::round(m_config.animationDurationMs() * 0.82))));
+    m_preferencesVisible = !m_preferencesVisible;
+    if (m_preferencesVisible) {
+        if (m_preferencesMonitorId == -1) {
+            if (const auto* frame = frameForSelectedTarget())
+                m_preferencesMonitorId = frame->monitorId;
+            else if (const auto* frame = activeMonitorFrame())
+                m_preferencesMonitorId = frame->monitorId;
+        }
+        m_selectedPreference = PreferenceControl::WorkspaceView;
+        m_shelfTransition.animateTo(false, effectiveAnimationDurationMs());
+        m_dockTransition.animateTo(true, effectiveAnimationDurationMs());
+        releaseHoverAffordances();
+    } else {
+        m_preferencesMonitorId = -1;
+        m_pointerDownPreference = {};
+    }
+    damageAllMonitors();
+}
+
+PointerAction OverlayRenderer::activatePreference() {
+    if (!m_preferencesVisible)
+        return {};
+    return applyPreference(m_selectedPreference);
+}
+
+void OverlayRenderer::setWorkspaceShelfVisible(bool visible) {
+    if (effectiveLayoutMode() != LayoutMode::Stage || !active() || m_shelfTransition.targetVisible() == visible)
+        return;
+
+    const auto duration = effectiveAnimationDurationMs();
+    m_shelfTransition.animateTo(visible, duration == 0 ? 0 : std::max(90, static_cast<int>(std::round(duration * 0.82))));
     damageAllMonitors();
 }
 
 void OverlayRenderer::updateCloseAffordance(double x, double y) {
     std::uint64_t windowId = 0;
     auto          hot      = false;
-    if (!m_dragging && !m_searchActive && m_config.layoutMode() == LayoutMode::Stage && active()) {
+    if (!m_dragging && !m_searchActive && !m_preferencesVisible && effectiveLayoutMode() == LayoutMode::Stage && active()) {
         const auto target = hitTest(x, y);
         if (target.type == OverviewTargetType::Window || target.type == OverviewTargetType::CloseWindow) {
             windowId = target.windowId;
@@ -696,9 +780,9 @@ void OverlayRenderer::updateCloseAffordance(double x, double y) {
     if (hot != m_closeButtonHot) {
         m_closeButtonHot = hot;
         m_closeButtonHotTransition.animateTo(hot, CLOSE_HOT_MS);
-        setPointerCursorOverride(hot);
         damageMonitorById(m_selectedFrameMonitorId);
     }
+    setPointerCursorOverride(hot || m_settingsButtonHot);
 }
 
 void OverlayRenderer::setPointerCursorOverride(bool pointerCursor) {
@@ -717,14 +801,16 @@ void OverlayRenderer::releaseHoverAffordances() {
     m_closeButtonHotTransition.hideImmediate();
     m_closeButtonWindowId = 0;
     m_closeButtonHot      = false;
+    m_settingsButtonHot   = false;
     setPointerCursorOverride(false);
 }
 
 void OverlayRenderer::setHintDockVisible(bool visible) {
-    if (m_config.layoutMode() != LayoutMode::Stage || !active() || m_dockTransition.targetVisible() == visible)
+    if (!active() || m_dockTransition.targetVisible() == visible)
         return;
 
-    m_dockTransition.animateTo(visible, std::max(90, static_cast<int>(std::round(m_config.animationDurationMs() * 0.82))));
+    const auto duration = effectiveAnimationDurationMs();
+    m_dockTransition.animateTo(visible, duration == 0 ? 0 : std::max(90, static_cast<int>(std::round(duration * 0.82))));
     damageAllMonitors();
 }
 
@@ -733,7 +819,7 @@ void OverlayRenderer::toggleWorkspaceShelf() {
 }
 
 void OverlayRenderer::setWorkspaceShelfGestureProgress(bool revealing, double progress) {
-    if (m_config.layoutMode() != LayoutMode::Stage || !active())
+    if (effectiveLayoutMode() != LayoutMode::Stage || !active())
         return;
 
     m_shelfTransition.setProgress(revealing ? progress : 1.0 - progress, revealing);
@@ -742,7 +828,8 @@ void OverlayRenderer::setWorkspaceShelfGestureProgress(bool revealing, double pr
 
 void OverlayRenderer::finishWorkspaceShelfGesture(bool revealing, bool commit) {
     const auto visible = revealing ? commit : !commit;
-    m_shelfTransition.animateTo(visible, std::max(90, static_cast<int>(std::round(m_config.animationDurationMs() * 0.72))));
+    const auto duration = effectiveAnimationDurationMs();
+    m_shelfTransition.animateTo(visible, duration == 0 ? 0 : std::max(90, static_cast<int>(std::round(duration * 0.72))));
     damageAllMonitors();
 }
 
@@ -758,6 +845,7 @@ void OverlayRenderer::hideImmediate() {
     m_frames.clear();
     m_previousFrames.clear();
     m_frameBoundsByMonitor.clear();
+    m_settingsButtonByMonitor.clear();
     m_labels.clear();
     m_selectedTarget = {};
     m_selectedFrameMonitorId = -1;
@@ -765,6 +853,8 @@ void OverlayRenderer::hideImmediate() {
     m_closingWindowId        = 0;
     m_closingWindowMonitorId = -1;
     clearSearch();
+    m_preferencesVisible = false;
+    m_preferencesMonitorId = -1;
     resetPointerInteraction();
 
     if (wasRenderable)
@@ -778,11 +868,13 @@ void OverlayRenderer::resetPointerInteraction() {
     m_pointerPosition = {};
     m_pointerDown = false;
     m_dragging = false;
+    m_pointerDownPreference = {};
+    m_pointerDownSettingsButton = false;
 }
 
 void OverlayRenderer::animateSelection() {
     m_selectionTransition.hideImmediate();
-    m_selectionTransition.animateTo(true, std::max(0, static_cast<int>(std::round(m_config.animationDurationMs() * 0.62))));
+    m_selectionTransition.animateTo(true, std::max(0, static_cast<int>(std::round(effectiveAnimationDurationMs() * 0.62))));
 }
 
 bool OverlayRenderer::active() const noexcept {
@@ -791,6 +883,10 @@ bool OverlayRenderer::active() const noexcept {
 
 bool OverlayRenderer::searchActive() const noexcept {
     return m_searchActive;
+}
+
+bool OverlayRenderer::preferencesVisible() const noexcept {
+    return m_preferencesVisible;
 }
 
 bool OverlayRenderer::workspaceShelfVisible() const noexcept {
@@ -812,7 +908,7 @@ OverviewTarget OverlayRenderer::hitTest(double x, double y) const {
     if (!frame)
         return {};
 
-    if (!m_searchActive && m_config.layoutMode() == LayoutMode::Stage) {
+    if (!m_searchActive && effectiveLayoutMode() == LayoutMode::Stage) {
         const auto mapped = mapDisplayedStagePoint(*frame, {.x = localX, .y = localY}, workspaceShelfVisible());
         localX = mapped.x;
         localY = mapped.y;
@@ -877,7 +973,7 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
 
     // Frosted glass: a lifted step off the theme background rather than the background itself,
     // so the desktop stays faintly legible behind the overview instead of being crushed to black.
-    auto backdrop = m_config.layoutMode() == LayoutMode::Stage ? surfaceColor(0.06F, 0.70) : Theme::backdropColor();
+    auto backdrop = effectiveLayoutMode() == LayoutMode::Stage ? surfaceColor(0.06F, 0.70) : Theme::backdropColor();
     backdrop.a *= backdropAlpha;
     drawRect(box, backdrop, damage, 0, true);
 
@@ -890,11 +986,14 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
         return;
 
     renderFrame(*frame, alpha, damage);
+    renderHintDock(*frame, alpha, resolvedAccentColor(), damage);
+    renderPreferencesPanel(*frame, alpha, damage);
 }
 
 void OverlayRenderer::rebuildFrames() {
     m_frames.clear();
     m_frameBoundsByMonitor.clear();
+    m_settingsButtonByMonitor.clear();
 
     if (g_pCompositor) {
         for (const auto& monitor : g_pCompositor->m_monitors) {
@@ -913,7 +1012,7 @@ void OverlayRenderer::rebuildFrames() {
                 m_selectedTarget.workspaceId : snapshot.activeWorkspaceId;
             m_frameBoundsByMonitor[snapshot.id] = globalBoundsForMonitor(monitor);
             m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize,
-                layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
+                layoutOptionsFor(effectiveLayoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
         }
     }
 
@@ -932,7 +1031,7 @@ void OverlayRenderer::rebuildFrames() {
             const auto previewWorkspaceId = monitor.id == m_selectedFrameMonitorId && m_selectedTarget.workspaceId > 0 ?
                 m_selectedTarget.workspaceId : monitor.activeWorkspaceId;
             m_frames.push_back(m_layout.compute(m_state, monitor, renderSize,
-                layoutOptionsFor(m_config.layoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
+                layoutOptionsFor(effectiveLayoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
         }
     }
 
@@ -1049,7 +1148,7 @@ void OverlayRenderer::clearSearch() {
 }
 
 void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
-    const auto mode         = m_config.layoutMode();
+    const auto mode         = effectiveLayoutMode();
     if (mode == LayoutMode::Stage) {
         renderStageFrame(frame, alpha, damage);
         return;
@@ -1057,6 +1156,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
     const auto searchActive = m_searchActive;
     const auto contentAlpha = searchActive ? alpha * 0.055 : alpha;
+    const auto accent       = resolvedAccentColor();
 
     const auto shadowColor = withAlpha(Theme::shadowColor(), contentAlpha);
 
@@ -1106,19 +1206,19 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
 
         if (workspace.active && !compact) {
             const auto glowBox = CBox{workspaceBox.x - 6.0, workspaceBox.y - 6.0, workspaceBox.w + 12.0, workspaceBox.h + 12.0};
-            drawRect(glowBox, withAlpha(Theme::activeGlowColor(), contentAlpha), damage, round + 6);
+            drawRect(glowBox, withAlpha(accent, contentAlpha * 0.12), damage, round + 6);
         }
 
         drawRect(workspaceBox, Theme::cardFill(workspace.active, workspaceSelected, workspace.empty, static_cast<float>(contentAlpha)), damage, round);
 
         if (workspaceSelected || workspace.active) {
-            const auto borderColor = Theme::cardBorder(workspace.active, workspaceSelected, static_cast<float>(contentAlpha));
+            const auto borderColor = withAlpha(accent, contentAlpha * (workspaceSelected ? 0.96 : 0.30));
             drawBorder(workspaceBox, borderColor, round, 2);
         }
 
         if (workspace.active) {
             const auto accentWidth = std::min(compact ? 28.0 : 56.0, std::max(1.0, workspaceBox.w - 32.0));
-            const auto accentBar   = withAlpha(Theme::accentColor(), contentAlpha);
+            const auto accentBar   = withAlpha(accent, contentAlpha);
             drawRect(CBox{workspaceBox.x + centered(workspaceBox.w, accentWidth), workspaceBox.y + workspaceBox.h - 7.0, accentWidth, 4.0},
                 accentBar, damage, 2);
         }
@@ -1162,7 +1262,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             }
 
             if (windowSelected) {
-                const auto borderColor = Theme::windowBorder(true, static_cast<float>(contentAlpha));
+                const auto borderColor = withAlpha(accent, contentAlpha * 0.96);
                 drawBorder(CBox{windowBox.x - 5.0, windowBox.y - 5.0, windowBox.w + 10.0, windowBox.h + 10.0}, borderColor, windowRound + 5, 3);
             }
         }
@@ -1176,16 +1276,17 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     }
 }
 
-void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double contentAlpha, CHyprColor accent, CHyprColor railSurface,
-    const CRegion& damage) {
-const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
+void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double contentAlpha, CHyprColor accent, const CRegion& damage) {
+    const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
     if (!m_searchActive && dockProgress > 0.001) {
         // A shortcut dock: a small frosted capsule that rides up from the bottom edge, lit
         // along its rim by a two-stop gradient the way Hyprland lights a window border. It stays
         // hidden until the pointer reaches the bottom edge, so the stage is uncluttered by
         // shortcuts you already know.
         const auto dockAlpha = contentAlpha * dockProgress;
-        const auto modeLabel = m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
+        const auto modeLabel = effectiveLayoutMode() == LayoutMode::WorkspaceWall ? "WORKSPACES" :
+            m_mode == OverviewMode::Grouped ? "APPS" : m_mode == OverviewMode::AppExpose ? "APP EXPOSÉ" : "SPATIAL";
+        constexpr auto settingsLabel = "SETTINGS";
 
         struct DeckHint {
             const char* keys;
@@ -1201,7 +1302,7 @@ const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
                 {"/", "find"},
             }};
 
-        constexpr auto dockHeight   = 26.0;
+        constexpr auto dockHeight   = 30.0;
         constexpr auto dockPadR     = 15.0;
         constexpr auto pillInset    = 4.0;
         constexpr auto pillPadX     = 11.0;
@@ -1210,19 +1311,19 @@ const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
         constexpr auto pairGap      = 15.0;
         constexpr auto measureWidth = 240.0;
         constexpr auto riseDistance = 14.0;
-        constexpr auto rimAngle     = 2.62F;
 
         const auto foreground = m_config.foregroundColor();
-        // Derived from the live theme rather than a fixed pair, so the rim tracks accent_color and
-        // falls back with it when the config leaves the defaults in place.
+        // Hint keys use a softened accent so they remain legible without competing with active
+        // controls in the deliberately restrained Omarchy-style dock.
         const auto rimLit   = tintedSurface(accent, foreground, 0.42);
-        const auto rimShade = withAlpha(accent, 0.16);
 
         const auto pillHeight = dockHeight - pillInset * 2.0;
         const auto modeSize   = m_labels.measure(modeLabel, measureWidth, Theme::hintSize(), foreground);
         const auto pillWidth  = modeSize.width + pillPadX * 2.0;
+        const auto settingsSize = m_labels.measure(settingsLabel, measureWidth, Theme::hintSize(), foreground);
+        const auto settingsWidth = settingsSize.width + pillPadX * 2.0;
 
-        auto contentWidth = pillInset + pillWidth + pillGap;
+        auto contentWidth = pillInset + pillWidth + pillGap + settingsWidth + pillGap;
         std::array<double, HINTS.size()> keyWidths{};
         std::array<double, HINTS.size()> actionWidths{};
         for (std::size_t i = 0; i < HINTS.size(); ++i) {
@@ -1236,20 +1337,31 @@ const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
         // Rides up into place, so the reveal reads as the dock arriving rather than fading in.
         const auto dockY = frame.bounds.height - 34.0 - dockHeight + (1.0 - dockProgress) * riseDistance;
         const auto dock  = CBox{centered(frame.bounds.width, dockWidth), dockY, dockWidth, dockHeight};
-        const auto radius = static_cast<int>(std::round(dockHeight / 2.0));
+        constexpr auto radius = 0;
 
-        // Ambient then contact shadow, matching how the window cards are lifted off the backdrop.
-        drawRect(CBox{dock.x - 3.0, dock.y + 9.0, dock.w + 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.40), damage, radius + 6);
-        drawRect(CBox{dock.x + 3.0, dock.y + 5.0, dock.w - 6.0, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
-        drawRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
-
-        drawBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), rimShade, rimAngle, static_cast<float>(dockAlpha * 0.55), radius, 1);
+        drawRect(CBox{dock.x + 5.0, dock.y + 7.0, dock.w, dock.h}, withAlpha(Theme::shadowColor(), dockAlpha * 0.48), damage);
+        drawRect(dock, withAlpha(m_config.backgroundColor(), dockAlpha * 0.94), damage, radius, true);
+        drawBorder(dock, withAlpha(foreground, dockAlpha * 0.46), radius, 1);
 
         const auto pillBox = CBox{dock.x + pillInset, dock.y + pillInset, pillWidth, pillHeight};
-        drawRect(pillBox, withAlpha(accent, dockAlpha * 0.95), damage, static_cast<int>(std::round(pillHeight / 2.0)), true);
-        m_labels.renderCentered(modeLabel, pillBox, Theme::hintSize(), m_config.backgroundColor(), dockAlpha, damage);
+        drawRect(pillBox, withAlpha(foreground, dockAlpha * 0.07), damage, 0, true);
+        m_labels.renderCentered(modeLabel, pillBox, Theme::hintSize(), accent, dockAlpha, damage);
 
-        auto cursorX = pillBox.x + pillBox.w + pillGap;
+        const auto settingsBox = CBox{pillBox.x + pillBox.w + pillGap, pillBox.y, settingsWidth, pillHeight};
+        m_settingsButtonByMonitor[frame.monitorId] = {
+            .x = settingsBox.x,
+            .y = settingsBox.y,
+            .width = settingsBox.w,
+            .height = settingsBox.h,
+        };
+        const auto settingsActive = m_preferencesVisible && frame.monitorId == m_preferencesMonitorId;
+        drawRect(settingsBox, withAlpha(foreground, dockAlpha * (settingsActive || m_settingsButtonHot ? 0.11 : 0.04)), damage);
+        drawBorder(settingsBox, withAlpha(settingsActive || m_settingsButtonHot ? accent : foreground,
+            dockAlpha * (settingsActive || m_settingsButtonHot ? 0.64 : 0.12)), 0, 1);
+        m_labels.renderCentered(settingsLabel, settingsBox, Theme::hintSize(),
+            settingsActive || m_settingsButtonHot ? accent : foreground, dockAlpha * (settingsActive || m_settingsButtonHot ? 1.0 : 0.54), damage);
+
+        auto cursorX = settingsBox.x + settingsBox.w + pillGap;
         for (std::size_t i = 0; i < HINTS.size(); ++i) {
             const auto keySize    = m_labels.measure(HINTS[i].keys, measureWidth, Theme::hintSize(), foreground);
             const auto actionSize = m_labels.measure(HINTS[i].action, measureWidth, Theme::hintSize(), foreground);
@@ -1260,7 +1372,137 @@ const auto dockProgress = std::clamp(m_dockTransition.value(), 0.0, 1.0);
                 Theme::hintSize(), foreground, dockAlpha * 0.58, damage);
             cursorX += actionWidths[i] + pairGap;
         }
+    } else {
+        m_settingsButtonByMonitor.erase(frame.monitorId);
     }
+}
+
+void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
+    if (!m_preferencesVisible || frame.monitorId != m_preferencesMonitorId)
+        return;
+
+    const auto geometry   = computePreferencesPanel(frame.bounds);
+    const auto accent     = resolvedAccentColor();
+    const auto foreground = m_config.foregroundColor();
+    const auto panelBox   = boxFor(geometry.panel);
+    const auto panelAlpha = std::clamp(alpha, 0.0, 1.0);
+
+    auto dim = m_config.backgroundColor();
+    dim.a = static_cast<float>(0.68 * panelAlpha);
+    drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, dim, damage);
+    drawRect(CBox{panelBox.x + 8.0, panelBox.y + 10.0, panelBox.w, panelBox.h},
+        withAlpha(Theme::shadowColor(), panelAlpha * 0.74), damage);
+    drawRect(panelBox, withAlpha(m_config.backgroundColor(), panelAlpha * 0.95), damage, 0, true);
+    drawBorder(panelBox, withAlpha(foreground, panelAlpha * 0.82), 0, 2);
+
+    drawRect(CBox{panelBox.x, panelBox.y, 4.0, 58.0}, withAlpha(accent, panelAlpha), damage);
+    drawRect(CBox{panelBox.x + 1.0, panelBox.y + 57.0, panelBox.w - 2.0, 1.0},
+        withAlpha(foreground, panelAlpha * 0.16), damage);
+    m_labels.renderColored("> radiant preferences", panelBox.x + 22.0, panelBox.y + 17.0,
+        panelBox.w - 150.0, Theme::footerSize(), accent, panelAlpha, damage);
+    m_labels.renderColored("~/.config/hypr-radiant/preferences.conf", panelBox.x + 22.0, panelBox.y + 39.0,
+        panelBox.w - 170.0, Theme::badgeSize(), foreground, panelAlpha * 0.42, damage);
+
+    const auto closeBox = boxFor(geometry.closeButton);
+    const auto closeSelected = m_selectedPreference == PreferenceControl::Close;
+    drawRect(closeBox, withAlpha(foreground, panelAlpha * (closeSelected ? 0.12 : 0.05)), damage);
+    drawBorder(closeBox, withAlpha(foreground, panelAlpha * 0.20), 0, 1);
+    m_labels.renderCentered("[ctrl+,]", closeBox, Theme::badgeSize(),
+        closeSelected ? accent : foreground, panelAlpha * (closeSelected ? 1.0 : 0.58), damage);
+
+    m_labels.renderColored("OVERVIEW", geometry.panel.x + 30.0, geometry.rows[0].rect.y - 23.0,
+        geometry.panel.width - 60.0, Theme::badgeSize(), accent, panelAlpha * 0.72, damage);
+    drawRect(CBox{geometry.panel.x + 98.0, geometry.rows[0].rect.y - 18.0, geometry.panel.width - 128.0, 1.0},
+        withAlpha(foreground, panelAlpha * 0.11), damage);
+    m_labels.renderColored("INTERFACE", geometry.panel.x + 30.0, geometry.rows[2].rect.y - 23.0,
+        geometry.panel.width - 60.0, Theme::badgeSize(), accent, panelAlpha * 0.72, damage);
+    drawRect(CBox{geometry.panel.x + 106.0, geometry.rows[2].rect.y - 18.0, geometry.panel.width - 136.0, 1.0},
+        withAlpha(foreground, panelAlpha * 0.11), damage);
+
+    const std::array rowLabels{
+        "01  workspace.layout",
+        "02  windows.arrangement",
+        "03  interface.accent",
+        "04  motion.profile",
+    };
+
+    for (std::size_t i = 0; i < geometry.rows.size(); ++i) {
+        const auto& row = geometry.rows[i];
+        const auto selected = row.control == m_selectedPreference;
+        const auto rowBox = boxFor(row.rect);
+        drawRect(rowBox, withAlpha(foreground, panelAlpha * (selected ? 0.07 : 0.025)), damage);
+        drawRect(CBox{rowBox.x, rowBox.y + 8.0, 3.0, rowBox.h - 16.0},
+            withAlpha(selected ? accent : foreground, panelAlpha * (selected ? 0.92 : 0.10)), damage);
+
+        m_labels.renderColored(rowLabels[i], row.rect.x + 15.0, row.rect.y + 17.0,
+            std::max(1.0, row.rect.width * 0.40), Theme::hintSize(), selected ? accent : foreground,
+            panelAlpha * (selected ? 0.92 : 0.52), damage);
+    }
+
+    const auto activeOption = [this](PreferenceControl control) {
+        switch (control) {
+            case PreferenceControl::WorkspaceView: return effectiveLayoutMode() == LayoutMode::WorkspaceWall ? 1 : 0;
+            case PreferenceControl::WindowView: return m_preferences.state().windowView == WindowViewPreference::Grouped ? 1 : 0;
+            case PreferenceControl::Accent: return static_cast<int>(m_preferences.state().accent);
+            case PreferenceControl::Motion: return static_cast<int>(m_preferences.state().motion);
+            case PreferenceControl::None:
+            case PreferenceControl::AppExpose:
+            case PreferenceControl::Close:
+                return -1;
+        }
+        return -1;
+    };
+    const auto optionLabel = [](PreferenceControl control, int value) -> std::string {
+        switch (control) {
+            case PreferenceControl::WorkspaceView: return value == 0 ? "STAGE" : "WALL";
+            case PreferenceControl::WindowView: return value == 0 ? "SPATIAL" : "GROUPED";
+            case PreferenceControl::Accent: {
+                static constexpr std::array labels{"THEME", "GREEN", "BLUE", "VIOLET"};
+                return labels[static_cast<std::size_t>(std::clamp(value, 0, 3))];
+            }
+            case PreferenceControl::Motion: {
+                static constexpr std::array labels{"DEFAULT", "REDUCED", "OFF"};
+                return labels[static_cast<std::size_t>(std::clamp(value, 0, 2))];
+            }
+            case PreferenceControl::None:
+            case PreferenceControl::AppExpose:
+            case PreferenceControl::Close:
+                return {};
+        }
+        return {};
+    };
+    for (const auto& option : geometry.options) {
+        const auto optionBox = boxFor(option.rect);
+        const auto active = option.value == activeOption(option.control);
+        drawRect(optionBox, withAlpha(foreground, panelAlpha * (active ? 0.10 : 0.025)), damage);
+        drawBorder(optionBox, withAlpha(active ? accent : foreground, panelAlpha * (active ? 0.58 : 0.11)), 0, 1);
+        m_labels.renderCentered(optionLabel(option.control, option.value), optionBox, Theme::badgeSize(),
+            active ? accent : foreground, panelAlpha * (active ? 1.0 : 0.48), damage);
+    }
+
+    const auto appSelected = m_selectedPreference == PreferenceControl::AppExpose;
+    const auto appBox = boxFor(geometry.appExposeButton);
+    drawRect(appBox, withAlpha(foreground, panelAlpha * (appSelected ? 0.09 : 0.035)), damage);
+    drawBorder(appBox, withAlpha(appSelected ? accent : foreground, panelAlpha * (appSelected ? 0.72 : 0.14)), 0, 1);
+    m_labels.renderColored("> radiant app --focused", geometry.appExposeButton.x + 16.0, geometry.appExposeButton.y + 11.0,
+        geometry.appExposeButton.width - 128.0, Theme::hintSize(),
+        appSelected ? accent : foreground, panelAlpha * 0.72, damage);
+    const auto runBox = CBox{
+        geometry.appExposeButton.x + geometry.appExposeButton.width - 96.0,
+        geometry.appExposeButton.y + 5.0,
+        84.0,
+        geometry.appExposeButton.height - 10.0,
+    };
+    drawRect(runBox, withAlpha(foreground, panelAlpha * 0.07), damage);
+    drawBorder(runBox, withAlpha(accent, panelAlpha * 0.48), 0, 1);
+    m_labels.renderCentered("[run ↵]", runBox, Theme::badgeSize(), accent, panelAlpha, damage);
+
+    m_labels.renderColored("↑↓ navigate   ←→ change   enter apply   ctrl+, close",
+        geometry.panel.x + 28.0, geometry.panel.y + geometry.panel.height - 25.0,
+        geometry.panel.width - 210.0, Theme::badgeSize(), foreground, panelAlpha * 0.30, damage);
+    m_labels.renderColored("● preferences.conf saved",
+        geometry.panel.x + geometry.panel.width - 174.0, geometry.panel.y + geometry.panel.height - 25.0,
+        150.0, Theme::badgeSize(), accent, panelAlpha * 0.58, damage);
 }
 
 void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const StageContext& ctx, const CRegion& damage) {
@@ -1560,8 +1802,6 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
     };
     renderStageWindows(frame, stageCtx, damage);
 
-    renderHintDock(frame, contentAlpha, accent, railSurface, damage);
-
     if (m_searchActive) {
         auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.58 * alpha);
@@ -1814,22 +2054,159 @@ const WorkspaceWallFrame* OverlayRenderer::activeMonitorFrame() const noexcept {
     return &m_frames.front();
 }
 
+bool OverlayRenderer::settingsButtonAt(double x, double y, std::int64_t* monitorId) const {
+    double localX = x;
+    double localY = y;
+    const auto* frame = frameForPoint(x, y, localX, localY);
+    if (!frame)
+        return false;
+
+    const auto found = m_settingsButtonByMonitor.find(frame->monitorId);
+    if (found == m_settingsButtonByMonitor.end())
+        return false;
+    const auto& rect = found->second;
+    const auto inside = localX >= rect.x && localY >= rect.y && localX < rect.x + rect.width && localY < rect.y + rect.height;
+    if (inside && monitorId)
+        *monitorId = frame->monitorId;
+    return inside;
+}
+
+PreferenceHit OverlayRenderer::preferenceControlAt(double x, double y) const {
+    if (!m_preferencesVisible)
+        return {};
+
+    double localX = x;
+    double localY = y;
+    const auto* frame = frameForPoint(x, y, localX, localY);
+    if (!frame || frame->monitorId != m_preferencesMonitorId)
+        return {};
+    return hitTestPreferencesPanel(computePreferencesPanel(frame->bounds), localX, localY);
+}
+
+PointerAction OverlayRenderer::applyPreference(PreferenceControl control, int value) {
+    if (control == PreferenceControl::None)
+        return {};
+    if (control == PreferenceControl::Close) {
+        togglePreferences();
+        return {};
+    }
+    if (control == PreferenceControl::AppExpose) {
+        m_preferencesVisible = false;
+        m_preferencesMonitorId = -1;
+        damageAllMonitors();
+        return {.type = PointerActionType::ShowAppExpose, .target = {}, .windowId = 0};
+    }
+
+    auto& state = m_preferences.state();
+    switch (control) {
+        case PreferenceControl::WorkspaceView:
+            if (value == 0)
+                state.workspaceView = WorkspaceViewPreference::Stage;
+            else if (value == 1)
+                state.workspaceView = WorkspaceViewPreference::WorkspaceWall;
+            else
+                state.workspaceView = effectiveLayoutMode() == LayoutMode::Stage ?
+                    WorkspaceViewPreference::WorkspaceWall : WorkspaceViewPreference::Stage;
+            break;
+        case PreferenceControl::WindowView:
+            if (value == 0)
+                state.windowView = WindowViewPreference::Spatial;
+            else if (value == 1)
+                state.windowView = WindowViewPreference::Grouped;
+            else
+                state.windowView = state.windowView == WindowViewPreference::Grouped ? WindowViewPreference::Spatial : WindowViewPreference::Grouped;
+            break;
+        case PreferenceControl::Accent:
+            if (value >= 0 && value <= 3)
+                state.accent = static_cast<AccentPreference>(value);
+            else
+                switch (state.accent) {
+                    case AccentPreference::FollowConfig: state.accent = AccentPreference::Green; break;
+                    case AccentPreference::Green: state.accent = AccentPreference::Blue; break;
+                    case AccentPreference::Blue: state.accent = AccentPreference::Violet; break;
+                    case AccentPreference::Violet: state.accent = AccentPreference::FollowConfig; break;
+                }
+            break;
+        case PreferenceControl::Motion:
+            if (value >= 0 && value <= 2)
+                state.motion = static_cast<MotionPreference>(value);
+            else
+                switch (state.motion) {
+                    case MotionPreference::FollowConfig: state.motion = MotionPreference::Reduced; break;
+                    case MotionPreference::Reduced: state.motion = MotionPreference::Off; break;
+                    case MotionPreference::Off: state.motion = MotionPreference::FollowConfig; break;
+                }
+            break;
+        case PreferenceControl::None:
+        case PreferenceControl::AppExpose:
+        case PreferenceControl::Close:
+            return {};
+    }
+
+    if (!m_preferences.save())
+        log::warn("could not save preferences to {}", m_preferences.path().string());
+    rebuildAfterPreferenceChange();
+    return {};
+}
+
+void OverlayRenderer::rebuildAfterPreferenceChange() {
+    m_mode = defaultOverviewMode();
+    m_applicationFilter.clear();
+    m_previousFrames = m_frames;
+    rebuildFrames();
+    if (const auto* frame = frameForMonitor(m_selectedFrameMonitorId)) {
+        if (!targetInFrame(*frame, m_selectedTarget))
+            m_selectedTarget = m_hitTester.initialSelection(*frame);
+    } else if (const auto* frame = activeMonitorFrame()) {
+        m_selectedFrameMonitorId = frame->monitorId;
+        m_selectedTarget = m_hitTester.initialSelection(*frame);
+    }
+    m_stageTransitionMonitorId = -1;
+    m_stageTransition.hideImmediate();
+    m_stageTransition.animateTo(true, effectiveAnimationDurationMs());
+    animateSelection();
+    m_labels.clear();
+    damageAllMonitors();
+}
+
 CHyprColor OverlayRenderer::resolvedAccentColor() const {
+    switch (m_preferences.state().accent) {
+        case AccentPreference::Green: return {0.31F, 0.66F, 0.48F, 1.0F};
+        case AccentPreference::Blue: return {0.24F, 0.63F, 0.96F, 1.0F};
+        case AccentPreference::Violet: return {0.67F, 0.46F, 0.94F, 1.0F};
+        case AccentPreference::FollowConfig: break;
+    }
+
     if (const auto configured = m_config.accentColorOverride())
         return *configured;
 
-    if (const auto focusedWindow = Desktop::focusState() ? Desktop::focusState()->window() : nullptr) {
-        if (!focusedWindow->m_realBorderColor.m_colors.empty()) {
-            auto accent = focusedWindow->m_realBorderColor.m_colors.front();
-            accent.a = 1.0;
-            return accent;
-        }
-    }
-
-    // Omarchy drives col.active_border from the same theme accent, so this fallback agrees with
-    // the border on Omarchy and still resolves sensibly elsewhere.
+    // "Theme" deliberately means the active Omarchy palette, not the currently focused
+    // application's border. The palette is refreshed every time the overview opens.
     const auto& accent = m_config.palette().accent;
     return {accent.red, accent.green, accent.blue, accent.alpha};
+}
+
+LayoutMode OverlayRenderer::effectiveLayoutMode() const {
+    switch (m_preferences.state().workspaceView) {
+        case WorkspaceViewPreference::Stage: return LayoutMode::Stage;
+        case WorkspaceViewPreference::WorkspaceWall: return LayoutMode::WorkspaceWall;
+        case WorkspaceViewPreference::FollowConfig: return m_config.layoutMode();
+    }
+    return m_config.layoutMode();
+}
+
+int OverlayRenderer::effectiveAnimationDurationMs() const {
+    const auto configured = m_config.animationDurationMs();
+    switch (m_preferences.state().motion) {
+        case MotionPreference::Reduced: return std::min(configured, 90);
+        case MotionPreference::Off: return 0;
+        case MotionPreference::FollowConfig: return configured;
+    }
+    return configured;
+}
+
+OverviewMode OverlayRenderer::defaultOverviewMode() const {
+    return m_preferences.state().windowView == WindowViewPreference::Grouped ? OverviewMode::Grouped : OverviewMode::Spatial;
 }
 
 CHyprColor OverlayRenderer::surfaceColor(float lift, double alpha) const {

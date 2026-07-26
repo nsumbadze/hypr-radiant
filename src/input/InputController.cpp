@@ -69,6 +69,7 @@ void InputController::install(Callbacks callbacks) {
     m_jump          = std::move(callbacks.jump);
     m_close         = std::move(callbacks.close);
     m_toggleMode    = std::move(callbacks.toggleMode);
+    m_togglePreferences = std::move(callbacks.togglePreferences);
 
     m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](Vector2D position, Event::SCallbackInfo& info) {
         if (!m_active || !m_active())
@@ -176,6 +177,12 @@ void InputController::install(Callbacks callbacks) {
             return;
         }
 
+        if (key == KEY_COMMA && ctrlHeld()) {
+            if (m_togglePreferences)
+                m_togglePreferences();
+            return;
+        }
+
         if (key == KEY_TAB) {
             if (!m_searchActive || !m_searchActive()) {
                 if (m_toggleMode)
@@ -265,6 +272,7 @@ void InputController::uninstall() {
     m_jump = {};
     m_close = {};
     m_toggleMode = {};
+    m_togglePreferences = {};
     m_scrollAccumulator = 0.0;
     m_acceptInputAfter = Clock::time_point::min();
     m_acceptActivationAfter = Clock::time_point::min();

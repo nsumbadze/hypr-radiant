@@ -2,6 +2,7 @@
 
 #include <hypr-radiant/compositor/ActivationController.hpp>
 #include <hypr-radiant/config/Config.hpp>
+#include <hypr-radiant/config/Preferences.hpp>
 #include <hypr-radiant/input/GestureController.hpp>
 #include <hypr-radiant/input/InputController.hpp>
 #include <hypr-radiant/input/ShortcutController.hpp>
@@ -29,6 +30,7 @@ class RadiantPlugin {
     SDispatchResult close(const std::string& args);
     SDispatchResult toggle(const std::string& args);
     SDispatchResult showApplication(const std::string& args);
+    SDispatchResult preferences(const std::string& args);
     SDispatchResult shelf(const std::string& args);
     SDispatchResult status(const std::string& args);
 
@@ -43,6 +45,7 @@ class RadiantPlugin {
     HANDLE          m_handle = nullptr;
     ActivationController m_activation;
     RadiantConfig     m_config;
+    PreferencesStore  m_preferences;
     ShortcutController m_shortcut;
     InputController m_input;
     GestureController m_gestures;

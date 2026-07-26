@@ -31,6 +31,7 @@ class InputController {
     using JumpFn     = std::function<void(std::int64_t)>;
     using CloseFn    = std::function<void()>;
     using ToggleModeFn = std::function<void()>;
+    using TogglePreferencesFn = std::function<void()>;
 
     // One named field per callback: the previous 13 positional std::functions were transposable at
     // the call site — two same-typed lambdas 30 lines apart compiled fine while silently swapping,
@@ -49,6 +50,7 @@ class InputController {
         JumpFn          jump;
         CloseFn         close;
         ToggleModeFn    toggleMode;
+        TogglePreferencesFn togglePreferences;
     };
 
     void install(Callbacks callbacks);
@@ -81,6 +83,7 @@ class InputController {
     JumpFn              m_jump;
     CloseFn             m_close;
     ToggleModeFn        m_toggleMode;
+    TogglePreferencesFn m_togglePreferences;
     CHyprSignalListener m_mouseMoveListener;
     CHyprSignalListener m_mouseButtonListener;
     CHyprSignalListener m_mouseAxisListener;

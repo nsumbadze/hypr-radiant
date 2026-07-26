@@ -1,6 +1,8 @@
 #pragma once
 
 #include <hypr-radiant/config/Config.hpp>
+#include <hypr-radiant/config/Preferences.hpp>
+#include <hypr-radiant/overview/PreferencesPanelGeometry.hpp>
 #include <hypr-radiant/render/FadeAnimation.hpp>
 #include <hypr-radiant/RadiantState.hpp>
 #include <hypr-radiant/overview/HitTester.hpp>
@@ -27,6 +29,7 @@ enum class PointerActionType {
     MoveWindow,
     CreateWorkspaceAndMoveWindow,
     CloseWindow,
+    ShowAppExpose,
 };
 
 struct PointerAction {
@@ -37,7 +40,7 @@ struct PointerAction {
 
 class OverlayRenderer {
   public:
-    explicit OverlayRenderer(const RadiantConfig& config);
+    OverlayRenderer(const RadiantConfig& config, PreferencesStore& preferences);
 
     void install();
     void uninstall();
@@ -52,6 +55,8 @@ class OverlayRenderer {
     void backspaceSearch();
     void clearSearchOrHide();
     void toggleGroupedMode();
+    void togglePreferences();
+    [[nodiscard]] PointerAction activatePreference();
     void setWorkspaceShelfVisible(bool visible);
     void setHintDockVisible(bool visible);
     void toggleWorkspaceShelf();
@@ -69,6 +74,7 @@ class OverlayRenderer {
 
     [[nodiscard]] bool           active() const noexcept;
     [[nodiscard]] bool           searchActive() const noexcept;
+    [[nodiscard]] bool           preferencesVisible() const noexcept;
     [[nodiscard]] bool           workspaceShelfVisible() const noexcept;
     [[nodiscard]] OverviewMode   mode() const noexcept;
     [[nodiscard]] OverviewTarget selectedTarget() const noexcept;
@@ -86,7 +92,7 @@ class OverlayRenderer {
     void clearSearch();
     void renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderStageFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
-    void renderHintDock(const WorkspaceWallFrame& frame, double contentAlpha, CHyprColor accent, CHyprColor railSurface, const CRegion& damage);
+    void renderHintDock(const WorkspaceWallFrame& frame, double contentAlpha, CHyprColor accent, const CRegion& damage);
     // Derived per-frame values the stage-window pass reads; bundled so the pass takes one named
     // argument instead of eight positional doubles and colours that could be transposed unnoticed.
     struct StageContext {
@@ -102,6 +108,7 @@ class OverlayRenderer {
     void renderStageWindows(const WorkspaceWallFrame& frame, const StageContext& ctx, const CRegion& damage);
     void renderWindowPreview(const WindowCard& window, const CBox& clipBox, double alpha, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
+    void renderPreferencesPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
     [[nodiscard]] OverviewTarget searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const;
@@ -113,6 +120,13 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* frameForSelectedTarget() const noexcept;
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
+    [[nodiscard]] LayoutMode effectiveLayoutMode() const;
+    [[nodiscard]] int        effectiveAnimationDurationMs() const;
+    [[nodiscard]] OverviewMode defaultOverviewMode() const;
+    [[nodiscard]] bool settingsButtonAt(double x, double y, std::int64_t* monitorId = nullptr) const;
+    [[nodiscard]] PreferenceHit preferenceControlAt(double x, double y) const;
+    [[nodiscard]] PointerAction applyPreference(PreferenceControl control, int value = -1);
+    void rebuildAfterPreferenceChange();
     /// Surface derived from the active theme background, stepped `lift` toward its contrasting
     /// end. Lightens on dark themes and darkens on light ones.
     [[nodiscard]] CHyprColor surfaceColor(float lift, double alpha) const;
@@ -132,6 +146,7 @@ class OverlayRenderer {
         const std::function<OverviewTarget(const WorkspaceWallFrame&)>& selectInitial);
 
     const RadiantConfig&                                  m_config;
+    PreferencesStore&                                     m_preferences;
     FadeAnimation                                      m_animation;
     FadeAnimation                                      m_stageTransition;
     FadeAnimation                                      m_selectionTransition;
@@ -149,6 +164,7 @@ class OverlayRenderer {
     std::vector<WorkspaceWallFrame>                       m_frames;
     std::vector<WorkspaceWallFrame>                       m_previousFrames;
     std::unordered_map<std::int64_t, LayoutRect>          m_frameBoundsByMonitor;
+    std::unordered_map<std::int64_t, LayoutRect>          m_settingsButtonByMonitor;
     OverviewTarget                                        m_selectedTarget;
     std::int64_t                                          m_selectedFrameMonitorId = -1;
     // -1 animates the stage on every monitor (open/refresh); otherwise only this monitor animates,
@@ -161,8 +177,14 @@ class OverlayRenderer {
     std::int64_t                                          m_closingWindowMonitorId = -1;
     bool                                                  m_closeButtonHot = false;
     bool                                                  m_pointerCursorActive = false;
+    bool                                                  m_settingsButtonHot = false;
     std::string                                           m_searchQuery;
     bool                                                  m_searchActive = false;
+    bool                                                  m_preferencesVisible = false;
+    std::int64_t                                          m_preferencesMonitorId = -1;
+    PreferenceControl                                     m_selectedPreference = PreferenceControl::WorkspaceView;
+    PreferenceHit                                         m_pointerDownPreference;
+    bool                                                  m_pointerDownSettingsButton = false;
     OverviewMode                                          m_mode = OverviewMode::Spatial;
     std::string                                           m_applicationFilter;
     OverviewTarget                                        m_preSearchTarget;
