@@ -13,6 +13,7 @@
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/helpers/Monitor.hpp>
+#include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/render/pass/BorderPassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <hyprland/src/render/Renderer.hpp>
@@ -921,6 +922,11 @@ OverviewTarget OverlayRenderer::hitTest(double x, double y) const {
 
 void OverlayRenderer::onRenderStage(eRenderStage stage) {
     if (stage != RENDER_LAST_MOMENT || !m_animation.renderable())
+        return;
+
+    // Session-lock surfaces are security-sensitive compositor UI. Never draw Radiant over them,
+    // even during the tick before the plugin's lock guard clears its overlay state.
+    if (g_pSessionLockManager && g_pSessionLockManager->isSessionLocked())
         return;
 
     if (m_closingWindowId != 0 && m_windowCloseTransition.targetVisible() && !m_windowCloseTransition.running())

@@ -54,6 +54,8 @@ class RadiantPlugin {
     // A window closing while the overview is up leaves its card behind, so the layout is re-flowed
     // as soon as the compositor reports one gone, however it was closed.
     CHyprSignalListener m_windowDestroyListener;
+    // Lock UI must always win the final render stage and receive keyboard input.
+    CHyprSignalListener m_sessionLockGuardListener;
     Clock::time_point m_lastOpenedAt = Clock::time_point::min();
     SP<CEventLoopTimer> m_windowCloseTimer;
     std::uint64_t    m_pendingCloseWindowId = 0;

@@ -6,6 +6,7 @@
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+#include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 
 #include <memory>
@@ -85,6 +86,16 @@ bool RadiantPlugin::initialize() {
             cancelPendingWindowClose(false);
         if (m_overlay.active())
             m_overlay.refresh(m_stateCollector.collect());
+    });
+    m_sessionLockGuardListener = Event::bus()->m_events.tick.listen([this] {
+        if (!g_pSessionLockManager || !g_pSessionLockManager->isSessionLocked())
+            return;
+
+        const auto wasActive = m_overlay.active();
+        m_overlay.hideImmediate();
+        m_input.releaseKeyboard();
+        if (wasActive)
+            recordTransition("closed for session lock");
     });
     m_input.install({
         .active   = [this] { return m_overlay.active(); },
@@ -219,6 +230,7 @@ SDispatchResult RadiantPlugin::preferences(const std::string& args) {
 
 void RadiantPlugin::shutdown() {
     cancelPendingWindowClose(false);
+    m_sessionLockGuardListener.reset();
     m_windowDestroyListener.reset();
     m_gestures.uninstall();
     m_input.uninstall();
