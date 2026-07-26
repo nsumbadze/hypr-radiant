@@ -3,11 +3,13 @@
 #include <hyprland/src/devices/IKeyboard.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 
 #include <linux/input-event-codes.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <optional>
 
@@ -16,6 +18,8 @@ namespace {
 
 constexpr auto INPUT_ARM_DELAY = std::chrono::milliseconds{220};
 constexpr auto ACTIVATION_ARM_DELAY = std::chrono::milliseconds{700};
+constexpr auto FALLBACK_REPEAT_DELAY = std::chrono::milliseconds{400};
+constexpr auto FALLBACK_REPEAT_RATE  = 25;
 
 bool pressed(wl_keyboard_key_state state) {
     return state == WL_KEYBOARD_KEY_STATE_PRESSED;
@@ -40,13 +44,53 @@ bool fromMouseWheel(const IPointer::SAxisEvent& event) {
 }
 
 std::optional<char> searchCharForKey(uint32_t key) {
-    if (key >= KEY_A && key <= KEY_Z)
-        return static_cast<char>('a' + (key - KEY_A));
+    if (g_pSeatManager) {
+        const auto keyboard = g_pSeatManager->m_keyboard.lock();
+        if (keyboard && keyboard->m_xkbState) {
+            std::array<char, 8> text{};
+            // Linux input keycodes are evdev values; XKB keycodes carry the historical +8 offset.
+            const auto length = xkb_state_key_get_utf8(keyboard->m_xkbState, key + 8, text.data(), text.size());
+            if (length == 1) {
+                const auto value = static_cast<unsigned char>(text.front());
+                if (value >= 0x20 && value <= 0x7E)
+                    return static_cast<char>(value);
+            }
+        }
+    }
 
-    if (key == KEY_SPACE)
-        return ' ';
-
-    return std::nullopt;
+    // Keep a layout-independent fallback for the brief interval where Hyprland has no active XKB
+    // state (for example while a keyboard is being hot-plugged). Linux letter keycodes are not
+    // contiguous or alphabetical, so this must be explicit.
+    switch (key) {
+        case KEY_A: return 'a';
+        case KEY_B: return 'b';
+        case KEY_C: return 'c';
+        case KEY_D: return 'd';
+        case KEY_E: return 'e';
+        case KEY_F: return 'f';
+        case KEY_G: return 'g';
+        case KEY_H: return 'h';
+        case KEY_I: return 'i';
+        case KEY_J: return 'j';
+        case KEY_K: return 'k';
+        case KEY_L: return 'l';
+        case KEY_M: return 'm';
+        case KEY_N: return 'n';
+        case KEY_O: return 'o';
+        case KEY_P: return 'p';
+        case KEY_Q: return 'q';
+        case KEY_R: return 'r';
+        case KEY_S: return 's';
+        case KEY_T: return 't';
+        case KEY_U: return 'u';
+        case KEY_V: return 'v';
+        case KEY_W: return 'w';
+        case KEY_X: return 'x';
+        case KEY_Y: return 'y';
+        case KEY_Z: return 'z';
+        case KEY_SPACE: return ' ';
+        default: return std::nullopt;
+    }
 }
 
 } // namespace
@@ -147,6 +191,11 @@ void InputController::install(Callbacks callbacks) {
         if (!inputArmed() || suppressed)
             return;
 
+        if (event.keycode == KEY_BACKSPACE && !isPressed) {
+            stopBackspaceRepeat();
+            return;
+        }
+
         if (!isPressed)
             return;
 
@@ -168,6 +217,8 @@ void InputController::install(Callbacks callbacks) {
         if (key == KEY_BACKSPACE) {
             if (m_backspace)
                 m_backspace();
+            if (m_searchActive && m_searchActive())
+                startBackspaceRepeat();
             return;
         }
 
@@ -245,6 +296,7 @@ void InputController::grabKeyboard(OpeningRelease openingRelease) {
 }
 
 void InputController::releaseKeyboard() {
+    stopBackspaceRepeat();
     if (m_seatGrab && g_pSeatManager && g_pSeatManager->m_seatGrab == m_seatGrab)
         g_pSeatManager->setGrab(nullptr);
 }
@@ -277,6 +329,47 @@ void InputController::uninstall() {
     m_acceptInputAfter = Clock::time_point::min();
     m_acceptActivationAfter = Clock::time_point::min();
     m_openingInputGuard.reset();
+}
+
+void InputController::startBackspaceRepeat() {
+    stopBackspaceRepeat();
+    if (!g_pEventLoopManager)
+        return;
+
+    auto delay = FALLBACK_REPEAT_DELAY;
+    auto rate  = FALLBACK_REPEAT_RATE;
+    if (g_pSeatManager) {
+        if (const auto keyboard = g_pSeatManager->m_keyboard.lock()) {
+            if (keyboard->m_repeatRate <= 0)
+                return;
+            delay = std::chrono::milliseconds{std::max(0, keyboard->m_repeatDelay)};
+            rate  = keyboard->m_repeatRate;
+        }
+    }
+    const auto interval = std::chrono::milliseconds{std::max(1, 1000 / std::max(1, rate))};
+
+    m_backspaceRepeatTimer = makeShared<CEventLoopTimer>(
+        delay,
+        [this, interval](SP<CEventLoopTimer> self, void*) {
+            if (!m_active || !m_active() || !m_searchActive || !m_searchActive()) {
+                stopBackspaceRepeat();
+                return;
+            }
+            if (m_backspace)
+                m_backspace();
+            self->updateTimeout(interval);
+        },
+        nullptr);
+    g_pEventLoopManager->addTimer(m_backspaceRepeatTimer);
+}
+
+void InputController::stopBackspaceRepeat() {
+    if (!m_backspaceRepeatTimer)
+        return;
+    m_backspaceRepeatTimer->cancel();
+    if (g_pEventLoopManager)
+        g_pEventLoopManager->removeTimer(m_backspaceRepeatTimer);
+    m_backspaceRepeatTimer.reset();
 }
 
 bool InputController::inputArmed() const noexcept {

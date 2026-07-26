@@ -4,6 +4,7 @@
 #include <hypr-radiant/input/OpeningInputGuard.hpp>
 
 #include <hyprland/src/helpers/signal/Signal.hpp>
+#include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
 #include <hyprland/src/managers/SeatManager.hpp>
 
 #include <chrono>
@@ -67,6 +68,8 @@ class InputController {
   private:
     [[nodiscard]] bool inputArmed() const noexcept;
     [[nodiscard]] bool activationArmed() const noexcept;
+    void               startBackspaceRepeat();
+    void               stopBackspaceRepeat();
 
     using Clock = std::chrono::steady_clock;
 
@@ -89,6 +92,7 @@ class InputController {
     CHyprSignalListener m_mouseAxisListener;
     CHyprSignalListener m_keyListener;
     SP<CSeatGrab>       m_seatGrab;
+    SP<CEventLoopTimer> m_backspaceRepeatTimer;
     double              m_scrollAccumulator = 0.0;
     Clock::time_point   m_acceptInputAfter = Clock::time_point::min();
     Clock::time_point   m_acceptActivationAfter = Clock::time_point::min();
