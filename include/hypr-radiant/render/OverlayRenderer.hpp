@@ -8,6 +8,7 @@
 #include <hypr-radiant/overview/HitTester.hpp>
 #include <hypr-radiant/render/LabelRenderer.hpp>
 #include <hypr-radiant/overview/SearchMatcher.hpp>
+#include <hypr-radiant/overview/SearchSuggestions.hpp>
 #include <hypr-radiant/overview/WorkspaceWallLayout.hpp>
 
 #include <hyprland/src/SharedDefs.hpp>
@@ -111,6 +112,7 @@ class OverlayRenderer {
     void renderPreferencesPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
+    [[nodiscard]] std::vector<SearchSuggestion> matchingSearchSuggestions() const;
     [[nodiscard]] OverviewTarget searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const;
     [[nodiscard]] const WindowCard* findWindowCard(std::uint64_t windowId) const noexcept;
     [[nodiscard]] const WorkspaceCard* findWorkspaceCard(std::int64_t workspaceId) const noexcept;

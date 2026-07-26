@@ -142,13 +142,15 @@ bool targetInFrame(const WorkspaceWallFrame& frame, OverviewTarget target) {
             return true;
 
         for (const auto& window : workspace.windows) {
-            if (target.type == OverviewTargetType::Window && window.stableId == target.windowId)
+            if ((target.type == OverviewTargetType::Window || target.type == OverviewTargetType::Application) &&
+                window.stableId == target.windowId)
                 return true;
         }
     }
 
     for (const auto& window : frame.stage.windows) {
-        if (target.type == OverviewTargetType::Window && window.stableId == target.windowId)
+        if ((target.type == OverviewTargetType::Window || target.type == OverviewTargetType::Application) &&
+            window.stableId == target.windowId)
             return true;
     }
 
@@ -1050,23 +1052,12 @@ void OverlayRenderer::rebuildSearchMatches() {
     if (!m_searchActive)
         return;
 
-    for (const auto& frame : m_frames) {
-        if (m_mode != OverviewMode::Spatial) {
-            if (frame.monitorId != m_selectedFrameMonitorId)
-                continue;
-            const auto matches = m_searchMatcher.matchingStageWindowIds(frame, m_searchQuery);
-            m_searchMatches.insert(matches.begin(), matches.end());
+    for (const auto& window : m_state.windows) {
+        if (!window.mapped)
             continue;
-        }
-        if (m_searchQuery.empty()) {
-            for (const auto& workspace : frame.workspaces) {
-                for (const auto& window : workspace.windows)
-                    m_searchMatches.insert(window.stableId);
-            }
-            continue;
-        }
-        const auto matches = m_searchMatcher.matchingWindowIds(frame, m_searchQuery);
-        m_searchMatches.insert(matches.begin(), matches.end());
+        if (m_searchQuery.empty() || m_searchMatcher.matches(window.title, m_searchQuery) ||
+            m_searchMatcher.matches(window.className, m_searchQuery))
+            m_searchMatches.insert(window.stableId);
     }
 }
 
@@ -1077,7 +1068,9 @@ void OverlayRenderer::selectFirstSearchMatch() {
     const auto targets = matchingSearchTargets();
     if (!targets.empty()) {
         m_selectedTarget = targets.front();
-        if (const auto* frame = frameForSelectedTarget())
+        if (targets.front().monitorId >= 0)
+            m_selectedFrameMonitorId = targets.front().monitorId;
+        else if (const auto* frame = frameForSelectedTarget())
             m_selectedFrameMonitorId = frame->monitorId;
         return;
     }
@@ -1087,43 +1080,15 @@ void OverlayRenderer::selectFirstSearchMatch() {
 
 std::vector<OverviewTarget> OverlayRenderer::matchingSearchTargets() const {
     std::vector<OverviewTarget> targets;
-    if (!m_searchActive)
-        return targets;
-
-    std::unordered_set<std::int64_t> workspaceIds;
-    std::unordered_set<std::uint64_t> windowIds;
-    for (const auto& frame : m_frames) {
-        if (m_mode != OverviewMode::Spatial) {
-            if (frame.monitorId != m_selectedFrameMonitorId)
-                continue;
-            for (const auto& window : frame.stage.windows) {
-                if (m_searchMatches.contains(window.stableId) && !windowIds.contains(window.stableId)) {
-                    targets.push_back({.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-                    windowIds.insert(window.stableId);
-                }
-            }
-            continue;
-        }
-        for (const auto& workspace : frame.workspaces) {
-            if (workspace.createTarget)
-                continue;
-            const auto workspaceNumber = std::to_string(workspace.workspaceId);
-            if (!workspaceIds.contains(workspace.workspaceId) &&
-                (m_searchQuery.empty() || m_searchMatcher.matches(workspace.name, m_searchQuery) || m_searchMatcher.matches(workspaceNumber, m_searchQuery))) {
-                targets.push_back({.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
-                workspaceIds.insert(workspace.workspaceId);
-            }
-
-            for (const auto& window : workspace.windows) {
-                if (m_searchMatches.contains(window.stableId) && !windowIds.contains(window.stableId)) {
-                    targets.push_back({.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-                    windowIds.insert(window.stableId);
-                }
-            }
-        }
-    }
-
+    for (const auto& suggestion : matchingSearchSuggestions())
+        targets.push_back(suggestion.target);
     return targets;
+}
+
+std::vector<SearchSuggestion> OverlayRenderer::matchingSearchSuggestions() const {
+    if (!m_searchActive)
+        return {};
+    return buildSearchSuggestions(m_state, m_searchQuery);
 }
 
 void OverlayRenderer::moveSearchSelection(NavigationDirection direction) {
@@ -1140,7 +1105,9 @@ void OverlayRenderer::moveSearchSelection(NavigationDirection direction) {
         index = (index + 1) % targets.size();
 
     m_selectedTarget = targets[index];
-    if (const auto* frame = frameForSelectedTarget())
+    if (targets[index].monitorId >= 0)
+        m_selectedFrameMonitorId = targets[index].monitorId;
+    else if (const auto* frame = frameForSelectedTarget())
         m_selectedFrameMonitorId = frame->monitorId;
     damageAllMonitors();
 }
@@ -1814,13 +1781,19 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
     if (!m_searchActive)
         return;
 
-    const auto targets        = matchingSearchTargets();
+    const auto suggestions    = matchingSearchSuggestions();
+    std::vector<OverviewTarget> targets;
+    targets.reserve(suggestions.size());
+    for (const auto& suggestion : suggestions)
+        targets.push_back(suggestion.target);
+
     const auto geometry       = computeSearchPanelGeometry(frame, targets.size());
     const auto visibleStart   = visibleSearchStart(targets, m_selectedTarget, geometry.capacity);
     const auto visibleEnd     = std::min(targets.size(), visibleStart + geometry.capacity);
 
-    const auto accent = resolvedAccentColor();
+    const auto accent     = resolvedAccentColor();
     const auto background = m_config.backgroundColor();
+    const auto foreground = m_config.foregroundColor();
 
     const auto panelBox = CBox{geometry.panelX, geometry.panelY, geometry.panelW, geometry.panelH};
     const auto inputBox = CBox{geometry.inputX, geometry.inputY, geometry.inputW, geometry.inputH};
@@ -1843,14 +1816,17 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
     const auto promptX      = inputBox.x + 16.0;
     const auto queryX       = promptX + promptWidth + 10.0;
 
-    m_labels.render(">", promptX, textY, 32.0, Theme::labelSize(), alpha, damage);
-    m_labels.render(std::format("{}_", m_searchQuery), queryX, textY,
-        std::max(1.0, inputBox.x + inputBox.w - 92.0 - queryX), Theme::labelSize(), alpha, damage);
-    m_labels.render(std::format("{} result{}", targets.size(), targets.size() == 1 ? "" : "s"),
-        inputBox.x + inputBox.w - 84.0, inputBox.y + 17.0, 72.0, Theme::hintSize(), alpha * 0.50, damage);
+    m_labels.renderColored(">", promptX, textY, 32.0, Theme::labelSize(), accent, alpha, damage);
+    const auto queryText = m_searchQuery.empty() ? "apps, windows, workspaces_" : std::format("{}_", m_searchQuery);
+    m_labels.renderColored(queryText, queryX, textY,
+        std::max(1.0, inputBox.x + inputBox.w - 106.0 - queryX), Theme::labelSize(), foreground,
+        alpha * (m_searchQuery.empty() ? 0.38 : 1.0), damage);
+    m_labels.renderColored(std::format("{:02} FOUND", targets.size()),
+        inputBox.x + inputBox.w - 84.0, inputBox.y + 17.0, 72.0, Theme::hintSize(), foreground, alpha * 0.50, damage);
 
     for (std::size_t index = visibleStart; index < visibleEnd; ++index) {
-        const auto& target  = targets[index];
+        const auto& suggestion = suggestions[index];
+        const auto& target  = suggestion.target;
         const auto selected = sameTarget(target, m_selectedTarget);
         const auto rowIndex = index - visibleStart;
         const auto row      = CBox{
@@ -1867,35 +1843,42 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
                 withAlpha(accent, alpha), damage, 2);
         }
 
-        const auto badgeBox = CBox{row.x + 18.0, row.y + 16.0, 72.0, 24.0};
-        if (target.type == OverviewTargetType::Workspace) {
-            const auto* workspace = findWorkspaceCard(target.workspaceId);
-            const auto  name      = workspace && !workspace->name.empty() ? workspace->name : std::to_string(target.workspaceId);
-            drawRect(badgeBox, withAlpha(Theme::searchBadgeSpace(), alpha), damage, Theme::inputRadius());
-            m_labels.render("SPACE", row.x + 31.0, row.y + 23.0, 46.0, Theme::badgeSize(), alpha * 0.78, damage);
-            m_labels.render(std::format("Workspace {}", name), row.x + 104.0, row.y + 8.0, row.w - 128.0, Theme::labelSize(), alpha, damage);
-            m_labels.render("Switch to this workspace", row.x + 104.0, row.y + 30.0, row.w - 128.0, Theme::hintSize(), alpha * 0.50, damage);
-        } else if (const auto* window = findWindowCard(target.windowId)) {
-            drawRect(badgeBox, withAlpha(Theme::searchBadgeWindow(), alpha), damage, Theme::inputRadius());
-            m_labels.render("WINDOW", row.x + 26.0, row.y + 23.0, 56.0, Theme::badgeSize(), alpha * 0.78, damage);
-            m_labels.render(window->label, row.x + 104.0, row.y + 8.0, row.w - 128.0, Theme::labelSize(), alpha, damage);
-            m_labels.render(std::format("Workspace {}", window->workspaceId), row.x + 104.0, row.y + 30.0, row.w - 128.0, Theme::hintSize(), alpha * 0.50, damage);
-        }
+        const auto typeLabel = suggestion.kind == SearchSuggestionKind::Application ? "APP" :
+            suggestion.kind == SearchSuggestionKind::Window ? "WIN" : "WS";
+        const auto actionLabel = suggestion.kind == SearchSuggestionKind::Application ? "OPEN" :
+            suggestion.kind == SearchSuggestionKind::Window ? "FOCUS" : "SWITCH";
+        const auto glyph = suggestion.kind == SearchSuggestionKind::Workspace ?
+            std::format("#{}", target.workspaceId) : appGlyph(suggestion.appClass);
+        const auto textX = row.x + 76.0;
+
+        m_labels.renderColored(typeLabel, row.x + 18.0, row.y + 8.0, 38.0, Theme::badgeSize(),
+            selected ? accent : foreground, alpha * (selected ? 0.94 : 0.48), damage);
+        m_labels.renderColored(glyph, row.x + 18.0, row.y + 25.0, 42.0, Theme::labelSize(),
+            selected ? accent : foreground, alpha * (selected ? 1.0 : 0.72), damage);
+        drawRect(CBox{row.x + 58.0, row.y + 10.0, 1.0, row.h - 20.0},
+            withAlpha(selected ? accent : foreground, alpha * (selected ? 0.42 : 0.11)), damage);
+
+        m_labels.renderColored(suggestion.label, textX, row.y + 8.0, std::max(1.0, row.w - 184.0),
+            Theme::labelSize(), foreground, alpha * (selected ? 1.0 : 0.88), damage);
+        m_labels.renderColored(suggestion.context, textX, row.y + 31.0, std::max(1.0, row.w - 184.0),
+            Theme::hintSize(), foreground, alpha * (selected ? 0.58 : 0.42), damage);
+        m_labels.renderColored(actionLabel, row.x + row.w - 78.0, row.y + 22.0, 62.0,
+            Theme::badgeSize(), selected ? accent : foreground, alpha * (selected ? 0.88 : 0.28), damage);
     }
 
     if (targets.empty()) {
         const auto emptyBox = CBox{inputBox.x, geometry.resultsY, inputBox.w, 64.0};
         drawRect(emptyBox, Theme::searchRowFill(false, static_cast<float>(alpha)), damage, Theme::inputRadius());
         drawRect(CBox{emptyBox.x, emptyBox.y + 12.0, 3.0, emptyBox.h - 24.0}, withAlpha(accent, alpha * 0.42), damage, 2);
-        m_labels.render("NO MATCHES", emptyBox.x + 18.0, emptyBox.y + 12.0,
-            emptyBox.w - 36.0, Theme::labelSize(), alpha * 0.78, damage);
-        m_labels.render("Keep typing, or press Esc to clear", emptyBox.x + 18.0, emptyBox.y + 37.0,
-            emptyBox.w - 36.0, Theme::hintSize(), alpha * 0.48, damage);
+        m_labels.renderColored("NO MATCHES", emptyBox.x + 18.0, emptyBox.y + 12.0,
+            emptyBox.w - 36.0, Theme::labelSize(), accent, alpha * 0.78, damage);
+        m_labels.renderColored("try an app, window title, or workspace", emptyBox.x + 18.0, emptyBox.y + 37.0,
+            emptyBox.w - 36.0, Theme::hintSize(), foreground, alpha * 0.48, damage);
     }
 
-    m_labels.render("\xe2\x86\x91\xe2\x86\x93 select \xc2\xb7 Enter activate \xc2\xb7 Esc clear",
+    m_labels.renderColored("\xe2\x86\x91\xe2\x86\x93 select \xc2\xb7 Enter open \xc2\xb7 Esc clear",
         panelBox.x + 28.0, panelBox.y + panelBox.h - 24.0,
-        panelBox.w - 56.0, Theme::hintSize(), alpha * 0.48, damage);
+        panelBox.w - 56.0, Theme::hintSize(), foreground, alpha * 0.48, damage);
 }
 
 OverviewTarget OverlayRenderer::searchTargetAt(const WorkspaceWallFrame& frame, double x, double y) const {
