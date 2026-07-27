@@ -1,5 +1,6 @@
 #include <hypr-radiant/overview/OverlayGeometry.hpp>
 #include <hypr-radiant/render/OverlayRenderer.hpp>
+#include <hypr-radiant/HyprlandCompat.hpp>
 #include <hypr-radiant/overview/AppIdentity.hpp>
 #include <hypr-radiant/Log.hpp>
 #include <hypr-radiant/overview/SearchPanelGeometry.hpp>
@@ -12,7 +13,6 @@
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
-#include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/managers/SessionLockManager.hpp>
 #include <hyprland/src/render/pass/BorderPassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
@@ -161,9 +161,10 @@ PHLWINDOW findLiveWindow(std::uint64_t stableId) {
     if (!g_pCompositor)
         return nullptr;
 
-    const auto it = std::ranges::find_if(g_pCompositor->m_windows,
+    const auto& windows = HyprlandCompat::windows();
+    const auto it = std::ranges::find_if(windows,
         [stableId](const PHLWINDOW& window) { return window && window->m_stableID == stableId && window->m_isMapped; });
-    return it == g_pCompositor->m_windows.end() ? nullptr : *it;
+    return it == windows.end() ? nullptr : *it;
 }
 
 SP<Render::ITexture> currentSurfaceTexture(const SP<CWLSurfaceResource>& surface) {
@@ -980,7 +981,7 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
 
     const auto monitor = g_pHyprRenderer->renderData().pMonitor.lock();
 
-    if (!monitor || !g_pCompositor->monitorExists(monitor))
+    if (!HyprlandCompat::monitorExists(monitor))
         return;
 
     const auto width  = monitor->m_transformedSize.x;
@@ -1017,8 +1018,8 @@ void OverlayRenderer::rebuildFrames() {
     m_frameBoundsByMonitor.clear();
 
     if (g_pCompositor) {
-        for (const auto& monitor : g_pCompositor->m_monitors) {
-            if (!monitor || !g_pCompositor->monitorExists(monitor))
+        for (const auto& monitor : HyprlandCompat::monitors()) {
+            if (!HyprlandCompat::monitorExists(monitor))
                 continue;
 
             auto snapshot = snapshotForCurrentMonitor(monitor);
@@ -1777,7 +1778,7 @@ void OverlayRenderer::renderWindowPreview(const WindowCard& windowCard, const CB
     if (!texture)
         return;
 
-    const auto sourceSize = texture->m_size == Vector2D{} ? window->m_realSize->value() : texture->m_size;
+    const auto sourceSize = texture->m_size == Vector2D{} ? HyprlandCompat::windowSize(window) : texture->m_size;
     const auto targetBox  = fillBoxForAspect(insetBox(clipBox, 2.0), sourceSize.x, sourceSize.y);
     if (targetBox.w <= 0.0 || targetBox.h <= 0.0)
         return;
@@ -2014,7 +2015,7 @@ const WorkspaceWallFrame* OverlayRenderer::frameForSelectedTarget() const noexce
 
 const WorkspaceWallFrame* OverlayRenderer::activeMonitorFrame() const noexcept {
     if (g_pCompositor) {
-        if (const auto monitor = g_pCompositor->getMonitorFromCursor()) {
+        if (const auto monitor = HyprlandCompat::monitorFromCursor()) {
             if (const auto* frame = frameForMonitor(monitor->m_id))
                 return frame;
         }
@@ -2171,12 +2172,12 @@ void OverlayRenderer::damageMonitorById(std::int64_t monitorId) const {
     if (!g_pCompositor || !g_pHyprRenderer)
         return;
 
-    for (const auto& monitor : g_pCompositor->m_monitors) {
-        if (!monitor || monitor->m_id != monitorId || !g_pCompositor->monitorExists(monitor))
+    for (const auto& monitor : HyprlandCompat::monitors()) {
+        if (!monitor || monitor->m_id != monitorId || !HyprlandCompat::monitorExists(monitor))
             continue;
 
         g_pHyprRenderer->damageMonitor(monitor);
-        g_pCompositor->scheduleFrameForMonitor(monitor);
+        HyprlandCompat::scheduleFrame(monitor);
         return;
     }
 }
@@ -2185,12 +2186,12 @@ void OverlayRenderer::damageAllMonitors() const {
     if (!g_pCompositor || !g_pHyprRenderer)
         return;
 
-    for (const auto& monitor : g_pCompositor->m_monitors) {
-        if (!monitor || !g_pCompositor->monitorExists(monitor))
+    for (const auto& monitor : HyprlandCompat::monitors()) {
+        if (!HyprlandCompat::monitorExists(monitor))
             continue;
 
         g_pHyprRenderer->damageMonitor(monitor);
-        g_pCompositor->scheduleFrameForMonitor(monitor);
+        HyprlandCompat::scheduleFrame(monitor);
     }
 }
 
