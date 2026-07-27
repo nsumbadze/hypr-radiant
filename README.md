@@ -15,7 +15,7 @@ move between workspaces without leaving the overview.
 
 ## Requirements
 
-- Hyprland 0.55.x, with development headers matching the compositor you run
+- Hyprland 0.55.x or 0.56.x, with development headers matching the compositor you run
 - `hyprpm`
 - CMake 3.25 or newer
 - A C++23 compiler

@@ -1,9 +1,9 @@
 #include <hypr-radiant/compositor/ActivationController.hpp>
+#include <hypr-radiant/HyprlandCompat.hpp>
 
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/desktop/state/FocusState.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
-#include <hyprland/src/helpers/Monitor.hpp>
 #include <hyprland/src/managers/XWaylandManager.hpp>
 
 namespace hypr_radiant {
@@ -13,7 +13,7 @@ PHLWINDOW windowByStableId(std::uint64_t stableId) {
     if (!g_pCompositor)
         return nullptr;
 
-    for (const auto& window : g_pCompositor->m_windows) {
+    for (const auto& window : HyprlandCompat::windows()) {
         if (window && window->m_stableID == stableId)
             return window;
     }
@@ -25,14 +25,14 @@ bool activateWorkspace(std::int64_t workspaceId, std::int64_t monitorId = -1) {
     if (!g_pCompositor)
         return false;
 
-    auto workspace = g_pCompositor->getWorkspaceByID(static_cast<WORKSPACEID>(workspaceId));
+    auto workspace = HyprlandCompat::workspaceById(static_cast<WORKSPACEID>(workspaceId));
     if (!workspace && monitorId >= 0)
-        workspace = g_pCompositor->createNewWorkspace(static_cast<WORKSPACEID>(workspaceId), static_cast<MONITORID>(monitorId));
+        workspace = HyprlandCompat::createWorkspace(static_cast<WORKSPACEID>(workspaceId), static_cast<MONITORID>(monitorId));
     if (!workspace)
         return false;
 
     const auto monitor = workspace->m_monitor.lock();
-    if (!monitor || !g_pCompositor->monitorExists(monitor))
+    if (!HyprlandCompat::monitorExists(monitor))
         return false;
 
     monitor->changeWorkspace(workspace, false, false, false);
@@ -71,14 +71,13 @@ bool ActivationController::moveWindow(std::uint64_t windowId, std::int64_t works
     if (!window)
         return false;
 
-    auto workspace = g_pCompositor->getWorkspaceByID(static_cast<WORKSPACEID>(workspaceId));
+    auto workspace = HyprlandCompat::workspaceById(static_cast<WORKSPACEID>(workspaceId));
     if (!workspace)
-        workspace = g_pCompositor->createNewWorkspace(static_cast<WORKSPACEID>(workspaceId), static_cast<MONITORID>(monitorId));
+        workspace = HyprlandCompat::createWorkspace(static_cast<WORKSPACEID>(workspaceId), static_cast<MONITORID>(monitorId));
     if (!workspace)
         return false;
 
-    g_pCompositor->moveWindowToWorkspaceSafe(window, workspace);
-    return true;
+    return HyprlandCompat::moveWindowToWorkspace(window, workspace);
 }
 
 bool ActivationController::closeWindow(std::uint64_t windowId) const {

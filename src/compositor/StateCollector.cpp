@@ -1,10 +1,10 @@
 #include <hypr-radiant/compositor/StateCollector.hpp>
+#include <hypr-radiant/HyprlandCompat.hpp>
 #include <hypr-radiant/Log.hpp>
 
 #include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/desktop/Workspace.hpp>
-#include <hyprland/src/helpers/Monitor.hpp>
 
 #include <cstdint>
 
@@ -49,8 +49,8 @@ RadiantState StateCollector::collect() const {
         return state;
     }
 
-    for (const auto& monitor : g_pCompositor->m_monitors) {
-        if (!monitor || !g_pCompositor->monitorExists(monitor))
+    for (const auto& monitor : HyprlandCompat::monitors()) {
+        if (!HyprlandCompat::monitorExists(monitor))
             continue;
 
         const auto activeWorkspace = monitor->m_activeWorkspace;
@@ -64,12 +64,12 @@ RadiantState StateCollector::collect() const {
         });
     }
 
-    for (const auto& workspace : g_pCompositor->getWorkspacesCopy()) {
+    for (const auto& workspace : HyprlandCompat::workspaces()) {
         if (!workspace || workspace->inert())
             continue;
 
         const auto monitor      = workspace->m_monitor.lock();
-        const auto validMonitor = monitor && g_pCompositor->monitorExists(monitor);
+        const auto validMonitor = HyprlandCompat::monitorExists(monitor);
 
         state.workspaces.push_back({
             .id             = workspaceId(workspace),
@@ -79,24 +79,24 @@ RadiantState StateCollector::collect() const {
         });
     }
 
-    for (const auto& window : g_pCompositor->m_windows) {
+    for (const auto& window : HyprlandCompat::windows()) {
         if (!window)
             continue;
 
         const auto workspace    = window->m_workspace;
         const auto monitor      = window->m_monitor.lock();
-        const auto validMonitor = monitor && g_pCompositor->monitorExists(monitor);
+        const auto validMonitor = HyprlandCompat::monitorExists(monitor);
 
         state.windows.push_back({
             .stableId      = window->m_stableID,
             .title         = window->m_title,
             .className     = window->m_class,
-            .geometry      = geometryFrom(window->m_realPosition->value(), window->m_realSize->value()),
+            .geometry      = geometryFrom(HyprlandCompat::windowPosition(window), HyprlandCompat::windowSize(window)),
             .workspaceId   = workspaceId(workspace),
             .monitorId     = validMonitor ? monitorId(monitor) : -1,
             .mapped        = window->m_isMapped,
             .floating      = window->m_isFloating,
-            .fullscreen    = window->m_fullscreenState.internal != FSMODE_NONE || window->m_fullscreenState.client != FSMODE_NONE,
+            .fullscreen    = HyprlandCompat::windowFullscreen(window),
         });
     }
 

@@ -1,4 +1,5 @@
 #include <hypr-radiant/RadiantPlugin.hpp>
+#include <hypr-radiant/HyprlandCompat.hpp>
 #include <hypr-radiant/Log.hpp>
 
 #include <hyprland/src/helpers/Color.hpp>
@@ -81,7 +82,7 @@ bool RadiantPlugin::initialize() {
     // Only destroy, not close: close fires on request and destroy on the window actually going
     // away, so listening to both re-collected and re-rasterised every label twice per closed window.
     // A window that refuses to close never destroys, and correctly never triggers a re-layout.
-    m_windowDestroyListener = Event::bus()->m_events.window.destroy.listen([this](PHLWINDOW window) {
+    m_windowDestroyListener = HyprlandCompat::listenWindowDestroy([this](PHLWINDOW window) {
         if (window && window->m_stableID == m_pendingCloseWindowId)
             cancelPendingWindowClose(false);
         if (m_overlay.active())
