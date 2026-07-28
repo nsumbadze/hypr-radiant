@@ -59,9 +59,12 @@ void polishedDefaultsLeaveBreathingRoom() {
 
     assert(frame.workspaces.front().rect.x >= 100.0);
     assert(frame.workspaces.front().rect.y >= 100.0);
+    assert(std::abs(frame.workspaces.front().rect.width / frame.workspaces.front().rect.height - 1920.0 / 1080.0) < 0.01);
     assert(frame.workspaces.at(1).windows.size() == 1);
     assert(frame.workspaces.at(1).windows.front().rect.x > frame.workspaces.at(1).rect.x + 20.0);
-    assert(frame.workspaces.at(1).windows.front().rect.y > frame.workspaces.at(1).rect.y + 20.0);
+    // The title rail owns the top of the card; live previews begin below it instead of rendering
+    // behind the workspace label.
+    assert(frame.workspaces.at(1).windows.front().rect.y > frame.workspaces.at(1).rect.y + 48.0);
 }
 
 void focusedStageUsesRealWorkspacesPlusEmptyNext() {

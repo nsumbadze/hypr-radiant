@@ -41,6 +41,11 @@ constexpr auto DOCK_BAND_HEIGHT = 92.0;
 constexpr auto CLOSE_REVEAL_MS = 140;
 constexpr auto CLOSE_HOT_MS    = 110;
 
+double easedProgress(double value) {
+    const auto clamped = std::clamp(value, 0.0, 1.0);
+    return clamped * clamped * (3.0 - 2.0 * clamped);
+}
+
 CBox boxFor(const LayoutRect& rect) {
     return CBox{std::round(rect.x), std::round(rect.y), std::round(rect.width), std::round(rect.height)};
 }
@@ -996,7 +1001,12 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
 
     // Frosted glass: a lifted step off the theme background rather than the background itself,
     // so the desktop stays faintly legible behind the overview instead of being crushed to black.
-    auto backdrop = effectiveLayoutMode() == LayoutMode::Stage ? surfaceColor(0.06F, 0.70) : Theme::backdropColor();
+    // Both overview layouts follow the live Omarchy background. The old wall path used a fixed
+    // green-black backdrop, so changing themes updated its accent but left most of the screen
+    // behind in the previous design's palette.
+    auto backdrop = surfaceColor(0.055F, effectiveLayoutMode() == LayoutMode::Stage ? 0.70 : 0.40);
+    if (effectiveLayoutMode() == LayoutMode::WorkspaceWall)
+        backdrop = tintedSurface(backdrop, resolvedAccentColor(), 0.08);
     backdrop.a *= backdropAlpha;
     drawRect(box, backdrop, damage, 0, true);
 
@@ -1135,128 +1145,176 @@ void OverlayRenderer::clearSearch() {
 }
 
 void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
-    const auto mode         = effectiveLayoutMode();
-    if (mode == LayoutMode::Stage) {
+    if (effectiveLayoutMode() == LayoutMode::Stage) {
         renderStageFrame(frame, alpha, damage);
         return;
     }
 
     const auto searchActive = m_searchActive;
-    const auto contentAlpha = searchActive ? alpha * 0.055 : alpha;
+    const auto contentAlpha = searchActive ? alpha * 0.07 : alpha;
     const auto accent       = resolvedAccentColor();
-
-    const auto shadowColor = withAlpha(Theme::shadowColor(), contentAlpha);
+    const auto foreground   = m_config.foregroundColor();
+    const auto accentLit    = tintedSurface(accent, foreground, 0.24);
+    const auto entrance     = std::clamp(m_stageTransition.value(), 0.0, 1.0);
+    const auto selection    = easedProgress(m_selectionTransition.value());
+    // Typography follows the actual interactive progress, not the animation's eventual target.
+    // Gesture-driven closes keep targetVisible() true until release, so a target-based curve left
+    // labels fully present and then dropped their textures at the end. This delayed smoothstep
+    // makes them fade continuously after the glass on reveal and before it on dismissal.
+    const auto typographyFade = easedProgress((alpha - 0.08) / 0.72);
+    const auto headingAlpha = contentAlpha * typographyFade;
 
     double contentLeft   = frame.bounds.width;
-    double contentRight  = 0.0;
     double contentTop    = frame.bounds.height;
-    double contentBottom = 0.0;
     bool   hasContent    = false;
     for (const auto& workspace : frame.workspaces) {
         if (workspace.rect.width <= 0.0 || workspace.rect.height <= 0.0)
             continue;
         contentLeft   = std::min(contentLeft, workspace.rect.x);
-        contentRight  = std::max(contentRight, workspace.rect.x + workspace.rect.width);
         contentTop    = std::min(contentTop, workspace.rect.y);
-        contentBottom = std::max(contentBottom, workspace.rect.y + workspace.rect.height);
         hasContent    = true;
     }
 
     const auto titleX = hasContent ? contentLeft : 46.0;
-    const auto titleY = hasContent ? std::max(34.0, contentTop - 58.0) : 34.0;
-    if (hasContent) {
-        const auto stageBox = CBox{
-            std::max(18.0, contentLeft - 44.0),
-            std::max(18.0, titleY - 24.0),
-            std::min(frame.bounds.width - 36.0, contentRight - contentLeft + 88.0),
-            std::min(frame.bounds.height - 36.0, contentBottom - titleY + 62.0),
-        };
-        drawRect(CBox{stageBox.x + Theme::shadowOffsetX(), stageBox.y + Theme::shadowOffsetY(), stageBox.w, stageBox.h}, shadowColor, damage, 34);
-        drawRect(stageBox, withAlpha(Theme::panelColor(), contentAlpha), damage, 32, true);
-    }
-    m_labels.render("Workspaces", titleX, titleY, std::max(1.0, frame.bounds.width * 0.45), Theme::titleSize(), contentAlpha, damage);
-    if (!searchActive && hasContent) {
-        const auto helpWidth = std::min(680.0, std::max(1.0, contentRight - contentLeft));
-        const auto helpX     = contentLeft + centered(contentRight - contentLeft, helpWidth);
-        m_labels.render("\xe2\x86\x91\xe2\x86\x93\xe2\x86\x90\xe2\x86\x92 navigate \xc2\xb7 Enter activate \xc2\xb7 1-9 jump \xc2\xb7 / search \xc2\xb7 Esc close",
-            helpX, frame.bounds.height - 16.0 - 24.0 + 4.0, helpWidth, Theme::hintSize(), contentAlpha * 0.68, damage);
-    }
+    const auto titleY = hasContent ? std::max(30.0, contentTop - 58.0) : 30.0;
 
-    for (const auto& workspace : frame.workspaces) {
-        const auto workspaceSelected = frame.monitorId == m_selectedFrameMonitorId &&
+    const auto headingY = titleY + (1.0 - entrance) * 10.0;
+    m_labels.renderColored("WORKSPACES", titleX, headingY, std::max(1.0, frame.bounds.width * 0.45),
+        Theme::titleSize(), accentLit, headingAlpha, damage);
+
+    for (std::size_t workspaceIndex = 0; workspaceIndex < frame.workspaces.size(); ++workspaceIndex) {
+        const auto& workspace = frame.workspaces[workspaceIndex];
+        const auto ownsSelection = frame.monitorId == m_selectedFrameMonitorId &&
+            m_selectedTarget.workspaceId == workspace.workspaceId;
+        const auto workspaceSelected = ownsSelection &&
             sameTarget(m_selectedTarget, {.type = OverviewTargetType::Workspace, .workspaceId = workspace.workspaceId});
-        const auto workspaceBox = boxFor(workspace.rect);
         const auto compact      = workspace.rect.height <= 120.0;
-        const auto round        = Theme::workspaceRadius(compact);
+        const auto round        = compact ? 14 : 18;
+        const auto stagger      = frame.workspaces.size() <= 1 ? 0.0 :
+            static_cast<double>(workspaceIndex) / static_cast<double>(frame.workspaces.size() - 1) * 0.13;
+        const auto cardEntrance = easedProgress((entrance - stagger) / std::max(0.01, 1.0 - stagger));
+        const auto hoverLift    = ownsSelection ? selection : 0.0;
+        auto       displayRect  = scaledAroundCenter(workspace.rect,
+            std::lerp(0.94, 1.0, cardEntrance) * std::lerp(1.0, workspaceSelected ? 1.018 : 1.006, hoverLift),
+            -std::lerp(0.0, workspaceSelected ? 7.0 : 3.0, hoverLift));
+        displayRect.y += (1.0 - cardEntrance) * (28.0 + static_cast<double>(workspaceIndex % 3) * 7.0);
+        const auto workspaceBox = boxFor(displayRect);
+        const auto cardAlpha    = contentAlpha * cardEntrance;
+        const auto detailAlpha  = cardAlpha * typographyFade;
 
-        drawRect(CBox{workspaceBox.x + Theme::shadowOffsetX(), workspaceBox.y + Theme::shadowOffsetY(), workspaceBox.w, workspaceBox.h}, shadowColor, damage, round);
-
-        if (workspace.active && !compact) {
-            const auto glowBox = CBox{workspaceBox.x - 6.0, workspaceBox.y - 6.0, workspaceBox.w + 12.0, workspaceBox.h + 12.0};
-            drawRect(glowBox, withAlpha(accent, contentAlpha * 0.12), damage, round + 6);
+        if ((ownsSelection || workspace.active) && !compact) {
+            const auto glowStrength = workspaceSelected ? 0.075 * selection : workspace.active ? 0.032 : 0.02 * selection;
+            const auto spread       = workspaceSelected ? 11.0 : 7.0;
+            const auto glowBox = CBox{
+                workspaceBox.x - spread,
+                workspaceBox.y - spread,
+                workspaceBox.w + spread * 2.0,
+                workspaceBox.h + spread * 2.0,
+            };
+            drawRect(glowBox, withAlpha(accent, cardAlpha * glowStrength), damage, round + static_cast<int>(spread));
         }
 
-        drawRect(workspaceBox, Theme::cardFill(workspace.active, workspaceSelected, workspace.empty, static_cast<float>(contentAlpha)), damage, round);
+        const auto shadowLift = workspaceSelected ? 9.0 * selection : ownsSelection ? 4.0 * selection : 0.0;
+        drawRect(CBox{workspaceBox.x + 5.0, workspaceBox.y + 7.0 + shadowLift * 0.30, workspaceBox.w, workspaceBox.h},
+            withAlpha(Theme::shadowColor(), cardAlpha * (0.34 + hoverLift * 0.12)), damage, round + 2);
 
-        if (workspaceSelected || workspace.active) {
-            const auto borderColor = withAlpha(accent, contentAlpha * (workspaceSelected ? 0.96 : 0.30));
-            drawBorder(workspaceBox, borderColor, round, 2);
-        }
+        const auto surfaceLift = workspace.empty ? 0.085F :
+            workspaceSelected ? static_cast<float>(0.145 + selection * 0.035) : workspace.active ? 0.13F : ownsSelection ? 0.125F : 0.105F;
+        auto cardSurface = surfaceColor(surfaceLift, cardAlpha * (workspace.empty ? 0.58 : 0.70));
+        cardSurface = tintedSurface(cardSurface, accent,
+            workspaceSelected ? 0.14 + selection * 0.08 : workspace.active ? 0.11 : ownsSelection ? 0.10 : 0.045);
+        drawRect(workspaceBox, cardSurface, damage, round, true);
 
+        // Hairlines establish the card edge; state is carried by a short coloured rail instead of
+        // a thick neon frame. Window hover intentionally does not outline its whole workspace.
+        drawBorder(workspaceBox, withAlpha(foreground, cardAlpha * 0.065), round, 1);
         if (workspace.active) {
-            const auto accentWidth = std::min(compact ? 28.0 : 56.0, std::max(1.0, workspaceBox.w - 32.0));
-            const auto accentBar   = withAlpha(accent, contentAlpha);
-            drawRect(CBox{workspaceBox.x + centered(workspaceBox.w, accentWidth), workspaceBox.y + workspaceBox.h - 7.0, accentWidth, 4.0},
-                accentBar, damage, 2);
+            const auto railWidth = std::min(48.0, workspaceBox.w * 0.18);
+            drawRect(CBox{workspaceBox.x + 16.0, workspaceBox.y, railWidth, 1.0},
+                withAlpha(accent, cardAlpha * 0.58), damage, 1);
+        }
+        if (workspaceSelected) {
+            const auto cornerAlpha = cardAlpha * std::lerp(0.24, 0.76, selection);
+            constexpr auto cornerLength = 20.0;
+            constexpr auto cornerInset  = 7.0;
+            constexpr auto cornerWeight = 2.0;
+            const auto left   = workspaceBox.x + cornerInset;
+            const auto right  = workspaceBox.x + workspaceBox.w - cornerInset;
+            const auto top    = workspaceBox.y + cornerInset;
+            const auto bottom = workspaceBox.y + workspaceBox.h - cornerInset;
+            drawRect(CBox{left, top, cornerLength, cornerWeight}, withAlpha(accentLit, cornerAlpha), damage, 1);
+            drawRect(CBox{left, top, cornerWeight, cornerLength}, withAlpha(accentLit, cornerAlpha), damage, 1);
+            drawRect(CBox{right - cornerLength, top, cornerLength, cornerWeight}, withAlpha(accentLit, cornerAlpha), damage, 1);
+            drawRect(CBox{right - cornerWeight, top, cornerWeight, cornerLength}, withAlpha(accentLit, cornerAlpha), damage, 1);
+            drawRect(CBox{left, bottom - cornerWeight, cornerLength, cornerWeight}, withAlpha(accentLit, cornerAlpha), damage, 1);
+            drawRect(CBox{left, bottom - cornerLength, cornerWeight, cornerLength}, withAlpha(accentLit, cornerAlpha), damage, 1);
+            drawRect(CBox{right - cornerLength, bottom - cornerWeight, cornerLength, cornerWeight}, withAlpha(accentLit, cornerAlpha), damage, 1);
+            drawRect(CBox{right - cornerWeight, bottom - cornerLength, cornerWeight, cornerLength}, withAlpha(accentLit, cornerAlpha), damage, 1);
         }
 
-        m_labels.render(workspace.name, workspace.rect.x + (compact ? 10.0 : 18.0), workspace.rect.y + (compact ? 8.0 : 14.0),
-            std::max(1.0, workspace.rect.width - (compact ? 20.0 : 36.0)), compact ? Theme::hintSize() : Theme::labelSize(), contentAlpha, damage);
-
-        if (workspace.empty && !compact)
-            m_labels.render("Empty", workspace.rect.x + 18.0, workspace.rect.y + 44.0, std::max(1.0, workspace.rect.width - 36.0), Theme::footerSize(), contentAlpha * 0.42, damage);
+        const auto headerHeight = compact ? 28.0 : std::clamp(workspaceBox.h * 0.12, 34.0, 42.0);
+        drawRect(CBox{workspaceBox.x + 14.0, workspaceBox.y + headerHeight, std::max(0.0, workspaceBox.w - 28.0), 1.0},
+            withAlpha(ownsSelection ? accent : foreground, cardAlpha * (ownsSelection ? 0.12 : 0.055)), damage);
+        const auto workspaceCode = std::format("{:02}", workspace.workspaceId);
+        const auto workspaceLabel = workspace.name.empty() || workspace.name == std::to_string(workspace.workspaceId) ?
+            workspaceCode : workspace.name;
+        m_labels.renderColored(workspaceLabel, workspaceBox.x + (compact ? 10.0 : 15.0),
+            workspaceBox.y + (compact ? 7.0 : 9.0), std::max(1.0, workspaceBox.w - (compact ? 20.0 : 30.0)),
+            compact ? Theme::hintSize() : Theme::labelSize(), ownsSelection ? accentLit : foreground,
+            detailAlpha * (ownsSelection ? 0.96 : 0.72), damage);
 
         for (const auto& window : workspace.windows) {
             const auto windowSelected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
                 m_selectedTarget,
                 {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-            const auto windowBox   = boxFor(window.rect);
+            auto windowRect = remapRect(window.rect, workspace.rect, displayRect);
+            if (windowSelected)
+                windowRect = scaledAroundCenter(windowRect, std::lerp(1.0, 1.018, selection), -3.0 * selection);
+            const auto windowBox   = boxFor(windowRect);
             const auto windowRound = Theme::windowRadius();
             const auto footerHeight = compact ? 0.0 : 28.0;
 
-            drawRect(CBox{windowBox.x + Theme::shadowOffsetX(), windowBox.y + Theme::shadowOffsetY(), windowBox.w, windowBox.h},
-                withAlpha(Theme::shadowColor(), contentAlpha), damage, windowRound + 4);
+            if (windowSelected)
+                drawRect(CBox{windowBox.x - 6.0, windowBox.y - 6.0, windowBox.w + 12.0, windowBox.h + 12.0},
+                    withAlpha(accent, cardAlpha * 0.055 * selection), damage, windowRound + 6);
+            drawRect(CBox{windowBox.x + 3.0, windowBox.y + 5.0 + selection * (windowSelected ? 2.0 : 0.0), windowBox.w, windowBox.h},
+                withAlpha(Theme::shadowColor(), cardAlpha * (windowSelected ? 0.52 : 0.34)), damage, windowRound + 2);
 
-            drawRect(windowBox, Theme::windowFill(windowSelected, static_cast<float>(contentAlpha)), damage, windowRound);
+            auto windowSurface = surfaceColor(windowSelected ? 0.25F : 0.19F, cardAlpha * 0.82);
+            windowSurface = tintedSurface(windowSurface, accent, windowSelected ? 0.18 * selection : 0.055);
+            drawRect(windowBox, windowSurface, damage, windowRound);
 
             if (!compact && windowBox.h > 88.0) {
                 const auto previewShell = CBox{
-                    windowBox.x + 10.0,
-                    windowBox.y + 10.0,
-                    std::max(1.0, windowBox.w - 20.0),
-                    std::max(1.0, windowBox.h - footerHeight - 16.0),
+                    windowBox.x + 7.0,
+                    windowBox.y + 7.0,
+                    std::max(1.0, windowBox.w - 14.0),
+                    std::max(1.0, windowBox.h - footerHeight - 10.0),
                 };
-                drawRect(previewShell, Theme::windowFill(windowSelected, static_cast<float>(contentAlpha)), damage, windowRound);
-                renderWindowPreview(window, previewShell, contentAlpha, damage);
+                drawRect(previewShell, surfaceColor(0.08F, cardAlpha * 0.92), damage, windowRound - 2);
+                renderWindowPreview(window, previewShell, cardAlpha, damage);
 
-                drawRect(CBox{windowBox.x, windowBox.y + windowBox.h - footerHeight, windowBox.w, footerHeight},
-                    Theme::windowFill(windowSelected, static_cast<float>(contentAlpha)), damage, windowRound);
-                m_labels.render(window.label, window.rect.x + 14.0, window.rect.y + window.rect.height - footerHeight + 8.0,
-                    std::max(1.0, window.rect.width - 28.0), Theme::footerSize(), contentAlpha, damage);
+                m_labels.renderColored(appGlyph(window.appClass), windowBox.x + 11.0, windowBox.y + windowBox.h - footerHeight + 8.0,
+                    18.0, Theme::hintSize(), accent, detailAlpha * (windowSelected ? 1.0 : 0.70), damage);
+                m_labels.render(window.label, windowBox.x + 32.0, windowBox.y + windowBox.h - footerHeight + 7.0,
+                    std::max(1.0, windowBox.w - 43.0), Theme::footerSize(), detailAlpha * (windowSelected ? 1.0 : 0.78), damage);
             } else {
-                m_labels.render(window.label, window.rect.x + (compact ? 8.0 : 12.0), window.rect.y + (compact ? 5.0 : 8.0),
-                    std::max(1.0, window.rect.width - (compact ? 16.0 : 20.0)), compact ? Theme::badgeSize() : Theme::footerSize(), contentAlpha, damage);
+                m_labels.render(window.label, windowBox.x + (compact ? 8.0 : 12.0), windowBox.y + (compact ? 5.0 : 8.0),
+                    std::max(1.0, windowBox.w - (compact ? 16.0 : 20.0)), compact ? Theme::badgeSize() : Theme::footerSize(),
+                    detailAlpha * (windowSelected ? 1.0 : 0.76), damage);
             }
 
             if (windowSelected) {
-                const auto borderColor = withAlpha(accent, contentAlpha * 0.96);
-                drawBorder(CBox{windowBox.x - 5.0, windowBox.y - 5.0, windowBox.w + 10.0, windowBox.h + 10.0}, borderColor, windowRound + 5, 3);
+                drawBorder(windowBox, withAlpha(accentLit, cardAlpha * std::lerp(0.22, 0.66, selection)),
+                    windowRound, 1);
+                drawRect(CBox{windowBox.x + 12.0, windowBox.y, std::min(72.0, windowBox.w * 0.34), 1.0},
+                    withAlpha(accentLit, cardAlpha * 0.78 * selection), damage, 1);
             }
         }
     }
 
     if (searchActive) {
-        auto dim = Theme::backdropColor();
+        auto dim = m_config.backgroundColor();
         dim.a = static_cast<float>(0.72 * alpha);
         drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, dim, damage);
         renderSearchPanel(frame, alpha, damage);

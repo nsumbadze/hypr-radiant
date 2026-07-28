@@ -161,8 +161,16 @@ void InputController::install(Callbacks callbacks) {
 
         info.cancelled = shouldCancelInputEvent(isPressed, inputArmed(), suppressed);
 
-        if (!inputArmed() || !activationArmed() || suppressed || event.button != BTN_LEFT)
+        // A fresh primary-button press is already deliberate input. It should not inherit the
+        // keyboard repeat delay, which made a quick wall click get swallowed and feel like the
+        // workspace required a second click. The opening button itself remains suppressed until
+        // release by OpeningInputGuard.
+        if (!pointerActivationArmed() || suppressed || event.button != BTN_LEFT)
             return;
+
+        // The matching release can arrive before the general input delay expires. Keep the whole
+        // click inside the overlay so clients never receive an orphaned release event.
+        info.cancelled = true;
 
         if (!g_pInputManager)
             return;
@@ -400,6 +408,10 @@ bool InputController::inputArmed() const noexcept {
 
 bool InputController::activationArmed() const noexcept {
     return Clock::now() >= m_acceptActivationAfter && m_openingInputGuard.openingReleaseObserved();
+}
+
+bool InputController::pointerActivationArmed() const noexcept {
+    return m_openingInputGuard.openingReleaseObserved();
 }
 
 } // namespace hypr_radiant

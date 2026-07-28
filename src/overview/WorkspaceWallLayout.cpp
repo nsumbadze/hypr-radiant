@@ -94,8 +94,18 @@ WorkspaceWallFrame computeGridFrame(
 
     const auto gridWidth  = std::max(1.0, renderSize.width - options.outerPadding * 2.0);
     const auto gridHeight = std::max(1.0, renderSize.height - options.outerPadding * 2.0);
-    const auto cardWidth  = std::max(0.0, gridWidth - options.cardGap * static_cast<double>(cols - 1)) / static_cast<double>(cols);
-    const auto cardHeight = std::max(0.0, gridHeight - options.cardGap * static_cast<double>(rows - 1)) / static_cast<double>(rows);
+    const auto cellWidth  = std::max(0.0, gridWidth - options.cardGap * static_cast<double>(cols - 1)) / static_cast<double>(cols);
+    const auto cellHeight = std::max(0.0, gridHeight - options.cardGap * static_cast<double>(rows - 1)) / static_cast<double>(rows);
+    const auto monitorAspect = monitor.geometry.size.height > 0.0 ?
+        monitor.geometry.size.width / monitor.geometry.size.height :
+        std::max(1.0, renderSize.width) / std::max(1.0, renderSize.height);
+    const auto cardSize   = aspectFit(std::max(0.2, monitorAspect), cellWidth, cellHeight);
+    const auto cardWidth  = cardSize.width;
+    const auto cardHeight = cardSize.height;
+    const auto packedWidth = cardWidth * static_cast<double>(cols) + options.cardGap * static_cast<double>(cols - 1);
+    const auto packedHeight = cardHeight * static_cast<double>(rows) + options.cardGap * static_cast<double>(rows - 1);
+    const auto cardsX = options.outerPadding + centered(gridWidth, packedWidth);
+    const auto cardsY = options.outerPadding + centered(gridHeight, packedHeight);
 
     for (int id = 1; id <= static_cast<std::int64_t>(count); ++id) {
         const auto index = id - 1;
@@ -109,8 +119,8 @@ WorkspaceWallFrame computeGridFrame(
             .workspaceId = id,
             .name        = name,
             .rect        = {
-                .x = options.outerPadding + static_cast<double>(col) * (cardWidth + options.cardGap),
-                .y = options.outerPadding + static_cast<double>(row) * (cardHeight + options.cardGap),
+                .x = cardsX + static_cast<double>(col) * (cardWidth + options.cardGap),
+                .y = cardsY + static_cast<double>(row) * (cardHeight + options.cardGap),
                 .width = cardWidth,
                 .height = cardHeight,
             },
@@ -119,7 +129,12 @@ WorkspaceWallFrame computeGridFrame(
             .empty  = true,
         };
 
-        const auto inner = inset(card.rect, options.windowInset);
+        auto inner = inset(card.rect, options.windowInset);
+        // Reserve a real title rail instead of placing the workspace name over the first preview.
+        // The rail scales with the card but stays compact enough for small overview surfaces.
+        const auto titleRailHeight = std::clamp(cardHeight * 0.12, 24.0, 38.0);
+        inner.y += titleRailHeight;
+        inner.height = std::max(0.0, inner.height - titleRailHeight);
         std::vector<WindowSnapshot> windows;
         for (const auto& window : state.windows) {
             if (!window.mapped || window.workspaceId != id)
