@@ -119,7 +119,12 @@ WorkspaceWallFrame computeGridFrame(
             .empty  = true,
         };
 
-        const auto inner = inset(card.rect, options.windowInset);
+        auto inner = inset(card.rect, options.windowInset);
+        // Reserve a real title rail instead of placing the workspace name over the first preview.
+        // The rail scales with the card but stays compact enough for small overview surfaces.
+        const auto titleRailHeight = std::clamp(cardHeight * 0.12, 24.0, 38.0);
+        inner.y += titleRailHeight;
+        inner.height = std::max(0.0, inner.height - titleRailHeight);
         std::vector<WindowSnapshot> windows;
         for (const auto& window : state.windows) {
             if (!window.mapped || window.workspaceId != id)
