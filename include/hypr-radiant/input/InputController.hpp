@@ -68,6 +68,7 @@ class InputController {
   private:
     [[nodiscard]] bool inputArmed() const noexcept;
     [[nodiscard]] bool activationArmed() const noexcept;
+    [[nodiscard]] bool pointerActivationArmed() const noexcept;
     void               startBackspaceRepeat();
     void               stopBackspaceRepeat();
 
