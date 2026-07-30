@@ -25,6 +25,7 @@ class RadiantPlugin {
     explicit RadiantPlugin(HANDLE handle);
 
     bool            initialize();
+    void            installDefaultShortcut();
     void            shutdown();
     SDispatchResult open(const std::string& args);
     SDispatchResult close(const std::string& args);
