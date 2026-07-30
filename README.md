@@ -217,7 +217,68 @@ hyprctl plugin unload "$PWD/build/hypr-radiant.so"
 
 Unloading is clean, so you can reload as often as you want. Direct loading is
 temporary and does not survive a Hyprland restart; use the `hyprpm` installation
-and startup line above for persistent loading.
+and startup line above for persistent loading. While developing an uncommitted
+build, you can instead put its absolute path in `~/.config/hypr/autostart.conf`:
+
+```ini
+exec-once = hyprctl plugin load /absolute/path/to/hypr-radiant/build/hypr-radiant.so
+```
+
+## Troubleshooting
+
+First check the compositor, loaded plugin, and current configuration:
+
+```sh
+hyprctl version
+hyprctl plugin list
+hyprctl configerrors
+hyprctl devices
+hyprctl getoption plugin:radiant:gesture_enabled
+hyprctl getoption plugin:radiant:gesture_fingers
+hyprctl getoption plugin:radiant:gesture_distance
+hyprctl dispatch radiant:status
+```
+
+The expected gesture values are `int: 1`, `int: 3`, and `float: 300`. A
+`set: false` line means the plugin is using its default value; it does not mean
+the option is disabled.
+
+If the dispatcher opens the overview but a swipe does not, follow Hyprland's
+input log and then make one deliberate three-finger swipe up:
+
+```sh
+hyprctl rollinglog --follow
+```
+
+Look for a libinput `gesture: [3fg]` line. If the log only reports `[2fg]`, the
+touchpad or libinput did not recognize three fingers, so the gesture never
+reached the plugin. To collect a smaller report after reproducing the problem:
+
+```sh
+hyprctl rollinglog | rg -i 'hypr-radiant|gesture|swipe'
+```
+
+If the log shows the third contact entering `BUTTON_STATE_BOTTOM`, libinput is
+treating the bottom of the pad as a software button instead of part of the
+gesture. Enable clickfinger behavior in Hyprland:
+
+```ini
+input {
+    touchpad {
+        clickfinger_behavior = true
+    }
+}
+```
+
+You can also test four fingers or a shorter swipe distance without editing any
+files:
+
+```sh
+hyprctl keyword plugin:radiant:gesture_fingers 4
+hyprctl keyword plugin:radiant:gesture_distance 120
+```
+
+Run `hyprctl reload` afterward to restore the values from your configuration.
 
 ## Tests
 
