@@ -74,7 +74,6 @@ bool RadiantPlugin::initialize() {
     }
     m_preferences.load();
 
-    m_shortcut.install([this] { return m_config.shortcutEnabled(); });
     m_overlay.install();
     // Re-collect whenever a window goes away while the overview is up. Without this the card for a
     // closed window lingers as an empty surface, whether it was closed from the overview's own
@@ -192,6 +191,10 @@ bool RadiantPlugin::initialize() {
             } },
     });
     return true;
+}
+
+void RadiantPlugin::installDefaultShortcut() {
+    m_shortcut.install([this] { return m_config.shortcutEnabled(); });
 }
 
 SDispatchResult RadiantPlugin::showApplication(const std::string& args) {
@@ -477,6 +480,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
         resetPluginState();
         throw std::runtime_error{"hypr-radiant: failed to register dispatchers"};
     }
+
+    // A keybind can only target a dispatcher Hyprland already knows about. Installing it before the
+    // plugin dispatchers made the default shortcut disappear during plugin startup and config
+    // reloads on Hyprland 0.56.
+    g_plugin->installDefaultShortcut();
 
     hypr_radiant::log::info("loaded; overview and shelf dispatchers registered");
 
