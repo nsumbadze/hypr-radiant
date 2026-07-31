@@ -108,6 +108,11 @@ class OverlayRenderer {
     };
     void renderStageWindows(const WorkspaceWallFrame& frame, const StageContext& ctx, const CRegion& damage);
     void renderWindowPreview(const WindowCard& window, const CBox& clipBox, double alpha, const CRegion& damage);
+    /// The card the pointer carries during a drag, and the same card settling into place after the
+    /// button comes up. `draggedSlot` is where the dragged window sits in this frame, so the lift
+    /// can start from the card itself; it is empty when the window belongs to another monitor.
+    void renderDragOverlay(const WorkspaceWallFrame& frame, std::optional<LayoutRect> draggedSlot, double alpha, const CRegion& damage);
+    void renderDragCard(const WindowCard& window, const LayoutRect& rect, double alpha, double lift, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderPreferencesPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
 
@@ -133,6 +138,19 @@ class OverlayRenderer {
     [[nodiscard]] CHyprColor surfaceColor(float lift, double alpha) const;
     void resetPointerInteraction();
     void animateSelection();
+    /// Duration for a drag affordance, as a fraction of the configured overview animation. Returns
+    /// 0 whenever motion is off, so every drag animation collapses to an instant state change.
+    [[nodiscard]] int dragDurationMs(double scale) const;
+    /// Promotes a held press into a drag: the card lifts out of its slot and the slot fades.
+    void beginDrag();
+    /// The workspace a card released over `hit` would land on, or nothing when there is no
+    /// destination there. Window hits resolve to the workspace holding them.
+    [[nodiscard]] OverviewTarget dropTargetFor(OverviewTarget hit) const;
+    /// Re-plays the destination highlight whenever the workspace under the dragged card changes.
+    void updateDropTarget(OverviewTarget target);
+    /// Hands the released card to the settle animation, which flies it into the workspace it was
+    /// dropped on, or back into its own slot when the drop had no destination.
+    void beginDragSettle(double x, double y);
     /// Tracks which card owns the close button and whether the pointer is on it, so the button can
     /// animate instead of popping in and out as the pointer crosses cards.
     void updateCloseAffordance(double x, double y);
@@ -146,6 +164,16 @@ class OverlayRenderer {
     void beginSession(RadiantState state, OverviewMode mode, std::string applicationFilter, int stageDurationMs,
         const std::function<OverviewTarget(const WorkspaceWallFrame&)>& selectInitial);
 
+    // Where a released drag card flies to while it fades out. Kept apart from the live drag state
+    // because the settle outlives the drag: the button is already up and the pointer interaction
+    // reset by the time it plays.
+    struct DragSettle {
+        std::int64_t  monitorId = -1;
+        std::uint64_t windowId  = 0;
+        LayoutRect    from;
+        LayoutRect    to;
+    };
+
     const RadiantConfig&                                  m_config;
     PreferencesStore&                                     m_preferences;
     FadeAnimation                                      m_animation;
@@ -156,6 +184,10 @@ class OverlayRenderer {
     FadeAnimation                                      m_closeButtonTransition;
     FadeAnimation                                      m_closeButtonHotTransition;
     FadeAnimation                                      m_windowCloseTransition;
+    FadeAnimation                                      m_pressTransition;
+    FadeAnimation                                      m_dragLiftTransition;
+    FadeAnimation                                      m_dropTargetTransition;
+    FadeAnimation                                      m_dragSettleTransition;
     CHyprSignalListener                                m_renderStageListener;
     CHyprSignalListener                                m_monitorLayoutListener;
     RadiantState                                         m_state;
@@ -193,6 +225,7 @@ class OverlayRenderer {
     OverviewTarget                                        m_dragTarget;
     RadiantPoint                                            m_pointerDownPosition;
     RadiantPoint                                            m_pointerPosition;
+    DragSettle                                            m_dragSettle;
     bool                                                  m_pointerDown = false;
     bool                                                  m_dragging = false;
 };

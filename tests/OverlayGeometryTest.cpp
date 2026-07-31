@@ -139,6 +139,51 @@ void displayedPointRoundTripsToSourceStage() {
     assert(mappedRight.x > stageCx);
 }
 
+void dragCardLiftsFromItsSlotToThePointer() {
+    const LayoutRect slot{.x = 400.0, .y = 300.0, .width = 260.0, .height = 150.0};
+    const RadiantPoint pointer{.x = 900.0, .y = 700.0};
+
+    // Progress 0 is the untouched card: the pick-up starts where the window already is, so the
+    // first frame of a drag cannot jump.
+    const auto resting = dragCardRect(slot, pointer, 0.0);
+    assert(near(resting.x, slot.x) && near(resting.y, slot.y));
+    assert(near(resting.width, slot.width) && near(resting.height, slot.height));
+
+    // Progress 1 is centred on the pointer, which is what the drop hit test uses.
+    const auto lifted = dragCardRect(slot, pointer, 1.0);
+    assert(near(lifted.x + lifted.width / 2.0, pointer.x));
+    assert(near(lifted.y + lifted.height / 2.0, pointer.y));
+
+    // Mid-flight sits between the two, and out-of-range progress clamps instead of overshooting.
+    const auto half = dragCardRect(slot, pointer, 0.5);
+    assert(half.x > slot.x && half.x < lifted.x);
+    const auto overshoot = dragCardRect(slot, pointer, 4.0);
+    assert(near(overshoot.x, lifted.x) && near(overshoot.width, lifted.width));
+
+    // A tiny wall card is magnified to the floor size rather than dragged as a speck.
+    const auto tiny = dragCardRect({.x = 0.0, .y = 0.0, .width = 90.0, .height = 60.0}, pointer, 1.0);
+    assert(near(tiny.width, 180.0));
+}
+
+void dragLandingCentresInsideTheWorkspaceCard() {
+    const LayoutRect card{.x = 800.0, .y = 600.0, .width = 300.0, .height = 180.0};
+    const LayoutRect workspace{.x = 100.0, .y = 100.0, .width = 480.0, .height = 300.0};
+
+    const auto landing = dragLandingRect(card, workspace);
+    assert(near(landing.x + landing.width / 2.0, workspace.x + workspace.width / 2.0));
+    assert(near(landing.y + landing.height / 2.0, workspace.y + workspace.height / 2.0));
+
+    // Fits well inside the destination and keeps the card's aspect, so the settle never covers the
+    // workspace it is landing on.
+    assert(landing.width < workspace.width && landing.height < workspace.height);
+    assert(near(landing.width / landing.height, card.width / card.height, 0.01));
+    assert(landing.width <= card.width); // settling shrinks, never swells
+
+    // Degenerate destinations fall back to the card untouched instead of collapsing it.
+    const auto safe = dragLandingRect(card, {.x = 0.0, .y = 0.0, .width = 0.0, .height = 200.0});
+    assert(near(safe.width, card.width) && near(safe.x, card.x));
+}
+
 } // namespace
 
 int main() {
@@ -151,6 +196,8 @@ int main() {
     remapRectRoundTripsThroughItsInverse();
     collapsedStageFillsTheSpaceTheShelfVacates();
     displayedPointRoundTripsToSourceStage();
+    dragCardLiftsFromItsSlotToThePointer();
+    dragLandingCentresInsideTheWorkspaceCard();
     std::cout << "OverlayGeometryTest passed\n";
     return 0;
 }
