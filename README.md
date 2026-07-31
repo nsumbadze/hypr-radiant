@@ -136,7 +136,10 @@ With the mouse:
 
 - Hover a workspace or window to move the selection
 - Click a workspace to switch to it, click a window to focus it
-- Drag a window onto a workspace card to move it there
+- Drag a window onto a workspace card to move it there: the card lifts out of the
+  wall and follows the pointer, the workspace under it lights up as the
+  destination, and the drop settles the card into place. Releasing over the
+  window's own workspace, or over nothing, sends it back where it came from
 - Drag a window onto the trailing `+`, or just click it, to create a workspace
 - Pointer at the top edge reveals the shelf, at the bottom edge the dock
 - Scrolling shows and hides the shelf, `Ctrl` + wheel steps through workspaces

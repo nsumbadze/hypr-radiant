@@ -28,6 +28,15 @@ namespace hypr_radiant {
 /// Returns `child` unchanged when `source` has no area.
 [[nodiscard]] LayoutRect remapRect(const LayoutRect& child, const LayoutRect& source, const LayoutRect& target);
 
+/// Card that trails the pointer while a window is being dragged. `progress` 0 leaves it sitting in
+/// the slot it was picked up from and 1 has it fully lifted and centred on `pointer`, so the
+/// pick-up can be animated instead of the card teleporting under the cursor.
+[[nodiscard]] LayoutRect dragCardRect(const LayoutRect& source, RadiantPoint pointer, double progress);
+
+/// Where a dropped card comes to rest inside the workspace card it was released over: centred and
+/// scaled to fit, so the release reads as the window landing somewhere rather than blinking out.
+[[nodiscard]] LayoutRect dragLandingRect(const LayoutRect& card, const LayoutRect& workspace);
+
 /// The shrunken stage rectangle shown while the workspace shelf is retracted.
 [[nodiscard]] LayoutRect collapsedStageBounds(const WorkspaceWallFrame& frame);
 

@@ -57,6 +57,41 @@ LayoutRect remapRect(const LayoutRect& child, const LayoutRect& source, const La
     };
 }
 
+LayoutRect dragCardRect(const LayoutRect& source, RadiantPoint pointer, double progress) {
+    // Clamped so a card picked up from a dense wall is still readable and one picked up from a
+    // full-screen stage window does not follow the pointer as a wall of its own.
+    const auto width  = std::clamp(source.width * 0.58, 180.0, 320.0);
+    const auto aspect = source.height > 0.0 ? source.width / source.height : 16.0 / 9.0;
+    const auto height = std::clamp(width / std::max(0.2, aspect), 100.0, 220.0);
+    const LayoutRect lifted{
+        .x      = pointer.x - width / 2.0,
+        .y      = pointer.y - height / 2.0,
+        .width  = width,
+        .height = height,
+    };
+
+    return interpolatedRect(source, lifted, std::clamp(progress, 0.0, 1.0));
+}
+
+LayoutRect dragLandingRect(const LayoutRect& card, const LayoutRect& workspace) {
+    if (card.width <= 0.0 || card.height <= 0.0 || workspace.width <= 0.0 || workspace.height <= 0.0)
+        return card;
+
+    // Never grows the card: landing is a settling motion, and a card that swelled into the
+    // destination would read as the drop being undone.
+    constexpr auto landingFill = 0.46;
+    const auto     scale        = std::min({1.0, workspace.width * landingFill / card.width, workspace.height * landingFill / card.height});
+    const auto     width        = card.width * scale;
+    const auto     height       = card.height * scale;
+
+    return {
+        .x      = workspace.x + (workspace.width - width) / 2.0,
+        .y      = workspace.y + (workspace.height - height) / 2.0,
+        .width  = width,
+        .height = height,
+    };
+}
+
 LayoutRect collapsedStageBounds(const WorkspaceWallFrame& frame) {
     const auto bottom     = frame.stage.bounds.y + frame.stage.bounds.height;
     const auto collapsedY = std::min(bottom, frame.rail.bounds.y + 70.0);

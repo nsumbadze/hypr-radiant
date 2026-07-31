@@ -285,6 +285,8 @@ void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::s
     m_labels.clear();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
+    m_dragSettleTransition.hideImmediate();
+    m_dragSettle = {};
     releaseHoverAffordances();
     m_animation.animateTo(true, effectiveAnimationDurationMs());
     m_stageTransitionMonitorId = -1;
@@ -488,13 +490,12 @@ void OverlayRenderer::pointerMoved(double x, double y) {
     const auto dx = x - m_pointerDownPosition.x;
     const auto dy = y - m_pointerDownPosition.y;
     if (!m_dragging && std::hypot(dx, dy) >= 8.0)
-        m_dragging = true;
+        beginDrag();
 
     if (!m_dragging)
         return;
 
-    const auto target = hitTest(x, y);
-    m_dragTarget = target.type == OverviewTargetType::Workspace || target.type == OverviewTargetType::NewWorkspace ? target : OverviewTarget{};
+    updateDropTarget(dropTargetFor(hitTest(x, y)));
     if (m_dragTarget.type != OverviewTargetType::None) {
         m_selectedTarget = m_dragTarget;
         m_selectedFrameMonitorId = m_dragTarget.monitorId;
@@ -514,6 +515,14 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
         }
         m_pointerDownTarget = hitTest(x, y);
         m_dragTarget = {};
+        m_dropTargetTransition.hideImmediate();
+        // A press dips the card under the pointer before it is known whether this becomes a click or
+        // a drag, so the overview acknowledges the button going down instead of looking inert.
+        if (m_pointerDownTarget.type == OverviewTargetType::Window) {
+            m_pressTransition.hideImmediate();
+            m_pressTransition.animateTo(true, dragDurationMs(0.30));
+            damageMonitorById(m_pointerDownTarget.monitorId);
+        }
         return {};
     }
 
@@ -567,6 +576,11 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
                        : PointerAction{.type = PointerActionType::Activate, .target = releasedTarget};
         }
     }
+
+    // Captured before the interaction is reset: the settle needs the card, the pointer and the drop
+    // target that the reset is about to clear.
+    if (m_dragging)
+        beginDragSettle(x, y);
 
     resetPointerInteraction();
     damageAllMonitors();
@@ -866,6 +880,8 @@ void OverlayRenderer::hideImmediate() {
     m_windowCloseTransition.hideImmediate();
     m_shelfTransition.hideImmediate();
     m_dockTransition.hideImmediate();
+    m_dragSettleTransition.hideImmediate();
+    m_dragSettle = {};
     releaseHoverAffordances();
     m_frames.clear();
     m_previousFrames.clear();
@@ -893,6 +909,97 @@ void OverlayRenderer::resetPointerInteraction() {
     m_pointerDown = false;
     m_dragging = false;
     m_pointerDownPreference = {};
+    // Dropped rather than animated out: both timelines are drawn against the card the press landed
+    // on, and that card is exactly what this reset forgets. The settle keeps its own copy.
+    m_pressTransition.hideImmediate();
+    m_dragLiftTransition.hideImmediate();
+    m_dropTargetTransition.hideImmediate();
+}
+
+int OverlayRenderer::dragDurationMs(double scale) const {
+    const auto base = effectiveAnimationDurationMs();
+    if (base <= 0)
+        return 0;
+
+    return std::max(1, static_cast<int>(std::round(base * scale)));
+}
+
+void OverlayRenderer::beginDrag() {
+    m_dragging = true;
+    // The card leaves its slot instead of teleporting to the cursor: the lift interpolates it from
+    // where it sat to a pointer-anchored card, and the slot it vacated fades out behind it.
+    m_pressTransition.animateTo(false, dragDurationMs(0.22));
+    m_dragSettleTransition.hideImmediate();
+    m_dragSettle = {};
+    m_dragLiftTransition.hideImmediate();
+    m_dragLiftTransition.animateTo(true, dragDurationMs(0.46));
+}
+
+OverviewTarget OverlayRenderer::dropTargetFor(OverviewTarget hit) const {
+    // A workspace is mostly covered by the window cards sitting inside it, so a pointer over one of
+    // those is still a pointer over that workspace. Reading the hit literally meant a drop only
+    // landed in the gaps between cards, and released anywhere else it did nothing at all.
+    const auto resolved = hit.type == OverviewTargetType::Window || hit.type == OverviewTargetType::CloseWindow
+        ? OverviewTarget{.type = OverviewTargetType::Workspace, .workspaceId = hit.workspaceId, .monitorId = hit.monitorId}
+                          : hit;
+
+    if (resolved.type != OverviewTargetType::Workspace && resolved.type != OverviewTargetType::NewWorkspace)
+        return {};
+
+    // Released over the workspace the window already lives on: not a move. Reporting no destination
+    // makes it a cancelled drag, so the card flies back into its slot instead of round-tripping
+    // through the compositor to end up exactly where it started.
+    if (resolved.type == OverviewTargetType::Workspace && resolved.workspaceId == m_pointerDownTarget.workspaceId)
+        return {};
+
+    return resolved;
+}
+
+void OverlayRenderer::updateDropTarget(OverviewTarget target) {
+    // monitorId is part of the comparison even though sameTarget ignores it: the create-workspace
+    // card carries the same id on every monitor, and the drop has to land on the one under the
+    // pointer rather than the one the drag happened to start over.
+    if (sameTarget(target, m_dragTarget) && target.monitorId == m_dragTarget.monitorId)
+        return;
+
+    m_dragTarget = target;
+    if (m_dragTarget.type == OverviewTargetType::None) {
+        m_dropTargetTransition.animateTo(false, dragDurationMs(0.30));
+        return;
+    }
+
+    // Restarted rather than continued, so crossing from one workspace to the next re-plays the
+    // highlight on the card the pointer just entered instead of leaving it mid-fade.
+    m_dropTargetTransition.hideImmediate();
+    m_dropTargetTransition.animateTo(true, dragDurationMs(0.42));
+}
+
+void OverlayRenderer::beginDragSettle(double x, double y) {
+    const auto* source = findWindowCard(m_pointerDownTarget.windowId);
+    double      localX = x;
+    double      localY = y;
+    const auto* frame  = frameForPoint(x, y, localX, localY);
+    if (!source || !frame)
+        return;
+
+    const auto from = dragCardRect(source->rect, {.x = localX, .y = localY}, easedProgress(m_dragLiftTransition.value()));
+    // Released over nothing droppable: shrink away where the card is, unless the wall can show it
+    // falling back into the slot it came from. Stage cards are drawn through the shelf remap, so
+    // their layout rect is not where they appear and cannot be flown back to.
+    auto to = m_dragTarget.type == OverviewTargetType::None && effectiveLayoutMode() == LayoutMode::WorkspaceWall
+        ? source->rect
+               : scaledAroundCenter(from, 0.86);
+    auto landed = false;
+    if (m_dragTarget.type != OverviewTargetType::None) {
+        if (const auto* workspace = findWorkspaceCard(m_dragTarget.workspaceId)) {
+            to     = dragLandingRect(from, workspace->rect);
+            landed = true;
+        }
+    }
+
+    m_dragSettle = {.monitorId = frame->monitorId, .windowId = source->stableId, .from = from, .to = to};
+    m_dragSettleTransition.setProgress(1.0, true);
+    m_dragSettleTransition.animateTo(false, dragDurationMs(landed ? 0.58 : 0.44));
 }
 
 void OverlayRenderer::animateSelection() {
@@ -964,7 +1071,12 @@ void OverlayRenderer::onRenderStage(eRenderStage stage) {
     // frame, so they need every monitor; the stage push, selection highlight and close button are
     // monitor-local. Damaging all monitors for a one-screen hover was making unrelated screens
     // re-render every frame of a 140 ms button fade.
-    if (m_animation.running() || m_shelfTransition.running() || m_dockTransition.running()) {
+    // Drag affordances get every monitor: a card can be picked up on one screen and dropped on
+    // another, so the lift, the destination highlight and the settle are never monitor-local.
+    const auto dragAnimating = m_pressTransition.running() || m_dragLiftTransition.running() ||
+        m_dropTargetTransition.running() || m_dragSettleTransition.running();
+
+    if (m_animation.running() || m_shelfTransition.running() || m_dockTransition.running() || dragAnimating) {
         damageAllMonitors();
     } else {
         if (m_stageTransition.running()) {
@@ -1163,6 +1275,14 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
     // makes them fade continuously after the glass on reveal and before it on dismissal.
     const auto typographyFade = easedProgress((alpha - 0.08) / 0.72);
     const auto headingAlpha = contentAlpha * typographyFade;
+    // Drag affordances resolve once per frame and are read by both loops below: the card being
+    // carried, the slot it left behind and the workspace it would land on all move together.
+    const auto dragLift = m_dragging ? easedProgress(m_dragLiftTransition.value()) : 0.0;
+    const auto dropGlow = easedProgress(m_dropTargetTransition.value());
+    const auto pressDip = m_pointerDown && !m_dragging && m_pointerDownTarget.type == OverviewTargetType::Window
+        ? easedProgress(m_pressTransition.value())
+                          : 0.0;
+    std::optional<LayoutRect> draggedSlot;
 
     double contentLeft   = frame.bounds.width;
     double contentTop    = frame.bounds.height;
@@ -1194,9 +1314,15 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             static_cast<double>(workspaceIndex) / static_cast<double>(frame.workspaces.size() - 1) * 0.13;
         const auto cardEntrance = easedProgress((entrance - stagger) / std::max(0.01, 1.0 - stagger));
         const auto hoverLift    = ownsSelection ? selection : 0.0;
+        // The workspace the carried card would land on rises to meet it, so the destination is
+        // legible from the card's own position rather than only under the pointer.
+        const auto drop         = m_dragging && m_dragTarget.type != OverviewTargetType::None &&
+                m_dragTarget.monitorId == frame.monitorId && m_dragTarget.workspaceId == workspace.workspaceId
+                          ? dropGlow
+                          : 0.0;
         auto       displayRect  = scaledAroundCenter(workspace.rect,
-            std::lerp(0.94, 1.0, cardEntrance) * std::lerp(1.0, workspaceSelected ? 1.018 : 1.006, hoverLift),
-            -std::lerp(0.0, workspaceSelected ? 7.0 : 3.0, hoverLift));
+            std::lerp(0.94, 1.0, cardEntrance) * std::lerp(1.0, workspaceSelected ? 1.018 : 1.006, hoverLift) * std::lerp(1.0, 1.03, drop),
+            -std::lerp(0.0, workspaceSelected ? 7.0 : 3.0, hoverLift) - 6.0 * drop);
         displayRect.y += (1.0 - cardEntrance) * (28.0 + static_cast<double>(workspaceIndex % 3) * 7.0);
         const auto workspaceBox = boxFor(displayRect);
         const auto cardAlpha    = contentAlpha * cardEntrance;
@@ -1223,6 +1349,8 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         auto cardSurface = surfaceColor(surfaceLift, cardAlpha * (workspace.empty ? 0.58 : 0.70));
         cardSurface = tintedSurface(cardSurface, accent,
             workspaceSelected ? 0.14 + selection * 0.08 : workspace.active ? 0.11 : ownsSelection ? 0.10 : 0.045);
+        if (drop > 0.001)
+            cardSurface = tintedSurface(cardSurface, accent, 0.22 * drop);
         drawRect(workspaceBox, cardSurface, damage, round, true);
 
         // Hairlines establish the card edge; state is carried by a short coloured rail instead of
@@ -1252,6 +1380,16 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             drawRect(CBox{right - cornerWeight, bottom - cornerLength, cornerWeight, cornerLength}, withAlpha(accentLit, cornerAlpha), damage, 1);
         }
 
+        if (drop > 0.001) {
+            // Destination cue: a halo, a full accent ring and an inset rail, all keyed to the same
+            // progress so the card the pointer entered lights up rather than switching on.
+            const auto spread = std::lerp(4.0, 14.0, drop);
+            drawRect(CBox{workspaceBox.x - spread, workspaceBox.y - spread, workspaceBox.w + spread * 2.0, workspaceBox.h + spread * 2.0},
+                withAlpha(accent, cardAlpha * 0.12 * drop), damage, round + static_cast<int>(spread));
+            drawBorder(workspaceBox, withAlpha(accentLit, cardAlpha * std::lerp(0.20, 0.86, drop)), round, 2);
+            drawBorder(insetBox(workspaceBox, 7.0), withAlpha(accent, cardAlpha * 0.26 * drop), std::max(1, round - 5), 1);
+        }
+
         const auto headerHeight = compact ? 28.0 : std::clamp(workspaceBox.h * 0.12, 34.0, 42.0);
         drawRect(CBox{workspaceBox.x + 14.0, workspaceBox.y + headerHeight, std::max(0.0, workspaceBox.w - 28.0), 1.0},
             withAlpha(ownsSelection ? accent : foreground, cardAlpha * (ownsSelection ? 0.12 : 0.055)), damage);
@@ -1267,20 +1405,33 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             const auto windowSelected = frame.monitorId == m_selectedFrameMonitorId && sameTarget(
                 m_selectedTarget,
                 {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
-            auto windowRect = remapRect(window.rect, workspace.rect, displayRect);
+            const auto held    = m_pointerDownTarget.type == OverviewTargetType::Window && window.stableId == m_pointerDownTarget.windowId;
+            const auto dragged = held && m_dragging;
+            const auto slotRect = remapRect(window.rect, workspace.rect, displayRect);
+            auto windowRect = slotRect;
+            if (dragged)
+                draggedSlot = slotRect;
             if (windowSelected)
                 windowRect = scaledAroundCenter(windowRect, std::lerp(1.0, 1.018, selection), -3.0 * selection);
+            // The card the pointer is carrying is drawn separately, so what stays in the wall is the
+            // hole it left: pressed in slightly, then shrinking and fading as the drag lifts it out.
+            if (dragged)
+                windowRect = scaledAroundCenter(windowRect, std::lerp(1.0, 0.93, dragLift));
+            else if (held && pressDip > 0.0)
+                windowRect = scaledAroundCenter(windowRect, std::lerp(1.0, 0.972, pressDip), 1.5 * pressDip);
             const auto windowBox   = boxFor(windowRect);
             const auto windowRound = Theme::windowRadius();
             const auto footerHeight = compact ? 0.0 : 28.0;
+            const auto windowAlpha  = dragged ? cardAlpha * std::lerp(1.0, 0.16, dragLift) : cardAlpha;
+            const auto windowDetail = dragged ? detailAlpha * std::lerp(1.0, 0.16, dragLift) : detailAlpha;
 
             if (windowSelected)
                 drawRect(CBox{windowBox.x - 6.0, windowBox.y - 6.0, windowBox.w + 12.0, windowBox.h + 12.0},
-                    withAlpha(accent, cardAlpha * 0.055 * selection), damage, windowRound + 6);
+                    withAlpha(accent, windowAlpha * 0.055 * selection), damage, windowRound + 6);
             drawRect(CBox{windowBox.x + 3.0, windowBox.y + 5.0 + selection * (windowSelected ? 2.0 : 0.0), windowBox.w, windowBox.h},
-                withAlpha(Theme::shadowColor(), cardAlpha * (windowSelected ? 0.52 : 0.34)), damage, windowRound + 2);
+                withAlpha(Theme::shadowColor(), windowAlpha * (windowSelected ? 0.52 : 0.34)), damage, windowRound + 2);
 
-            auto windowSurface = surfaceColor(windowSelected ? 0.25F : 0.19F, cardAlpha * 0.82);
+            auto windowSurface = surfaceColor(windowSelected ? 0.25F : 0.19F, windowAlpha * 0.82);
             windowSurface = tintedSurface(windowSurface, accent, windowSelected ? 0.18 * selection : 0.055);
             drawRect(windowBox, windowSurface, damage, windowRound);
 
@@ -1291,27 +1442,54 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                     std::max(1.0, windowBox.w - 14.0),
                     std::max(1.0, windowBox.h - footerHeight - 10.0),
                 };
-                drawRect(previewShell, surfaceColor(0.08F, cardAlpha * 0.92), damage, windowRound - 2);
-                renderWindowPreview(window, previewShell, cardAlpha, damage);
+                drawRect(previewShell, surfaceColor(0.08F, windowAlpha * 0.92), damage, windowRound - 2);
+                renderWindowPreview(window, previewShell, windowAlpha, damage);
 
                 m_labels.renderColored(appGlyph(window.appClass), windowBox.x + 11.0, windowBox.y + windowBox.h - footerHeight + 8.0,
-                    18.0, Theme::hintSize(), accent, detailAlpha * (windowSelected ? 1.0 : 0.70), damage);
+                    18.0, Theme::hintSize(), accent, windowDetail * (windowSelected ? 1.0 : 0.70), damage);
                 m_labels.render(window.label, windowBox.x + 32.0, windowBox.y + windowBox.h - footerHeight + 7.0,
-                    std::max(1.0, windowBox.w - 43.0), Theme::footerSize(), detailAlpha * (windowSelected ? 1.0 : 0.78), damage);
+                    std::max(1.0, windowBox.w - 43.0), Theme::footerSize(), windowDetail * (windowSelected ? 1.0 : 0.78), damage);
             } else {
                 m_labels.render(window.label, windowBox.x + (compact ? 8.0 : 12.0), windowBox.y + (compact ? 5.0 : 8.0),
                     std::max(1.0, windowBox.w - (compact ? 16.0 : 20.0)), compact ? Theme::badgeSize() : Theme::footerSize(),
-                    detailAlpha * (windowSelected ? 1.0 : 0.76), damage);
+                    windowDetail * (windowSelected ? 1.0 : 0.76), damage);
+            }
+
+            if (dragged) {
+                // Outline of the vacated slot, so the wall keeps showing where the window came from
+                // and where a cancelled drag will put it back.
+                drawBorder(boxFor(slotRect), withAlpha(accent, cardAlpha * 0.34 * dragLift), windowRound, 1);
             }
 
             if (windowSelected) {
-                drawBorder(windowBox, withAlpha(accentLit, cardAlpha * std::lerp(0.22, 0.66, selection)),
+                drawBorder(windowBox, withAlpha(accentLit, windowAlpha * std::lerp(0.22, 0.66, selection)),
                     windowRound, 1);
                 drawRect(CBox{windowBox.x + 12.0, windowBox.y, std::min(72.0, windowBox.w * 0.34), 1.0},
-                    withAlpha(accentLit, cardAlpha * 0.78 * selection), damage, 1);
+                    withAlpha(accentLit, windowAlpha * 0.78 * selection), damage, 1);
             }
         }
+
+        // Drawn after the windows so the caption sits over the cards already in the workspace rather
+        // than behind them. It rises into place from under the card edge, and is dropped entirely on
+        // cards too small to carry it.
+        constexpr auto captionWidth  = 118.0;
+        constexpr auto captionHeight = 24.0;
+        if (drop > 0.001 && workspaceBox.w > captionWidth + 24.0 && workspaceBox.h > 96.0) {
+            const auto caption = CBox{
+                workspaceBox.x + centered(workspaceBox.w, captionWidth),
+                workspaceBox.y + workspaceBox.h - captionHeight - 12.0 + (1.0 - drop) * 10.0,
+                captionWidth,
+                captionHeight,
+            };
+            drawRect(CBox{caption.x + 2.0, caption.y + 3.0, caption.w, caption.h}, withAlpha(Theme::shadowColor(), cardAlpha * 0.50 * drop), damage, 10);
+            drawRect(caption, withAlpha(tintedSurface(surfaceColor(0.10F, 1.0), accent, 0.22), cardAlpha * 0.94 * drop), damage, 10);
+            drawBorder(caption, withAlpha(accent, cardAlpha * 0.44 * drop), 10, 1);
+            m_labels.renderCentered(workspace.createTarget ? "NEW WORKSPACE" : "MOVE HERE", caption, Theme::badgeSize(),
+                accentLit, cardAlpha * drop, damage);
+        }
     }
+
+    renderDragOverlay(frame, draggedSlot, contentAlpha, damage);
 
     if (searchActive) {
         auto dim = m_config.backgroundColor();
@@ -1521,6 +1699,12 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
 }
 
 void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const StageContext& ctx, const CRegion& damage) {
+    const auto dragLift = m_dragging ? easedProgress(m_dragLiftTransition.value()) : 0.0;
+    const auto pressDip = m_pointerDown && !m_dragging && m_pointerDownTarget.type == OverviewTargetType::Window
+        ? easedProgress(m_pressTransition.value())
+                          : 0.0;
+    std::optional<LayoutRect> draggedSlot;
+
     for (const auto& window : frame.stage.windows) {
         // A window that has already unmapped has nothing left to preview, and drawing its card
         // anyway left an empty surface sitting on the stage until the next collect landed.
@@ -1530,9 +1714,19 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
             m_selectedTarget, {.type = OverviewTargetType::Window, .workspaceId = window.workspaceId, .windowId = window.stableId});
         const auto closeTransition = window.stableId == m_closingWindowId ? std::clamp(m_windowCloseTransition.value(), 0.0, 1.0) : 1.0;
         const auto cardAlpha       = ctx.stageAlpha * closeTransition;
+        const auto held    = m_pointerDownTarget.type == OverviewTargetType::Window && window.stableId == m_pointerDownTarget.windowId;
+        const auto dragged = held && m_dragging;
         auto displayRect = remapStageRect(window.rect, frame.stage.bounds, ctx.pushedStageBounds);
+        if (dragged)
+            draggedSlot = displayRect;
         if (selected)
             displayRect = scaledAroundCenter(displayRect, std::lerp(0.995, 1.014, ctx.selectionTransition), -3.0 * ctx.selectionTransition);
+        // What stays on the stage is the hole the card left, not the card: it presses in under the
+        // pointer and then shrinks away as the drag lifts the real card out of it.
+        if (dragged)
+            displayRect = scaledAroundCenter(displayRect, std::lerp(1.0, 0.93, dragLift));
+        else if (held && pressDip > 0.0)
+            displayRect = scaledAroundCenter(displayRect, std::lerp(1.0, 0.975, pressDip), 1.5 * pressDip);
         if (closeTransition < 1.0)
             displayRect = windowDismissalRect(displayRect, closeTransition);
         const auto windowBox = boxFor(displayRect);
@@ -1545,7 +1739,7 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
                 std::max(1.0, displayRect.width - 26.0), Theme::hintSize(), cardAlpha * 0.68, damage);
         }
 
-        const auto windowAlpha = m_dragging && window.stableId == m_pointerDownTarget.windowId ? cardAlpha * 0.30 : cardAlpha;
+        const auto windowAlpha = dragged ? cardAlpha * std::lerp(1.0, 0.18, dragLift) : cardAlpha;
         const auto lift = selected ? ctx.selectionTransition : 0.0;
         // Two shadow layers: a wide ambient one plus a tighter contact shadow, so cards float
         // instead of sitting flat on the backdrop.
@@ -1623,32 +1817,19 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
         const auto titleY = std::min(windowBox.y + windowBox.h + 8.0, ctx.displayedStageBounds.y + ctx.displayedStageBounds.height - 26.0);
         const auto titleBox = CBox{titleX, titleY, titleWidth, 26.0};
         auto titleSurface = tintedSurface(ctx.railSurface, ctx.accent, selected ? 0.18 : 0.04);
-        drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), cardAlpha * 0.52), damage, 9);
-        drawRect(titleBox, withAlpha(titleSurface, cardAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
+        // Follows the card's own alpha, so a lifted window does not leave a fully lit title sitting
+        // under the hole it came out of.
+        drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), windowAlpha * 0.52), damage, 9);
+        drawRect(titleBox, withAlpha(titleSurface, windowAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
         if (selected)
-            drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(ctx.accent, cardAlpha * 0.64), damage, 1);
+            drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(ctx.accent, windowAlpha * 0.64), damage, 1);
         m_labels.renderColored(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
-            18.0, Theme::hintSize(), ctx.accent, cardAlpha * (selected ? 1.0 : 0.82), damage);
+            18.0, Theme::hintSize(), ctx.accent, windowAlpha * (selected ? 1.0 : 0.82), damage);
         m_labels.render(window.label, titleBox.x + 33.0, titleBox.y + 6.0,
-            std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), cardAlpha * (selected ? 1.0 : 0.76), damage);
+            std::max(1.0, titleBox.w - 45.0), Theme::hintSize(), windowAlpha * (selected ? 1.0 : 0.76), damage);
     }
 
-    if (m_dragging) {
-        const auto bounds = m_frameBoundsByMonitor.find(frame.monitorId);
-        const auto* source = findWindowCard(m_pointerDownTarget.windowId);
-        if (bounds != m_frameBoundsByMonitor.end() && source && contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y)) {
-            const auto local = mapGlobalPointToFrame(bounds->second, frame.bounds, m_pointerPosition.x, m_pointerPosition.y);
-            const auto localX = local.x;
-            const auto localY = local.y;
-            const auto ghostWidth = std::clamp(source->rect.width * 0.58, 180.0, 320.0);
-            const auto aspect = source->rect.height > 0.0 ? source->rect.width / source->rect.height : 16.0 / 9.0;
-            const auto ghostHeight = std::clamp(ghostWidth / std::max(0.2, aspect), 100.0, 220.0);
-            const auto ghost = CBox{localX - ghostWidth / 2.0, localY - ghostHeight / 2.0, ghostWidth, ghostHeight};
-            drawRect(CBox{ghost.x + 9.0, ghost.y + 12.0, ghost.w, ghost.h}, withAlpha(Theme::shadowColor(), ctx.contentAlpha), damage, Theme::windowRadius() + 3);
-            drawRect(ghost, surfaceColor(0.12F, ctx.contentAlpha * 0.96), damage, Theme::windowRadius());
-            renderWindowPreview(*source, ghost, ctx.contentAlpha * 0.96, damage);
-        }
-    }
+    renderDragOverlay(frame, draggedSlot, ctx.contentAlpha, damage);
 }
 
 void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
@@ -1852,6 +2033,62 @@ void OverlayRenderer::renderWindowPreview(const WindowCard& windowCard, const CB
     data.surface  = surface;
 
     g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(std::move(data)));
+}
+
+void OverlayRenderer::renderDragOverlay(const WorkspaceWallFrame& frame, std::optional<LayoutRect> draggedSlot, double alpha, const CRegion& damage) {
+    if (m_dragging) {
+        const auto  bounds = m_frameBoundsByMonitor.find(frame.monitorId);
+        const auto* source = findWindowCard(m_pointerDownTarget.windowId);
+        if (bounds == m_frameBoundsByMonitor.end() || !source || !contains(bounds->second, m_pointerPosition.x, m_pointerPosition.y))
+            return;
+
+        const auto local = mapGlobalPointToFrame(bounds->second, frame.bounds, m_pointerPosition.x, m_pointerPosition.y);
+        const auto lift  = easedProgress(m_dragLiftTransition.value());
+        renderDragCard(*source, dragCardRect(draggedSlot.value_or(source->rect), local, lift), alpha, lift, damage);
+        return;
+    }
+
+    if (!m_dragSettleTransition.renderable() || m_dragSettle.monitorId != frame.monitorId)
+        return;
+
+    const auto* source = findWindowCard(m_dragSettle.windowId);
+    if (!source)
+        return;
+
+    // The settle runs 1 → 0 after release, so the card covers the last stretch into the workspace it
+    // was dropped on — or back into its own slot — instead of vanishing wherever the pointer stopped.
+    const auto remaining = std::clamp(m_dragSettleTransition.value(), 0.0, 1.0);
+    renderDragCard(*source, interpolatedRect(m_dragSettle.from, m_dragSettle.to, easedProgress(1.0 - remaining)),
+        alpha * remaining, remaining, damage);
+}
+
+void OverlayRenderer::renderDragCard(const WindowCard& window, const LayoutRect& rect, double alpha, double lift, const CRegion& damage) {
+    if (alpha <= 0.001 || rect.width <= 0.0 || rect.height <= 0.0)
+        return;
+
+    const auto box    = boxFor(rect);
+    const auto radius = Theme::windowRadius();
+    const auto accent = resolvedAccentColor();
+
+    // The shadow deepens with the lift, so the card reads as held above the wall rather than sliding
+    // across it, and shrinks back down as the drop settles.
+    drawRect(CBox{box.x - 4.0, box.y + 6.0 + lift * 10.0, box.w + 8.0, box.h + 8.0},
+        withAlpha(Theme::shadowColor(), alpha * (0.28 + lift * 0.30)), damage, radius + 10);
+    drawRect(CBox{box.x + 6.0, box.y + 10.0 + lift * 6.0, box.w, box.h},
+        withAlpha(Theme::shadowColor(), alpha * (0.44 + lift * 0.28)), damage, radius + 2);
+    drawRect(box, surfaceColor(0.14F, alpha * 0.96), damage, radius);
+    renderWindowPreview(window, box, alpha * 0.96, damage);
+    drawBorder(box, withAlpha(accent, alpha * std::lerp(0.20, 0.74, lift)), radius, 1);
+
+    // Named while it is in the air: a thumbnail alone is hard to identify at drag size, and the
+    // chip is what makes the card feel picked up rather than smeared across the wall.
+    if (box.w < 140.0)
+        return;
+
+    const auto chip = CBox{box.x + 10.0, box.y + box.h - 32.0 + (1.0 - lift) * 6.0, std::max(1.0, box.w - 20.0), 24.0};
+    drawRect(chip, withAlpha(tintedSurface(surfaceColor(0.08F, 1.0), accent, 0.16), alpha * 0.86 * lift), damage, 8);
+    m_labels.renderColored(appGlyph(window.appClass), chip.x + 9.0, chip.y + 5.0, 18.0, Theme::hintSize(), accent, alpha * lift, damage);
+    m_labels.render(window.label, chip.x + 30.0, chip.y + 5.0, std::max(1.0, chip.w - 40.0), Theme::hintSize(), alpha * 0.86 * lift, damage);
 }
 
 void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage) {
