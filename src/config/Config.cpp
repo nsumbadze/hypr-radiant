@@ -59,10 +59,15 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         "plugin:radiant:border_color", "Selected border color, or auto to follow the chrome preset.", "auto");
     m_effects = makeShared<Config::Values::CStringValue>(
         "plugin:radiant:effects", "Overlay shadows, glow, and blur: auto, on, or off.", "auto");
+    m_spacing = makeShared<Config::Values::CFloatValue>(
+        "plugin:radiant:spacing", "Multiplier for overview card padding and gaps.", 1.0F,
+        Config::Values::SFloatValueOptions{.min = 0.5F, .max = 2.0F});
+    m_shelf = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:shelf", "Stage workspace shelf behavior: auto, always, or hidden.", "auto");
 
     refreshPalette();
 
-    const std::array<SP<Config::Values::IValue>, 15> values{
+    const std::array<SP<Config::Values::IValue>, 17> values{
         m_opacity,
         m_animationDurationMs,
         m_layout,
@@ -78,6 +83,8 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         m_borderSize,
         m_borderColor,
         m_effects,
+        m_spacing,
+        m_shelf,
     };
 
     for (const auto& value : values) {
@@ -140,6 +147,14 @@ EffectsMode RadiantConfig::effectsMode() const {
     return m_effects ? parseEffectsMode(m_effects->value()) : EffectsMode::Auto;
 }
 
+double RadiantConfig::spacing() const {
+    return m_spacing ? std::clamp(static_cast<double>(m_spacing->value()), 0.5, 2.0) : 1.0;
+}
+
+ShelfMode RadiantConfig::shelfMode() const {
+    return m_shelf ? parseShelfMode(m_shelf->value()) : ShelfMode::Auto;
+}
+
 float RadiantConfig::opacity() const {
     if (!m_opacity)
         return 0.94F;
@@ -198,6 +213,14 @@ LayoutMode parseLayoutMode(std::string_view value) {
         return LayoutMode::WorkspaceWall;
 
     return LayoutMode::Stage;
+}
+
+ShelfMode parseShelfMode(std::string_view value) {
+    if (value == "always")
+        return ShelfMode::Always;
+    if (value == "hidden")
+        return ShelfMode::Hidden;
+    return ShelfMode::Auto;
 }
 
 } // namespace hypr_radiant

@@ -386,7 +386,7 @@ OverlayRenderer::OverlayRenderer(RadiantConfig& config, PreferencesStore& prefer
     m_config(config), m_preferences(preferences), m_labels(config) {}
 
 void OverlayRenderer::refreshChromeStyle() {
-    const auto preset = m_config.chromePreset();
+    const auto preset = effectiveChromePreset();
     m_chrome = resolveChromeStyle({
         .preset = preset,
         .roundingOverride = m_config.roundingOverride(),
@@ -478,6 +478,7 @@ void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::s
     m_dragSettle = {};
     releaseHoverAffordances();
     m_animation.animateTo(true, effectiveAnimationDurationMs());
+    normalizeShelfVisibility();
     m_stageTransitionMonitorId = -1;
     m_stageTransition.hideImmediate();
     m_stageTransition.animateTo(true, stageDurationMs);
@@ -523,13 +524,16 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
         static constexpr std::array stageControls{
             PreferenceControl::WorkspaceView,
             PreferenceControl::WindowView,
+            PreferenceControl::Shelf,
             PreferenceControl::Motion,
+            PreferenceControl::Chrome,
             PreferenceControl::NativeTheme,
             PreferenceControl::AppExpose,
         };
         static constexpr std::array globalControls{
             PreferenceControl::WorkspaceView,
             PreferenceControl::Motion,
+            PreferenceControl::Chrome,
             PreferenceControl::NativeTheme,
             PreferenceControl::AppExpose,
         };
@@ -993,6 +997,7 @@ void OverlayRenderer::togglePreferences() {
     } else {
         m_preferencesMonitorId = -1;
         m_pointerDownPreference = {};
+        normalizeShelfVisibility();
     }
     damageAllMonitors();
 }
@@ -1011,8 +1016,9 @@ PointerAction OverlayRenderer::activatePreference() {
     return {};
 }
 
-void OverlayRenderer::setWorkspaceShelfVisible(bool visible) {
-    if (effectiveLayoutMode() != LayoutMode::Stage || !active() || m_shelfTransition.targetVisible() == visible)
+void OverlayRenderer::setWorkspaceShelfVisible(bool visible, bool explicitRequest) {
+    if (effectiveLayoutMode() != LayoutMode::Stage || !active() || (!explicitRequest && !shelfAutomationAllowed(visible)) ||
+        m_shelfTransition.targetVisible() == visible)
         return;
 
     const auto duration = effectiveAnimationDurationMs();
@@ -1083,11 +1089,11 @@ void OverlayRenderer::setHintDockVisible(bool visible) {
 }
 
 void OverlayRenderer::toggleWorkspaceShelf() {
-    setWorkspaceShelfVisible(!m_shelfTransition.targetVisible());
+    setWorkspaceShelfVisible(!m_shelfTransition.targetVisible(), true);
 }
 
 void OverlayRenderer::setWorkspaceShelfGestureProgress(bool revealing, double progress) {
-    if (effectiveLayoutMode() != LayoutMode::Stage || !active())
+    if (effectiveLayoutMode() != LayoutMode::Stage || !active() || !shelfAutomationAllowed(revealing))
         return;
 
     m_shelfTransition.setProgress(revealing ? progress : 1.0 - progress, revealing);
@@ -1096,6 +1102,10 @@ void OverlayRenderer::setWorkspaceShelfGestureProgress(bool revealing, double pr
 
 void OverlayRenderer::finishWorkspaceShelfGesture(bool revealing, bool commit) {
     const auto visible = revealing ? commit : !commit;
+    if (!shelfAutomationAllowed(visible)) {
+        normalizeShelfVisibility();
+        return;
+    }
     const auto duration = effectiveAnimationDurationMs();
     m_shelfTransition.animateTo(visible, duration == 0 ? 0 : std::max(90, static_cast<int>(std::round(duration * 0.72))));
     damageAllMonitors();
@@ -1382,7 +1392,7 @@ void OverlayRenderer::rebuildFrames() {
                 m_selectedTarget.workspaceId : snapshot.activeWorkspaceId;
             m_frameBoundsByMonitor[snapshot.id] = globalBoundsForMonitor(monitor);
             m_frames.push_back(m_layout.compute(m_state, snapshot, renderSize,
-                layoutOptionsFor(effectiveLayoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
+                scaledSpacing(layoutOptionsFor(effectiveLayoutMode(), previewWorkspaceId, m_mode, m_applicationFilter), m_config.spacing())));
         }
     }
 
@@ -1401,7 +1411,7 @@ void OverlayRenderer::rebuildFrames() {
             const auto previewWorkspaceId = monitor.id == m_selectedFrameMonitorId && m_selectedTarget.workspaceId > 0 ?
                 m_selectedTarget.workspaceId : monitor.activeWorkspaceId;
             m_frames.push_back(m_layout.compute(m_state, monitor, renderSize,
-                layoutOptionsFor(effectiveLayoutMode(), previewWorkspaceId, m_mode, m_applicationFilter)));
+                scaledSpacing(layoutOptionsFor(effectiveLayoutMode(), previewWorkspaceId, m_mode, m_applicationFilter), m_config.spacing())));
         }
     }
 
@@ -1968,8 +1978,12 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             return "WORKSPACE";
         case PreferenceControl::WindowView:
             return "WINDOWS";
+        case PreferenceControl::Shelf:
+            return "SHELF";
         case PreferenceControl::Motion:
             return "MOTION";
+        case PreferenceControl::Chrome:
+            return "CHROME";
         case PreferenceControl::NativeTheme:
             return "THEME";
         case PreferenceControl::None:
@@ -2004,8 +2018,12 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             return 0;
         case PreferenceControl::WindowView:
             return static_cast<int>(m_preferences.state().windowView);
+        case PreferenceControl::Shelf:
+            return static_cast<int>(m_preferences.state().shelf);
         case PreferenceControl::Motion:
             return static_cast<int>(m_preferences.state().motion);
+        case PreferenceControl::Chrome:
+            return static_cast<int>(m_preferences.state().chrome);
         case PreferenceControl::NativeTheme:
             return 1;
         case PreferenceControl::None:
@@ -2024,10 +2042,18 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
         case PreferenceControl::WindowView:
             return value == 0 ? "SPATIAL" : value == 1 ? "GROUPED"
                                                        : "DECK";
+        case PreferenceControl::Shelf: {
+            static constexpr std::array labels{"CONFIG", "AUTO", "ALWAYS", "HIDDEN"};
+            return labels[static_cast<std::size_t>(std::clamp(value, 0, 3))];
+        }
         case PreferenceControl::Motion: {
             static constexpr std::array labels{
                 "DEFAULT", "SNAP", "GLITCH", "LIGHT", "SILK", "REDUCED", "OFF"};
             return labels[static_cast<std::size_t>(std::clamp(value, 0, 6))];
+        }
+        case PreferenceControl::Chrome: {
+            static constexpr std::array labels{"CONFIG", "RADIANT", "NATIVE", "FLAT"};
+            return labels[static_cast<std::size_t>(std::clamp(value, 0, 3))];
         }
         case PreferenceControl::NativeTheme:
             if (value == 0)
@@ -2847,11 +2873,23 @@ PointerAction OverlayRenderer::applyPreference(PreferenceControl control, int va
         else
             state.windowView = static_cast<WindowViewPreference>(adjacent(static_cast<int>(state.windowView), 3));
         break;
+    case PreferenceControl::Shelf:
+        if (value >= 0 && value <= 3)
+            state.shelf = static_cast<ShelfPreference>(value);
+        else
+            state.shelf = static_cast<ShelfPreference>(adjacent(static_cast<int>(state.shelf), 4));
+        break;
     case PreferenceControl::Motion:
         if (value >= 0 && value <= 6)
             state.motion = static_cast<MotionPreference>(value);
         else
             state.motion = static_cast<MotionPreference>(adjacent(static_cast<int>(state.motion), 7));
+        break;
+    case PreferenceControl::Chrome:
+        if (value >= 0 && value <= 3)
+            state.chrome = static_cast<ChromePreference>(value);
+        else
+            state.chrome = static_cast<ChromePreference>(adjacent(static_cast<int>(state.chrome), 4));
         break;
     case PreferenceControl::NativeTheme: {
         const auto count = nativeThemeOptionCount();
@@ -2897,6 +2935,7 @@ void OverlayRenderer::rebuildAfterPreferenceChange() {
     m_applicationFilter.clear();
     m_previousFrames = m_frames;
     rebuildFrames();
+    normalizeShelfVisibility();
     if (const auto* frame = frameForMonitor(m_selectedFrameMonitorId)) {
         if (!targetInFrame(*frame, m_selectedTarget))
             m_selectedTarget = m_hitTester.initialSelection(*frame);
@@ -2931,6 +2970,40 @@ LayoutMode OverlayRenderer::effectiveLayoutMode() const {
         return m_config.layoutMode();
     }
     return m_config.layoutMode();
+}
+
+ChromePreset OverlayRenderer::effectiveChromePreset() const {
+    switch (m_preferences.state().chrome) {
+    case ChromePreference::Radiant: return ChromePreset::Radiant;
+    case ChromePreference::Native: return ChromePreset::Native;
+    case ChromePreference::Flat: return ChromePreset::Flat;
+    case ChromePreference::FollowConfig: return m_config.chromePreset();
+    }
+    return m_config.chromePreset();
+}
+
+ShelfMode OverlayRenderer::effectiveShelfMode() const {
+    switch (m_preferences.state().shelf) {
+    case ShelfPreference::Auto: return ShelfMode::Auto;
+    case ShelfPreference::Always: return ShelfMode::Always;
+    case ShelfPreference::Hidden: return ShelfMode::Hidden;
+    case ShelfPreference::FollowConfig: return m_config.shelfMode();
+    }
+    return m_config.shelfMode();
+}
+
+bool OverlayRenderer::shelfAutomationAllowed(bool visible) const {
+    const auto mode = effectiveShelfMode();
+    return mode == ShelfMode::Auto || (mode == ShelfMode::Always && visible) || (mode == ShelfMode::Hidden && !visible);
+}
+
+void OverlayRenderer::normalizeShelfVisibility() {
+    if (effectiveLayoutMode() != LayoutMode::Stage || !active())
+        return;
+    if (effectiveShelfMode() == ShelfMode::Always)
+        setWorkspaceShelfVisible(true, true);
+    else if (effectiveShelfMode() == ShelfMode::Hidden)
+        setWorkspaceShelfVisible(false, true);
 }
 
 int OverlayRenderer::effectiveAnimationDurationMs() const {

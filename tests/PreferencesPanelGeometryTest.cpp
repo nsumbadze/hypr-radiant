@@ -1,6 +1,7 @@
 #include <hypr-radiant/overview/PreferencesPanelGeometry.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cassert>
 #include <iostream>
 
@@ -11,16 +12,16 @@ namespace {
 void centersPreferredPanelOnLargeMonitor() {
     const auto frame = computePreferencesPanel({.width = 1920.0, .height = 1080.0});
     assert(frame.panel.width == 720.0);
-    assert(frame.panel.height == 302.0);
+    assert(frame.panel.height == 422.0);
     assert(frame.panel.x == 600.0);
-    assert(frame.panel.y == 389.0);
+    assert(frame.panel.y == 329.0);
 }
 
 void wallAndCarouselOmitWindowArrangement() {
     const auto frame = computePreferencesPanel({.width = 1920.0, .height = 1080.0}, false);
-    assert(frame.panel.height == 242.0);
-    assert(frame.rows.size() == 2);
-    assert(frame.options.size() == 11);
+    assert(frame.panel.height == 302.0);
+    assert(frame.rows.size() == 3);
+    assert(frame.options.size() == 15);
     assert(std::ranges::none_of(frame.rows, [](const PreferenceRow& row) {
         return row.control == PreferenceControl::WindowView;
     }));
@@ -60,11 +61,11 @@ void presentsInstalledThemesAsACompactSelector() {
     constexpr auto themeCount = 28;
     const auto frame = computePreferencesPanel({.width = 1920.0, .height = 1080.0}, true, themeCount);
     assert(frame.panel.width == 820.0);
-    assert(frame.panel.height == 362.0);
+    assert(frame.panel.height == 482.0);
     assert(frame.panel.x == 550.0);
-    assert(frame.panel.y == 359.0);
+    assert(frame.panel.y == 299.0);
     assert(frame.nativeThemesPane.width == 0.0);
-    assert(frame.rows.size() == 4);
+    assert(frame.rows.size() == 6);
     assert(frame.rows.back().control == PreferenceControl::NativeTheme);
     assert(frame.appExposeButton.y > frame.rows.back().rect.y + frame.rows.back().rect.height);
 
@@ -90,6 +91,23 @@ void presentsInstalledThemesAsACompactSelector() {
            (PreferenceHit{.control = PreferenceControl::NativeTheme, .value = 2}));
 }
 
+void keepsStageRowsOrderedAndFitsSmallMonitors() {
+    const auto frame = computePreferencesPanel({.width = 500.0, .height = 360.0}, true, 28);
+    const std::array expected{
+        PreferenceControl::WorkspaceView,
+        PreferenceControl::WindowView,
+        PreferenceControl::Shelf,
+        PreferenceControl::Motion,
+        PreferenceControl::Chrome,
+        PreferenceControl::NativeTheme,
+    };
+    assert(frame.rows.size() == expected.size());
+    for (std::size_t index = 0; index < expected.size(); ++index)
+        assert(frame.rows[index].control == expected[index]);
+    assert(frame.appExposeButton.y >= frame.rows.back().rect.y + frame.rows.back().rect.height);
+    assert(frame.appExposeButton.y + frame.appExposeButton.height <= frame.panel.y + frame.panel.height);
+}
+
 } // namespace
 
 int main() {
@@ -98,6 +116,7 @@ int main() {
     wallAndCarouselOmitWindowArrangement();
     identifiesEveryControl();
     presentsInstalledThemesAsACompactSelector();
+    keepsStageRowsOrderedAndFitsSmallMonitors();
     std::cout << "PreferencesPanelGeometryTest passed\n";
     return 0;
 }

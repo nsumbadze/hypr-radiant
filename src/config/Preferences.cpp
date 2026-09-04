@@ -71,6 +71,24 @@ void parseLine(PreferencesState& preferences, std::string_view line) {
             preferences.motion = MotionPreference::Off;
         else
             preferences.motion = MotionPreference::FollowConfig;
+    } else if (key == "chrome") {
+        if (value == "radiant")
+            preferences.chrome = ChromePreference::Radiant;
+        else if (value == "native")
+            preferences.chrome = ChromePreference::Native;
+        else if (value == "flat")
+            preferences.chrome = ChromePreference::Flat;
+        else
+            preferences.chrome = ChromePreference::FollowConfig;
+    } else if (key == "shelf") {
+        if (value == "auto")
+            preferences.shelf = ShelfPreference::Auto;
+        else if (value == "always")
+            preferences.shelf = ShelfPreference::Always;
+        else if (value == "hidden")
+            preferences.shelf = ShelfPreference::Hidden;
+        else
+            preferences.shelf = ShelfPreference::FollowConfig;
     } else if (key == "native_theme") {
         preferences.nativeTheme = themeSlug(value);
     }
@@ -124,6 +142,26 @@ std::string_view value(MotionPreference preference) {
     return "config";
 }
 
+std::string_view value(ChromePreference preference) {
+    switch (preference) {
+    case ChromePreference::Radiant: return "radiant";
+    case ChromePreference::Native: return "native";
+    case ChromePreference::Flat: return "flat";
+    case ChromePreference::FollowConfig: return "config";
+    }
+    return "config";
+}
+
+std::string_view value(ShelfPreference preference) {
+    switch (preference) {
+    case ShelfPreference::Auto: return "auto";
+    case ShelfPreference::Always: return "always";
+    case ShelfPreference::Hidden: return "hidden";
+    case ShelfPreference::FollowConfig: return "config";
+    }
+    return "config";
+}
+
 } // namespace
 
 PreferencesState parsePreferences(std::string_view contents) {
@@ -143,6 +181,8 @@ std::string serializePreferences(const PreferencesState& preferences) {
         "workspace_view = " + std::string{value(preferences.workspaceView)} + "\n"
         "window_view = " + std::string{value(preferences.windowView)} + "\n"
         "motion = " + std::string{value(preferences.motion)} + "\n"
+        "chrome = " + std::string{value(preferences.chrome)} + "\n"
+        "shelf = " + std::string{value(preferences.shelf)} + "\n"
         "native_theme = " + (preferences.nativeTheme.empty() ? "auto" : preferences.nativeTheme) + "\n";
 }
 
@@ -251,6 +291,26 @@ std::string_view label(MotionPreference preference) {
         return "DEFAULT";
     }
     return "DEFAULT";
+}
+
+std::string_view label(ChromePreference preference) {
+    switch (preference) {
+    case ChromePreference::Radiant: return "RADIANT";
+    case ChromePreference::Native: return "NATIVE";
+    case ChromePreference::Flat: return "FLAT";
+    case ChromePreference::FollowConfig: return "CONFIG";
+    }
+    return "CONFIG";
+}
+
+std::string_view label(ShelfPreference preference) {
+    switch (preference) {
+    case ShelfPreference::Auto: return "AUTO";
+    case ShelfPreference::Always: return "ALWAYS";
+    case ShelfPreference::Hidden: return "HIDDEN";
+    case ShelfPreference::FollowConfig: return "CONFIG";
+    }
+    return "CONFIG";
 }
 
 } // namespace hypr_radiant

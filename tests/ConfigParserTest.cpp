@@ -118,6 +118,12 @@ void emptyLayoutModeFallsBackToStage() {
     assert(parseLayoutMode("") == LayoutMode::Stage);
 }
 
+void parsesShelfModes() {
+    assert(parseShelfMode("always") == ShelfMode::Always);
+    assert(parseShelfMode("hidden") == ShelfMode::Hidden);
+    assert(parseShelfMode("unknown") == ShelfMode::Auto);
+}
+
 void parsesAccentFormats() {
     const auto hex = parseAccentColor("#509475");
     assert(hex.has_value());
@@ -159,6 +165,8 @@ void unregisteredConfigUsesCustomizationDefaults() {
     assert(config.borderSizeOverride() == -1);
     assert(!config.borderColorOverride());
     assert(config.effectsMode() == EffectsMode::Auto);
+    assert(config.spacing() == 1.0);
+    assert(config.shelfMode() == ShelfMode::Auto);
 }
 
 void registersEveryPluginOptionBeforeRuntimeSetup() {
@@ -184,6 +192,8 @@ void registersEveryPluginOptionBeforeRuntimeSetup() {
         "plugin:radiant:border_size",
         "plugin:radiant:border_color",
         "plugin:radiant:effects",
+        "plugin:radiant:spacing",
+        "plugin:radiant:shelf",
     };
     assert(registeredConfigValues == expected);
     assert(config.registrationError().empty());
@@ -210,6 +220,7 @@ int main() {
     parsesRibbonLayoutMode();
     unknownLayoutModeFallsBackToStage();
     emptyLayoutModeFallsBackToStage();
+    parsesShelfModes();
     parsesAccentFormats();
     rejectsAutomaticAndInvalidAccents();
     overviewGestureDefaultsAreDiscoverable();

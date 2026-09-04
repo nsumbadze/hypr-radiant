@@ -27,7 +27,10 @@ enum class LayoutMode {
     Ribbon,
 };
 
+enum class ShelfMode { Auto, Always, Hidden };
+
 [[nodiscard]] LayoutMode parseLayoutMode(std::string_view value);
+[[nodiscard]] ShelfMode  parseShelfMode(std::string_view value);
 
 class RadiantConfig {
   public:
@@ -54,6 +57,8 @@ class RadiantConfig {
     [[nodiscard]] int             borderSizeOverride() const;
     [[nodiscard]] std::optional<RadiantRgba> borderColorOverride() const;
     [[nodiscard]] EffectsMode     effectsMode() const;
+    [[nodiscard]] double          spacing() const;
+    [[nodiscard]] ShelfMode       shelfMode() const;
 
   private:
     SP<Config::Values::CFloatValue>  m_opacity;
@@ -71,6 +76,8 @@ class RadiantConfig {
     SP<Config::Values::CIntValue>    m_borderSize;
     SP<Config::Values::CStringValue> m_borderColor;
     SP<Config::Values::CStringValue> m_effects;
+    SP<Config::Values::CFloatValue>  m_spacing;
+    SP<Config::Values::CStringValue> m_shelf;
     OmarchyPalette                   m_palette;
     std::string                      m_registrationError;
 };

@@ -386,9 +386,9 @@ SDispatchResult RadiantPlugin::shelf(const std::string& args) {
     if (args.empty() || args == "toggle")
         m_overlay.toggleWorkspaceShelf();
     else if (args == "show" || args == "open")
-        m_overlay.setWorkspaceShelfVisible(true);
+        m_overlay.setWorkspaceShelfVisible(true, true);
     else if (args == "hide" || args == "close")
-        m_overlay.setWorkspaceShelfVisible(false);
+        m_overlay.setWorkspaceShelfVisible(false, true);
     else
         return {.passEvent = false, .success = false, .error = "expected show, hide, or toggle"};
 

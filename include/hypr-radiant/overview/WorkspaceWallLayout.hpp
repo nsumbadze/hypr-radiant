@@ -83,6 +83,8 @@ struct WorkspaceWallOptions {
     std::string  applicationFilter;
 };
 
+[[nodiscard]] WorkspaceWallOptions scaledSpacing(WorkspaceWallOptions options, double multiplier);
+
 class WorkspaceWallLayout {
   public:
     [[nodiscard]] WorkspaceWallFrame compute(

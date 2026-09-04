@@ -574,6 +574,28 @@ void deckArrangementBuildsAHeroAndSupportingColumn() {
     assert(frame.stage.windows.at(1).rect.y < frame.stage.windows.at(2).rect.y);
 }
 
+void scalesOnlySpacingMetrics() {
+    WorkspaceWallOptions options;
+    options.outerPadding = 100.0;
+    options.cardGap = 20.0;
+    options.windowGap = 10.0;
+    options.windowInset = 8.0;
+    assert(scaledSpacing(options, 1.0).outerPadding == 100.0);
+    const auto half = scaledSpacing(options, 0.5);
+    assert(half.outerPadding == 50.0 && half.cardGap == 10.0 && half.windowGap == 5.0 && half.windowInset == 4.0);
+    const auto twice = scaledSpacing(options, 2.0);
+    assert(twice.outerPadding == 200.0 && twice.cardGap == 40.0 && twice.windowGap == 20.0 && twice.windowInset == 16.0);
+
+    const auto state = sampleState();
+    const auto frame = WorkspaceWallLayout{}.compute(state, state.monitors.front(), {.width = 640, .height = 360},
+        scaledSpacing(WorkspaceWallOptions{}, 2.0));
+    for (const auto& workspace : frame.workspaces) {
+        assert(workspace.rect.width >= 0.0 && workspace.rect.height >= 0.0);
+        for (const auto& window : workspace.windows)
+            assert(window.rect.width >= 0.0 && window.rect.height >= 0.0);
+    }
+}
+
 } // namespace
 
 int main() {
@@ -602,6 +624,7 @@ int main() {
     carouselShowsOnlyRealWorkspacesAndOneCreateTarget();
     ribbonMatchesTheOmarchyPickerHierarchy();
     deckArrangementBuildsAHeroAndSupportingColumn();
+    scalesOnlySpacingMetrics();
     std::cout << "WorkspaceWallLayoutTest passed\n";
     return 0;
 }

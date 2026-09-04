@@ -12,6 +12,8 @@ void defaultsFollowExistingConfig() {
     assert(preferences.workspaceView == WorkspaceViewPreference::FollowConfig);
     assert(preferences.windowView == WindowViewPreference::Spatial);
     assert(preferences.motion == MotionPreference::FollowConfig);
+    assert(preferences.chrome == ChromePreference::FollowConfig);
+    assert(preferences.shelf == ShelfPreference::FollowConfig);
     assert(preferences.nativeTheme.empty());
 }
 
@@ -20,11 +22,15 @@ void parsesEveryPreference() {
 workspace_view = workspace_wall
 window_view=grouped
 motion = reduced
+chrome = native
+shelf = always
 native_theme = tokyo-night
 )");
     assert(preferences.workspaceView == WorkspaceViewPreference::WorkspaceWall);
     assert(preferences.windowView == WindowViewPreference::Grouped);
     assert(preferences.motion == MotionPreference::Reduced);
+    assert(preferences.chrome == ChromePreference::Native);
+    assert(preferences.shelf == ShelfPreference::Always);
     assert(preferences.nativeTheme == "tokyo-night");
 }
 
@@ -77,6 +83,19 @@ void validatesNativeThemeSlugs() {
     assert(parsePreferences("native_theme = Tokyo-Night\n").nativeTheme.empty());
 }
 
+void parsesCustomizationPreferences() {
+    assert(parsePreferences("chrome = radiant\n").chrome == ChromePreference::Radiant);
+    assert(parsePreferences("chrome = native\n").chrome == ChromePreference::Native);
+    assert(parsePreferences("chrome = flat\n").chrome == ChromePreference::Flat);
+    assert(parsePreferences("chrome = surprise\n").chrome == ChromePreference::FollowConfig);
+    assert(parsePreferences("shelf = auto\n").shelf == ShelfPreference::Auto);
+    assert(parsePreferences("shelf = always\n").shelf == ShelfPreference::Always);
+    assert(parsePreferences("shelf = hidden\n").shelf == ShelfPreference::Hidden);
+    assert(parsePreferences("shelf = surprise\n").shelf == ShelfPreference::FollowConfig);
+    assert(label(ChromePreference::FollowConfig) == "CONFIG");
+    assert(label(ShelfPreference::Hidden) == "HIDDEN");
+}
+
 void ignoresUnknownKeysAndFallsBackOnUnknownValues() {
     const auto preferences = parsePreferences(R"(
 unknown = preserved-nowhere
@@ -99,6 +118,8 @@ void serializationRoundTrips() {
         .workspaceView = WorkspaceViewPreference::Carousel,
         .windowView = WindowViewPreference::Deck,
         .motion      = MotionPreference::Quattro,
+        .chrome      = ChromePreference::Flat,
+        .shelf       = ShelfPreference::Hidden,
         .nativeTheme = "tokyo-night",
     };
     assert(parsePreferences(serializePreferences(expected)) == expected);
@@ -113,6 +134,7 @@ int main() {
     parsesRibbonWorkspaceView();
     parsesDistinctAnimationProfiles();
     validatesNativeThemeSlugs();
+    parsesCustomizationPreferences();
     ignoresUnknownKeysAndFallsBackOnUnknownValues();
     ignoresLegacyAccentPreference();
     serializationRoundTrips();

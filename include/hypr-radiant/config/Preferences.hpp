@@ -31,10 +31,15 @@ enum class MotionPreference {
     Off,
 };
 
+enum class ChromePreference { FollowConfig, Radiant, Native, Flat };
+enum class ShelfPreference { FollowConfig, Auto, Always, Hidden };
+
 struct PreferencesState {
     WorkspaceViewPreference workspaceView = WorkspaceViewPreference::FollowConfig;
     WindowViewPreference    windowView    = WindowViewPreference::Spatial;
     MotionPreference motion = MotionPreference::FollowConfig;
+    ChromePreference chrome = ChromePreference::FollowConfig;
+    ShelfPreference  shelf  = ShelfPreference::FollowConfig;
     /// Empty follows the desktop's active Omarchy theme. Otherwise this is an installed theme
     /// slug whose palette is applied to Radiant only.
     std::string nativeTheme;
@@ -65,5 +70,7 @@ class PreferencesStore {
 [[nodiscard]] std::string_view label(WorkspaceViewPreference preference);
 [[nodiscard]] std::string_view label(WindowViewPreference preference);
 [[nodiscard]] std::string_view label(MotionPreference preference);
+[[nodiscard]] std::string_view label(ChromePreference preference);
+[[nodiscard]] std::string_view label(ShelfPreference preference);
 
 } // namespace hypr_radiant

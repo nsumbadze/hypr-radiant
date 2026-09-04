@@ -60,7 +60,7 @@ class OverlayRenderer {
     void toggleGroupedMode();
     void togglePreferences();
     [[nodiscard]] PointerAction activatePreference();
-    void setWorkspaceShelfVisible(bool visible);
+    void setWorkspaceShelfVisible(bool visible, bool explicitRequest = false);
     void setHintDockVisible(bool visible);
     void toggleWorkspaceShelf();
     void setWorkspaceShelfGestureProgress(bool revealing, double progress);
@@ -136,6 +136,10 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
     [[nodiscard]] LayoutMode effectiveLayoutMode() const;
+    [[nodiscard]] ChromePreset effectiveChromePreset() const;
+    [[nodiscard]] ShelfMode    effectiveShelfMode() const;
+    [[nodiscard]] bool         shelfAutomationAllowed(bool visible) const;
+    void                       normalizeShelfVisibility();
     [[nodiscard]] int        effectiveAnimationDurationMs() const;
     [[nodiscard]] AnimationCurve effectiveAnimationCurve() const;
     void applyMotionProfile();

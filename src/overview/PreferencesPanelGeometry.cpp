@@ -14,9 +14,17 @@ bool contains(const LayoutRect& rect, double x, double y) {
 PreferencesPanelFrame computePreferencesPanel(
     const LayoutRect& monitorBounds, bool includeWindowArrangement, int nativeThemeOptionCount) {
     const auto showNativeThemes = nativeThemeOptionCount > 0;
+    std::vector<PreferenceControl> controls{PreferenceControl::WorkspaceView};
+    if (includeWindowArrangement) {
+        controls.push_back(PreferenceControl::WindowView);
+        controls.push_back(PreferenceControl::Shelf);
+    }
+    controls.push_back(PreferenceControl::Motion);
+    controls.push_back(PreferenceControl::Chrome);
+    if (showNativeThemes)
+        controls.push_back(PreferenceControl::NativeTheme);
     const auto preferredWidth = showNativeThemes ? 820.0 : 720.0;
-    const auto preferredHeight = showNativeThemes ? includeWindowArrangement ? 362.0 : 302.0 : includeWindowArrangement ? 302.0
-                                                                                                           : 242.0;
+    const auto preferredHeight = 122.0 + static_cast<double>(controls.size()) * 60.0;
     constexpr auto outerMargin     = 28.0;
 
     const auto width  = std::max(1.0, std::min(preferredWidth, monitorBounds.width - outerMargin * 2.0));
@@ -36,13 +44,6 @@ PreferencesPanelFrame computePreferencesPanel(
     const auto rowWidth = innerWidth;
     const auto paneY = panel.y + 46.0 * verticalScale;
     const auto paneHeight = std::max(1.0, panel.height - 68.0 * verticalScale);
-    std::vector<PreferenceControl> controls{PreferenceControl::WorkspaceView};
-    if (includeWindowArrangement)
-        controls.push_back(PreferenceControl::WindowView);
-    controls.push_back(PreferenceControl::Motion);
-    if (showNativeThemes)
-        controls.push_back(PreferenceControl::NativeTheme);
-
     PreferencesPanelFrame frame{
         .panel = panel,
         .closeButton = {
@@ -81,6 +82,9 @@ PreferencesPanelFrame computePreferencesPanel(
             return 4;
         case PreferenceControl::WindowView:
             return 3;
+        case PreferenceControl::Shelf:
+        case PreferenceControl::Chrome:
+            return 4;
         case PreferenceControl::Motion:
             return 7;
         case PreferenceControl::NativeTheme:
@@ -92,7 +96,7 @@ PreferencesPanelFrame computePreferencesPanel(
         }
         return 0;
     };
-    frame.options.reserve((includeWindowArrangement ? 14 : 11) + (showNativeThemes ? 3 : 0));
+    frame.options.reserve(controls.size() * 4);
     for (const auto& row : frame.rows) {
         const auto optionCount = optionCountFor(row.control);
         constexpr auto optionGap = 6.0;
