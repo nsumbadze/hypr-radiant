@@ -155,7 +155,9 @@ Press `Ctrl+,` while the overview is open. The native Omarchy-style panel contro
 
 - Stage, Workspace Wall, Workspace Carousel, or the Omarchy-inspired Ribbon
 - In Stage, Spatial, application-grouped, or hero-and-supporting Deck window arrangement
+- In Stage, Config, Auto, Always, or Hidden workspace shelf behavior
 - Default, Snap, Glitch, Lightcycle, Silk, Reduced, or Off overview animations
+- Config, Radiant, Native, or Flat overlay chrome
 - Any installed Omarchy theme for Radiant, without changing the desktop theme
 - App Exposé for the focused application
 
@@ -164,6 +166,9 @@ Changes are saved immediately to
 survive plugin and Hyprland restarts. `CURRENT` follows Quattro's active
 `~/.local/state/omarchy/current/theme/colors.toml`; selecting an installed theme
 applies its palette to Radiant only.
+The Chrome and Shelf rows use `CONFIG` to follow their `plugin:radiant:*`
+options; any other choice overrides the corresponding option. Shelf is shown
+only for Stage.
 
 <!-- SCREENSHOT SLOT: assets/gifs/settings.gif -->
 ![Quattro settings panel](assets/gifs/settings.gif)
@@ -216,11 +221,18 @@ With the keyboard:
 
 - `Left` / `Right` move along the workspace shelf
 - `Down` drops into the windows of the selected workspace, `Up` goes back
+- With `window_navigation = spatial`, arrows choose windows by geometry. Moving
+  `Up` from the top row reveals an Auto shelf; moving back `Down` hides that
+  keyboard-revealed shelf
 - `1`–`9` jump straight to a workspace
 - Start typing to search windows by title or class
 - `/` opens search with every window listed, and types a slash once search is open,
   so window titles that contain a path stay searchable
 - `Tab` cycles Spatial, Grouped, and Deck window arrangements in Stage
+- With `vim_keys = 1`, `h`/`j`/`k`/`l` mirror the arrows. This disables automatic
+  type-to-search outside search; use `/` first, where all four letters type normally
+- With `tab_cycles_windows = 1`, `Tab` and `Shift+Tab` cycle windows while
+  `Ctrl+Tab` continues to cycle Stage arrangements
 - `Ctrl+,` opens or closes preferences
 - In preferences, `Left` / `Right` change and save a value; `Enter` confirms it and closes the panel
 - `Enter` activates the selection
@@ -245,6 +257,16 @@ if hl.plugin.radiant then
                 gesture_enabled = true,
                 gesture_fingers = 3,
                 gesture_distance = 300,
+                chrome = "radiant",
+                rounding = -1,
+                border_size = -1,
+                border_color = "auto",
+                effects = "auto",
+                spacing = 1.0,
+                shelf = "auto",
+                window_navigation = "list",
+                vim_keys = false,
+                tab_cycles_windows = false,
             },
         },
     })
@@ -266,6 +288,16 @@ plugin {
         gesture_enabled = true
         gesture_fingers = 3
         gesture_distance = 300
+        chrome = radiant
+        rounding = -1
+        border_size = -1
+        border_color = auto
+        effects = auto
+        spacing = 1.0
+        shelf = auto
+        window_navigation = list
+        vim_keys = 0
+        tab_cycles_windows = 0
     }
 }
 ```
@@ -281,12 +313,52 @@ plugin {
 | `gesture_enabled` | Trackpad swipe capture |
 | `gesture_fingers` | `3` or `4` |
 | `gesture_distance` | Swipe travel in pixels, `120` to `800` |
+| `chrome` | `radiant`, `native`, or `flat`; Native mirrors Hyprland decoration values when the overview opens |
+| `rounding` | `-1` follows the preset, otherwise `0` to `40` |
+| `border_size` | `-1` follows the preset, otherwise `0` to `12` |
+| `border_color` | `auto` follows the preset, or use any supported colour string for selected borders |
+| `effects` | `auto`, `on`, or `off`; Auto enables effects for Radiant and disables them for Native and Flat |
+| `spacing` | Card padding and gap multiplier, `0.5` to `2.0` |
+| `shelf` | `auto`, `always`, or `hidden`; `radiant:shelf` remains an explicit override |
+| `window_navigation` | `list` preserves the original order-based behavior; `spatial` uses window geometry |
+| `vim_keys` | Enable `h`, `j`, `k`, and `l` navigation |
+| `tab_cycles_windows` | Make Tab cycle windows and keep arrangement switching on Ctrl+Tab |
 
 Radiant's accent always follows the selected Omarchy theme. If no Omarchy theme
 can be read, the colours fall back to a neutral grey. The palette is re-read
 every time the overview or preferences open, so switching themes does not need
 a reload. Installed themes are discovered from Omarchy's stock and user theme
 directories.
+
+### Omarchy-native recipe
+
+`native` follows `decoration:rounding`, `general:border_size`, and the active
+and inactive border gradients, including their angle. Values are sampled when
+the overview opens, so close and reopen it after changing them:
+
+```ini
+plugin {
+    radiant {
+        chrome = native
+        spacing = 0.8
+        shelf = always
+        window_navigation = spatial
+    }
+}
+```
+
+For an explicitly square variant independent of the active Hyprland theme, use
+`chrome = flat`, `rounding = 0`, and `border_size = 3`. To preview Native from
+the command line with Omarchy's Lua config:
+
+```sh
+hyprctl eval 'hl.config({ plugin = { radiant = { chrome = "native" } } })'
+```
+
+With a legacy `.conf` config, use
+`hyprctl keyword plugin:radiant:chrome native` instead. Close and reopen Radiant
+after either command. Native falls back to Flat for the session if the running
+Hyprland version does not expose its decoration values.
 
 The settings panel starts by following these Hyprland values. Choosing Stage,
 Wall, Carousel, or Ribbon saves that view as the preference. `CURRENT` follows
@@ -422,7 +494,7 @@ Run `hyprctl reload` afterward to restore the values from your configuration.
 
 ## Tests
 
-The layout, geometry, search, gesture and theme logic is kept separate from
+The layout, geometry, search, gesture, chrome-style and theme logic is kept separate from
 Hyprland, so most of it runs without a compositor:
 
 ```sh
