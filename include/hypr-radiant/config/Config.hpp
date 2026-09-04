@@ -2,6 +2,7 @@
 
 #include <hypr-radiant/config/Color.hpp>
 #include <hypr-radiant/config/OmarchyPalette.hpp>
+#include <hypr-radiant/render/ChromeStyle.hpp>
 
 #include <hyprland/src/config/values/types/FloatValue.hpp>
 #include <hyprland/src/config/values/types/IntValue.hpp>
@@ -48,6 +49,11 @@ class RadiantConfig {
     [[nodiscard]] int             gestureFingers() const;
     [[nodiscard]] double          gestureDistance() const;
     [[nodiscard]] bool            shortcutEnabled() const;
+    [[nodiscard]] ChromePreset    chromePreset() const;
+    [[nodiscard]] int             roundingOverride() const;
+    [[nodiscard]] int             borderSizeOverride() const;
+    [[nodiscard]] std::optional<RadiantRgba> borderColorOverride() const;
+    [[nodiscard]] EffectsMode     effectsMode() const;
 
   private:
     SP<Config::Values::CFloatValue>  m_opacity;
@@ -60,6 +66,11 @@ class RadiantConfig {
     SP<Config::Values::CIntValue>    m_gestureFingers;
     SP<Config::Values::CFloatValue>  m_gestureDistance;
     SP<Config::Values::CIntValue>    m_shortcutEnabled;
+    SP<Config::Values::CStringValue> m_chrome;
+    SP<Config::Values::CIntValue>    m_rounding;
+    SP<Config::Values::CIntValue>    m_borderSize;
+    SP<Config::Values::CStringValue> m_borderColor;
+    SP<Config::Values::CStringValue> m_effects;
     OmarchyPalette                   m_palette;
     std::string                      m_registrationError;
 };

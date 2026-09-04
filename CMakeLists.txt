@@ -78,7 +78,9 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
         src/overview/AppIdentity.cpp
         src/config/Color.cpp
         src/config/Config.cpp
+        src/config/HyprlandDecoration.cpp
         src/render/FadeAnimation.cpp
+        src/render/ChromeStyle.cpp
         src/config/OmarchyPalette.cpp
         src/config/Preferences.cpp
         src/input/GestureController.cpp
@@ -115,6 +117,7 @@ if(HYPR_RADIANT_BUILD_PLUGIN)
     target_compile_definitions(hypr-radiant
         PRIVATE
             HYPR_RADIANT_HYPRLAND_STATE_API=${HYPR_RADIANT_HYPRLAND_STATE_API}
+            HYPR_RADIANT_HYPRLAND_CONFIG_VALUE_BASE=${HYPR_RADIANT_HYPRLAND_CONFIG_VALUE_BASE}
     )
 
     hypr_radiant_enable_warnings(hypr-radiant)
@@ -152,6 +155,17 @@ if(BUILD_TESTING)
     hypr_radiant_enable_sanitizers(hypr-radiant-layout-tests)
 
     add_test(NAME hypr-radiant-layout-tests COMMAND hypr-radiant-layout-tests)
+
+    add_executable(hypr-radiant-chrome-style-tests
+        tests/ChromeStyleTest.cpp
+        src/render/ChromeStyle.cpp
+    )
+    target_include_directories(hypr-radiant-chrome-style-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+    target_compile_features(hypr-radiant-chrome-style-tests PRIVATE cxx_std_23)
+    target_compile_options(hypr-radiant-chrome-style-tests PRIVATE -UNDEBUG)
+    hypr_radiant_enable_warnings(hypr-radiant-chrome-style-tests)
+    hypr_radiant_enable_sanitizers(hypr-radiant-chrome-style-tests)
+    add_test(NAME hypr-radiant-chrome-style-tests COMMAND hypr-radiant-chrome-style-tests)
 
     add_executable(hypr-radiant-hit-tests
         tests/HitTesterTest.cpp
@@ -197,6 +211,7 @@ if(BUILD_TESTING)
             src/config/Color.cpp
             src/config/Config.cpp
             src/config/OmarchyPalette.cpp
+            src/render/ChromeStyle.cpp
         )
 
         target_include_directories(hypr-radiant-config-tests

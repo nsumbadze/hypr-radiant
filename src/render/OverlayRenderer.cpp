@@ -140,6 +140,24 @@ void drawBorder(const CBox& box, CHyprColor from, CHyprColor to, float angle, fl
     g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
 }
 
+void drawBorder(const CBox& box, const BorderGradient& gradient, float alpha, int round, int borderSize) {
+    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0 || gradient.stops.empty())
+        return;
+
+    std::vector<CHyprColor> colors;
+    colors.reserve(gradient.stops.size());
+    for (const auto& stop : gradient.stops)
+        colors.emplace_back(stop.red, stop.green, stop.blue, stop.alpha);
+
+    CBorderPassElement::SBorderData border;
+    border.box        = box;
+    border.grad1      = Config::CGradientValueData{std::move(colors), gradient.angle};
+    border.a          = alpha;
+    border.round      = round;
+    border.borderSize = borderSize;
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(border));
+}
+
 CHyprColor withAlpha(CHyprColor color, double multiplier) {
     color.a *= multiplier;
     return color;
@@ -367,6 +385,47 @@ WorkspaceWallOptions layoutOptionsFor(LayoutMode mode, std::int64_t previewWorks
 OverlayRenderer::OverlayRenderer(RadiantConfig& config, PreferencesStore& preferences) :
     m_config(config), m_preferences(preferences), m_labels(config) {}
 
+void OverlayRenderer::refreshChromeStyle() {
+    const auto preset = m_config.chromePreset();
+    m_chrome = resolveChromeStyle({
+        .preset = preset,
+        .roundingOverride = m_config.roundingOverride(),
+        .borderSizeOverride = m_config.borderSizeOverride(),
+        .borderColorOverride = m_config.borderColorOverride(),
+        .effects = m_config.effectsMode(),
+        .native = preset == ChromePreset::Native ? m_decoration.read() : std::nullopt,
+    });
+    if (m_chrome.nativeUnavailable && !m_nativeWarningIssued) {
+        log::warn("native chrome is unavailable; using the flat preset for this session");
+        m_nativeWarningIssued = true;
+    }
+}
+
+void OverlayRenderer::drawChromeRect(
+    const CBox& box, CHyprColor color, const CRegion& damage, int radiantRound, bool blur) const {
+    drawRect(box, color, damage, m_chrome.radius(radiantRound), blur && m_chrome.effects);
+}
+
+void OverlayRenderer::drawSelectedBorder(const CBox& box, CHyprColor fallback, int radiantRound, int radiantWidth, int outset) const {
+    const auto round = m_chrome.rounding ? m_chrome.radius(radiantRound, outset) : radiantRound;
+    if (m_chrome.selectedBorder) {
+        drawBorder(box, *m_chrome.selectedBorder, static_cast<float>(fallback.a),
+            round, m_chrome.borderWidth(radiantWidth));
+        return;
+    }
+    drawBorder(box, fallback, round, m_chrome.borderWidth(radiantWidth));
+}
+
+void OverlayRenderer::drawInactiveBorder(const CBox& box, CHyprColor fallback, int radiantRound, int radiantWidth, int outset) const {
+    const auto round = m_chrome.rounding ? m_chrome.radius(radiantRound, outset) : radiantRound;
+    if (m_chrome.inactiveBorder) {
+        drawBorder(box, *m_chrome.inactiveBorder, static_cast<float>(fallback.a),
+            round, m_chrome.borderWidth(radiantWidth));
+        return;
+    }
+    drawBorder(box, fallback, round, m_chrome.borderWidth(radiantWidth));
+}
+
 void OverlayRenderer::install() {
     if (!Event::bus())
         throw std::runtime_error{"hypr-radiant: Hyprland event bus is not available"};
@@ -390,6 +449,8 @@ void OverlayRenderer::uninstall() {
 void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::string applicationFilter, int stageDurationMs,
     const std::function<OverviewTarget(const WorkspaceWallFrame&)>& selectInitial) {
     applyMotionProfile();
+    m_nativeWarningIssued = false;
+    refreshChromeStyle();
     m_mode              = mode;
     m_applicationFilter = std::move(applicationFilter);
     m_state             = std::move(state);
@@ -1285,7 +1346,7 @@ void OverlayRenderer::renderCurrentMonitor(double alpha) {
         effectiveLayoutMode() == LayoutMode::Ribbon)
         backdrop = tintedSurface(backdrop, resolvedAccentColor(), 0.08);
     backdrop.a *= backdropAlpha;
-    drawRect(box, backdrop, damage, 0, true);
+    drawChromeRect(box, backdrop, damage, 0, true);
 
     const auto* frame = frameForMonitor(monitor->m_id);
     if (!frame)
@@ -1533,7 +1594,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         const auto cardAlpha    = contentAlpha * cardEntrance * (ribbonBlade ? 0.62 : carouselThumbnail ? 0.80 : 1.0);
         const auto detailAlpha  = cardAlpha * typographyFade;
 
-        if ((ownsSelection || workspace.active || carouselFocused) && !compact) {
+        if (m_chrome.effects && (ownsSelection || workspace.active || carouselFocused) && !compact) {
             const auto glowStrength = carouselFocused ? 0.065 : workspaceSelected ? 0.075 * selection : workspace.active ? 0.032 : 0.02 * selection;
             const auto spread       = carouselFocused ? 10.0 : workspaceSelected ? 11.0 : 7.0;
             const auto glowBox = CBox{
@@ -1546,7 +1607,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         }
 
         const auto shadowLift = workspaceSelected ? 9.0 * selection : ownsSelection ? 4.0 * selection : 0.0;
-        if (!carouselThumbnail || ribbonBlade) {
+        if (m_chrome.effects && (!carouselThumbnail || ribbonBlade)) {
             drawRect(CBox{workspaceBox.x + 5.0, workspaceBox.y + 7.0 + shadowLift * 0.30, workspaceBox.w, workspaceBox.h},
                 withAlpha(Theme::shadowColor(), cardAlpha * (ribbonBlade ? 0.50 : 0.34 + hoverLift * 0.12)), damage, round + 2);
         }
@@ -1562,14 +1623,17 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         // The narrow Ribbon blades overlap heavily, so blurring each one separately multiplies
         // sampling work without producing a readable difference at that width. The hero remains
         // frosted; blades use the already-tinted opaque surface beneath their live texture.
-        drawRect(workspaceBox, cardSurface, damage, round, !ribbonBlade);
+        drawChromeRect(workspaceBox, cardSurface, damage, round, !ribbonBlade);
 
         // Hairlines establish the card edge. The focused carousel card uses small corner locks as
         // its only bright signal, echoing Quattro's restrained theme-switcher selection state.
-        drawBorder(workspaceBox, withAlpha(foreground, cardAlpha * (ribbonBlade ? 0.16 : 0.065)), round, 1);
+        drawInactiveBorder(workspaceBox, withAlpha(foreground, cardAlpha * (ribbonBlade ? 0.16 : 0.065)), round, 1);
         if (carouselFocused) {
-            drawBorder(workspaceBox, withAlpha(accentLit, cardAlpha * 0.62), withAlpha(accent, cardAlpha * 0.18),
-                2.62F, static_cast<float>(cardAlpha * 0.76), round, ribbonFocused ? 3 : 2);
+            if (m_chrome.selectedBorder)
+                drawSelectedBorder(workspaceBox, withAlpha(accentLit, cardAlpha * 0.76), round, ribbonFocused ? 3 : 2);
+            else
+                drawBorder(workspaceBox, withAlpha(accentLit, cardAlpha * 0.62), withAlpha(accent, cardAlpha * 0.18),
+                    2.62F, static_cast<float>(cardAlpha * 0.76), m_chrome.radius(round), m_chrome.borderWidth(ribbonFocused ? 3 : 2));
         }
         if (ribbonBlade) {
             // A bright leading edge and darker trailing edge give the narrow surface the same
@@ -1591,7 +1655,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             const auto ghostOffset = workspaceIndex % 2 == 0 ? -10.0 : 10.0;
             const auto ghostBox = CBox{workspaceBox.x + ghostOffset * entranceSignal, workspaceBox.y,
                 workspaceBox.w, workspaceBox.h};
-            drawBorder(ghostBox, withAlpha(accentLit, cardAlpha * 0.20 * entranceSignal), round, 1);
+            drawSelectedBorder(ghostBox, withAlpha(accentLit, cardAlpha * 0.20 * entranceSignal), round, 1);
         } else if (motion == MotionPreference::Tron && entranceSignal > 0.001) {
             const auto scanX = workspaceBox.x + workspaceBox.w * cardEntrance;
             drawRect(CBox{scanX, workspaceBox.y + 5.0, 2.0, std::max(1.0, workspaceBox.h - 10.0)},
@@ -1606,10 +1670,11 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             // Destination cue: a halo, a full accent ring and an inset rail, all keyed to the same
             // progress so the card the pointer entered lights up rather than switching on.
             const auto spread = std::lerp(4.0, 14.0, drop);
-            drawRect(CBox{workspaceBox.x - spread, workspaceBox.y - spread, workspaceBox.w + spread * 2.0, workspaceBox.h + spread * 2.0},
-                withAlpha(accent, cardAlpha * 0.12 * drop), damage, round + static_cast<int>(spread));
-            drawBorder(workspaceBox, withAlpha(accentLit, cardAlpha * std::lerp(0.20, 0.86, drop)), round, 2);
-            drawBorder(insetBox(workspaceBox, 7.0), withAlpha(accent, cardAlpha * 0.26 * drop), std::max(1, round - 5), 1);
+            if (m_chrome.effects)
+                drawChromeRect(CBox{workspaceBox.x - spread, workspaceBox.y - spread, workspaceBox.w + spread * 2.0, workspaceBox.h + spread * 2.0},
+                    withAlpha(accent, cardAlpha * 0.12 * drop), damage, round + static_cast<int>(spread));
+            drawSelectedBorder(workspaceBox, withAlpha(accentLit, cardAlpha * std::lerp(0.20, 0.86, drop)), round, 2);
+            drawSelectedBorder(insetBox(workspaceBox, 7.0), withAlpha(accent, cardAlpha * 0.26 * drop), std::max(1, round - 5), 1, -5);
         }
 
         const auto headerHeight = frame.ribbon ? 0.0 : compact ? 26.0 : carouselFocused ? std::clamp(workspaceBox.h * 0.105, 40.0, 52.0) :
@@ -1656,7 +1721,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                 if (window.stableId != workspace.windows.front().stableId)
                     continue;
                 const auto previewShell = insetBox(workspaceBox, 3.0);
-                drawRect(previewShell, surfaceColor(0.08F, cardAlpha * 0.90), damage, 1);
+                drawChromeRect(previewShell, surfaceColor(0.08F, cardAlpha * 0.90), damage, 1);
                 renderWindowPreview(window, previewShell, cardAlpha * 0.82, damage);
                 continue;
             }
@@ -1684,15 +1749,16 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             const auto windowAlpha  = dragged ? cardAlpha * std::lerp(1.0, 0.16, dragLift) : cardAlpha;
             const auto windowDetail = dragged ? detailAlpha * std::lerp(1.0, 0.16, dragLift) : detailAlpha;
 
-            if (windowSelected)
-                drawRect(CBox{windowBox.x - 6.0, windowBox.y - 6.0, windowBox.w + 12.0, windowBox.h + 12.0},
+            if (m_chrome.effects && windowSelected)
+                drawChromeRect(CBox{windowBox.x - 6.0, windowBox.y - 6.0, windowBox.w + 12.0, windowBox.h + 12.0},
                     withAlpha(accent, windowAlpha * 0.055 * selection), damage, windowRound + 6);
-            drawRect(CBox{windowBox.x + 3.0, windowBox.y + 5.0 + selection * (windowSelected ? 2.0 : 0.0), windowBox.w, windowBox.h},
-                withAlpha(Theme::shadowColor(), windowAlpha * (windowSelected ? 0.52 : 0.34)), damage, windowRound + 2);
+            if (m_chrome.effects)
+                drawChromeRect(CBox{windowBox.x + 3.0, windowBox.y + 5.0 + selection * (windowSelected ? 2.0 : 0.0), windowBox.w, windowBox.h},
+                    withAlpha(Theme::shadowColor(), windowAlpha * (windowSelected ? 0.52 : 0.34)), damage, windowRound + 2);
 
             auto windowSurface = surfaceColor(windowSelected ? 0.25F : 0.19F, windowAlpha * 0.82);
             windowSurface = tintedSurface(windowSurface, accent, windowSelected ? 0.18 * selection : 0.055);
-            drawRect(windowBox, windowSurface, damage, windowRound);
+            drawChromeRect(windowBox, windowSurface, damage, windowRound);
 
             if (carouselThumbnail && (!compact || ribbonBlade) && windowBox.h > 28.0) {
                 const auto previewShell = CBox{
@@ -1701,7 +1767,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                     std::max(1.0, windowBox.w - 10.0),
                     std::max(1.0, windowBox.h - 10.0),
                 };
-                drawRect(previewShell, surfaceColor(0.08F, windowAlpha * 0.92), damage, std::max(2, windowRound - 2));
+                drawChromeRect(previewShell, surfaceColor(0.08F, windowAlpha * 0.92), damage, std::max(2, windowRound - 2));
                 renderWindowPreview(window, previewShell, windowAlpha, damage);
             } else if (!compact && windowBox.h > 88.0) {
                 const auto previewShell = CBox{
@@ -1710,7 +1776,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                     std::max(1.0, windowBox.w - 14.0),
                     std::max(1.0, windowBox.h - footerHeight - 10.0),
                 };
-                drawRect(previewShell, surfaceColor(0.08F, windowAlpha * 0.92), damage, windowRound - 2);
+                drawChromeRect(previewShell, surfaceColor(0.08F, windowAlpha * 0.92), damage, windowRound - 2);
                 renderWindowPreview(window, previewShell, windowAlpha, damage);
 
                 m_labels.renderColored(appGlyph(window.appClass), windowBox.x + 11.0, windowBox.y + windowBox.h - footerHeight + 8.0,
@@ -1726,11 +1792,11 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
             if (dragged) {
                 // Outline of the vacated slot, so the wall keeps showing where the window came from
                 // and where a cancelled drag will put it back.
-                drawBorder(boxFor(slotRect), withAlpha(accent, cardAlpha * 0.34 * dragLift), windowRound, 1);
+                drawSelectedBorder(boxFor(slotRect), withAlpha(accent, cardAlpha * 0.34 * dragLift), windowRound, 1);
             }
 
             if (windowSelected) {
-                drawBorder(windowBox, withAlpha(accentLit, windowAlpha * std::lerp(0.22, 0.66, selection)),
+                drawSelectedBorder(windowBox, withAlpha(accentLit, windowAlpha * std::lerp(0.22, 0.66, selection)),
                     windowRound, 1);
                 drawRect(CBox{windowBox.x + 12.0, windowBox.y, std::min(72.0, windowBox.w * 0.34), 1.0},
                     withAlpha(accentLit, windowAlpha * 0.78 * selection), damage, 1);
@@ -1762,9 +1828,10 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                 captionWidth,
                 captionHeight,
             };
-            drawRect(CBox{caption.x + 2.0, caption.y + 3.0, caption.w, caption.h}, withAlpha(Theme::shadowColor(), cardAlpha * 0.50 * drop), damage, 10);
-            drawRect(caption, withAlpha(tintedSurface(surfaceColor(0.10F, 1.0), accent, 0.22), cardAlpha * 0.94 * drop), damage, 10);
-            drawBorder(caption, withAlpha(accent, cardAlpha * 0.44 * drop), 10, 1);
+            if (m_chrome.effects)
+                drawChromeRect(CBox{caption.x + 2.0, caption.y + 3.0, caption.w, caption.h}, withAlpha(Theme::shadowColor(), cardAlpha * 0.50 * drop), damage, 10);
+            drawChromeRect(caption, withAlpha(tintedSurface(surfaceColor(0.10F, 1.0), accent, 0.22), cardAlpha * 0.94 * drop), damage, 10);
+            drawSelectedBorder(caption, withAlpha(accent, cardAlpha * 0.44 * drop), 10, 1);
             m_labels.renderCentered(workspace.createTarget ? "NEW WORKSPACE" : "MOVE HERE", caption, Theme::badgeSize(),
                 accentLit, cardAlpha * drop, damage);
         }
@@ -1835,13 +1902,18 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
         const auto dock  = CBox{centered(frame.bounds.width, dockWidth), dockY, dockWidth, dockHeight};
         const auto radius = static_cast<int>(std::round(dockHeight / 2.0));
 
-        drawRect(CBox{dock.x - 3.0, dock.y + 9.0, dock.w + 6.0, dock.h},
-            withAlpha(Theme::shadowColor(), dockAlpha * 0.40), damage, radius + 6);
-        drawRect(CBox{dock.x + 3.0, dock.y + 5.0, dock.w - 6.0, dock.h},
-            withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
-        drawRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
-        drawBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), rimShade, rimAngle,
-            static_cast<float>(dockAlpha * 0.55), radius, 1);
+        if (m_chrome.effects) {
+            drawChromeRect(CBox{dock.x - 3.0, dock.y + 9.0, dock.w + 6.0, dock.h},
+                withAlpha(Theme::shadowColor(), dockAlpha * 0.40), damage, radius + 6);
+            drawChromeRect(CBox{dock.x + 3.0, dock.y + 5.0, dock.w - 6.0, dock.h},
+                withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
+        }
+        drawChromeRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
+        if (m_chrome.inactiveBorder)
+            drawInactiveBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), radius, 1);
+        else
+            drawBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), rimShade, rimAngle,
+                static_cast<float>(dockAlpha * 0.55), m_chrome.radius(radius), m_chrome.borderWidth(1));
 
         auto cursorX = dock.x + dockPadX;
         for (std::size_t i = 0; i < hints.size(); ++i) {
@@ -1873,7 +1945,7 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
     drawRect(CBox{0.0, 0.0, frame.bounds.width, frame.bounds.height}, dim, damage);
     constexpr auto panelRadius = 0;
     const auto     panelSurface = surfaceColor(0.0F, panelAlpha * 0.985);
-    drawRect(panelBox, panelSurface, damage, panelRadius, true);
+    drawRect(panelBox, panelSurface, damage, panelRadius, m_chrome.effects);
     drawBorder(panelBox, withAlpha(foreground, panelAlpha * 0.24), panelRadius, 1);
     constexpr auto signalLength = 64.0;
     drawRect(CBox{panelBox.x, panelBox.y, signalLength, 2.0}, withAlpha(accent, panelAlpha * 0.94), damage);
@@ -2073,15 +2145,17 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
         const auto lift = selected ? ctx.selectionTransition : 0.0;
         // Two shadow layers: a wide ambient one plus a tighter contact shadow, so cards float
         // instead of sitting flat on the backdrop.
-        drawRect(CBox{windowBox.x - 4.0, windowBox.y + 6.0 + lift * 8.0, windowBox.w + 8.0, windowBox.h + 8.0},
-            withAlpha(Theme::shadowColor(), windowAlpha * (0.34 + lift * 0.24)), damage, radius + 10);
-        drawRect(CBox{windowBox.x + 5.0, windowBox.y + 9.0 + lift * 5.0, windowBox.w, windowBox.h},
-            withAlpha(Theme::shadowColor(), windowAlpha * (0.62 + lift * 0.20)), damage, radius + 2);
-        if (selected) {
-            drawRect(CBox{windowBox.x - 8.0, windowBox.y - 8.0, windowBox.w + 16.0, windowBox.h + 16.0},
+        if (m_chrome.effects) {
+            drawChromeRect(CBox{windowBox.x - 4.0, windowBox.y + 6.0 + lift * 8.0, windowBox.w + 8.0, windowBox.h + 8.0},
+                withAlpha(Theme::shadowColor(), windowAlpha * (0.34 + lift * 0.24)), damage, radius + 10);
+            drawChromeRect(CBox{windowBox.x + 5.0, windowBox.y + 9.0 + lift * 5.0, windowBox.w, windowBox.h},
+                withAlpha(Theme::shadowColor(), windowAlpha * (0.62 + lift * 0.20)), damage, radius + 2);
+        }
+        if (m_chrome.effects && selected) {
+            drawChromeRect(CBox{windowBox.x - 8.0, windowBox.y - 8.0, windowBox.w + 16.0, windowBox.h + 16.0},
                 withAlpha(ctx.accent, cardAlpha * 0.10 * ctx.selectionTransition), damage, radius + 8);
         }
-        drawRect(windowBox, withAlpha(ctx.stageSurface, windowAlpha), damage, radius);
+        drawChromeRect(windowBox, withAlpha(ctx.stageSurface, windowAlpha), damage, radius);
         renderWindowPreview(window, windowBox, windowAlpha, damage);
         // Glass top edge: a hairline highlight along the upper border, the glass card cue that
         // separates a floating surface from a flat rectangle.
@@ -2089,10 +2163,11 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
             surfaceColor(0.60F, windowAlpha * 0.20), damage);
 
         if (selected) {
-            drawBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(ctx.accent, cardAlpha * 0.82),
+            drawSelectedBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(ctx.accent, cardAlpha * 0.82),
                 radius + 1, 1);
             drawSignalLock(displayRect, ctx.selectionTransition, ctx.accent, windowAlpha, damage);
-        }
+        } else if (m_chrome.inactiveBorder)
+            drawInactiveBorder(windowBox, withAlpha(ctx.accent, cardAlpha), radius, 1);
 
         // Drawn after the preview so it sits over the thumbnail rather than under it.
         const auto closeProgress = window.stableId == m_closeButtonWindowId ? std::clamp(m_closeButtonTransition.value(), 0.0, 1.0) : 0.0;
@@ -2121,16 +2196,17 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
 
                 // Hot reads as a halo outside the button instead of extra size: decoration can
                 // safely overhang the hotspot, geometry cannot.
-                if (hotProgress > 0.001)
-                    drawRect(CBox{closeBox.x - 5.0, closeBox.y - 5.0, closeBox.w + 10.0, closeBox.h + 10.0},
+                if (m_chrome.effects && hotProgress > 0.001)
+                    drawChromeRect(CBox{closeBox.x - 5.0, closeBox.y - 5.0, closeBox.w + 10.0, closeBox.h + 10.0},
                         withAlpha(ctx.accent, reveal * 0.24 * hotProgress), damage, dot + 5);
-                drawRect(CBox{closeBox.x + 1.0, closeBox.y + 2.0, closeBox.w, closeBox.h},
-                    withAlpha(Theme::shadowColor(), reveal * 0.42), damage, dot);
+                if (m_chrome.effects)
+                    drawChromeRect(CBox{closeBox.x + 1.0, closeBox.y + 2.0, closeBox.w, closeBox.h},
+                        withAlpha(Theme::shadowColor(), reveal * 0.42), damage, dot);
                 // Rests as a neutral surface and crossfades into the ctx.accent under the pointer.
                 const auto fill = tintedSurface(surfaceColor(0.34F, 1.0), ctx.accent, hotProgress * 0.94);
                 // Blur is rectangular before Hyprland applies the corner mask, which leaves a
                 // grey square around this fully round control on hover.
-                drawRect(closeBox, withAlpha(fill, reveal * 0.94), damage, dot);
+                drawChromeRect(closeBox, withAlpha(fill, reveal * 0.94), damage, dot);
 
                 const auto glyphColor = tintedSurface(m_config.foregroundColor(), m_config.backgroundColor(), hotProgress);
                 const auto glyphSize  = m_labels.measure(CLOSE_GLYPH, GLYPH_MEASURE_WIDTH, Theme::hintSize(), glyphColor);
@@ -2150,8 +2226,9 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
         auto titleSurface = tintedSurface(ctx.railSurface, ctx.accent, selected ? 0.18 : 0.04);
         // Follows the card's own alpha, so a lifted window does not leave a fully lit title sitting
         // under the hole it came out of.
-        drawRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), windowAlpha * 0.52), damage, 9);
-        drawRect(titleBox, withAlpha(titleSurface, windowAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
+        if (m_chrome.effects)
+            drawChromeRect(CBox{titleBox.x + 3.0, titleBox.y + 4.0, titleBox.w, titleBox.h}, withAlpha(Theme::shadowColor(), windowAlpha * 0.52), damage, 9);
+        drawChromeRect(titleBox, withAlpha(titleSurface, windowAlpha * (selected ? 0.96 : 0.78)), damage, 9, true);
         if (selected)
             drawRect(CBox{titleBox.x + 12.0, titleBox.y + titleBox.h - 1.0, std::max(1.0, titleBox.w - 24.0), 1.0}, withAlpha(ctx.accent, windowAlpha * 0.64), damage, 1);
         m_labels.renderColored(appGlyph(window.appClass), titleBox.x + 11.0, titleBox.y + 6.0,
@@ -2230,18 +2307,19 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
         const auto cardBox  = boxFor(displayRect);
         const auto radius   = Theme::workspaceRadius(true);
 
-        if (selected && !workspace.createTarget) {
-            drawRect(CBox{cardBox.x - 16.0, cardBox.y - 16.0, cardBox.w + 32.0, cardBox.h + 32.0},
+        if (m_chrome.effects && selected && !workspace.createTarget) {
+            drawChromeRect(CBox{cardBox.x - 16.0, cardBox.y - 16.0, cardBox.w + 32.0, cardBox.h + 32.0},
                 withAlpha(accent, railAlpha * (0.07 * selectionTransition + 0.10 * drop)), damage, radius + 16);
-            drawRect(CBox{cardBox.x - 8.0, cardBox.y - 8.0, cardBox.w + 16.0, cardBox.h + 16.0},
+            drawChromeRect(CBox{cardBox.x - 8.0, cardBox.y - 8.0, cardBox.w + 16.0, cardBox.h + 16.0},
                 withAlpha(accent, railAlpha * (0.15 * selectionTransition + 0.18 * drop)), damage, radius + 8);
         }
 
         const auto lift = selected ? selectionTransition : 0.0;
 
         if (!workspace.createTarget) {
-            drawRect(CBox{cardBox.x + 3.0, cardBox.y + 6.0 + lift * 5.0, cardBox.w, cardBox.h},
-                withAlpha(Theme::shadowColor(), railAlpha * (0.44 + lift * 0.36)), damage, radius);
+            if (m_chrome.effects)
+                drawChromeRect(CBox{cardBox.x + 3.0, cardBox.y + 6.0 + lift * 5.0, cardBox.w, cardBox.h},
+                    withAlpha(Theme::shadowColor(), railAlpha * (0.44 + lift * 0.36)), damage, radius);
             // Selection carries roughly twice the lift of an idle card so the highlight is
             // legible at a glance rather than a few percent apart.
             const auto cardLift = workspace.empty ? 0.07F : selected ? 0.26F : 0.13F;
@@ -2251,21 +2329,25 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 cardFill = tintedSurface(cardFill, accent, 0.12);
             if (dropTarget)
                 cardFill = tintedSurface(cardFill, accent, 0.24 * drop);
-            drawRect(cardBox, cardFill, damage, radius);
+            drawChromeRect(cardBox, cardFill, damage, radius);
         }
 
         if (workspace.createTarget) {
             // A full-size outlined card rather than a small floating circle, so the create target
             // sits in the workspace row instead of orbiting beside it.
-            drawRect(CBox{cardBox.x + 3.0, cardBox.y + 6.0 + lift * 5.0, cardBox.w, cardBox.h},
-                withAlpha(Theme::shadowColor(), railAlpha * (0.22 + lift * 0.30)), damage, radius);
+            if (m_chrome.effects)
+                drawChromeRect(CBox{cardBox.x + 3.0, cardBox.y + 6.0 + lift * 5.0, cardBox.w, cardBox.h},
+                    withAlpha(Theme::shadowColor(), railAlpha * (0.22 + lift * 0.30)), damage, radius);
             // Needs a real surface, not just an accent wash: a translucent tint let the desktop
             // read straight through the card and made it look like a rendering artefact.
             auto createFill = surfaceColor(selected ? 0.20F : 0.11F, railAlpha * (selected ? 0.93 : 0.76));
             createFill = tintedSurface(createFill, accent, selected ? 0.18 : 0.10);
-            drawRect(cardBox, createFill, damage, radius, true);
+            drawChromeRect(cardBox, createFill, damage, radius, true);
             const auto ringStrength = selected ? 0.88 : 0.46;
-            drawBorder(cardBox, withAlpha(accent, railAlpha * ringStrength), radius, selected ? 2 : 1);
+            if (selected)
+                drawSelectedBorder(cardBox, withAlpha(accent, railAlpha * ringStrength), radius, 2);
+            else
+                drawInactiveBorder(cardBox, withAlpha(accent, railAlpha * ringStrength), radius, 1);
             const auto glyphBox = CBox{cardBox.x, cardBox.y + centered(cardBox.h, 36.0) - 7.0, cardBox.w, 36.0};
             m_labels.renderCentered("+", glyphBox, Theme::titleSize() + 14, accent, railAlpha * (selected ? 1.0 : 0.78), damage);
             const auto captionBox = CBox{cardBox.x, cardBox.y + cardBox.h - 27.0, cardBox.w, 16.0};
@@ -2283,9 +2365,12 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
 
         if (!workspace.createTarget) {
             const auto borderStrength = dropTarget ? std::lerp(0.50, 1.0, drop) : selected ? 0.95 : workspace.active ? 0.30 : 0.10;
-            drawBorder(cardBox, withAlpha(accent, railAlpha * borderStrength), radius, selected || dropTarget ? 2 : 1);
+            if (selected || dropTarget)
+                drawSelectedBorder(cardBox, withAlpha(accent, railAlpha * borderStrength), radius, 2);
+            else
+                drawInactiveBorder(cardBox, withAlpha(accent, railAlpha * borderStrength), radius, 1);
             if (dropTarget)
-                drawBorder(insetBox(cardBox, 6.0), withAlpha(accent, railAlpha * 0.32 * drop), std::max(1, radius - 4), 1);
+                drawSelectedBorder(insetBox(cardBox, 6.0), withAlpha(accent, railAlpha * 0.32 * drop), std::max(1, radius - 4), 1, -4);
         }
 
         if (workspace.active && !selected && !workspace.createTarget) {
@@ -2324,9 +2409,10 @@ void OverlayRenderer::renderStageFrame(const WorkspaceWallFrame& frame, double a
                 interpolatedRect(collapsedStageBounds(*previousFrame), previousFrame->stage.bounds, shelfProgress), previousScale);
             const auto previousBox = boxFor(remapStageRect(window.rect, previousFrame->stage.bounds, previousDisplayedStage));
             const auto radius = Theme::windowRadius();
-            drawRect(CBox{previousBox.x + 7.0, previousBox.y + 10.0, previousBox.w, previousBox.h},
-                withAlpha(Theme::shadowColor(), previousAlpha * 0.72), damage, radius + 2);
-            drawRect(previousBox, surfaceColor(0.12F, previousAlpha), damage, radius);
+            if (m_chrome.effects)
+                drawChromeRect(CBox{previousBox.x + 7.0, previousBox.y + 10.0, previousBox.w, previousBox.h},
+                    withAlpha(Theme::shadowColor(), previousAlpha * 0.72), damage, radius + 2);
+            drawChromeRect(previousBox, surfaceColor(0.12F, previousAlpha), damage, radius);
             renderWindowPreview(window, previousBox, previousAlpha, damage);
         }
     }
@@ -2388,7 +2474,7 @@ void OverlayRenderer::renderWindowPreview(const WindowCard& windowCard, const CB
     data.a        = static_cast<float>(std::clamp(alpha, 0.0, 1.0));
     data.overallA = data.a;
     data.damage   = damage;
-    data.round    = Theme::windowRadius();
+    data.round    = m_chrome.radius(Theme::windowRadius());
     data.clipBox  = clipBox;
     data.surface  = surface;
 
@@ -2432,13 +2518,15 @@ void OverlayRenderer::renderDragCard(const WindowCard& window, const LayoutRect&
 
     // The shadow deepens with the lift, so the card reads as held above the wall rather than sliding
     // across it, and shrinks back down as the drop settles.
-    drawRect(CBox{box.x - 4.0, box.y + 6.0 + lift * 10.0, box.w + 8.0, box.h + 8.0},
-        withAlpha(Theme::shadowColor(), alpha * (0.28 + lift * 0.30)), damage, radius + 10);
-    drawRect(CBox{box.x + 6.0, box.y + 10.0 + lift * 6.0, box.w, box.h},
-        withAlpha(Theme::shadowColor(), alpha * (0.44 + lift * 0.28)), damage, radius + 2);
-    drawRect(box, surfaceColor(0.14F, alpha * 0.96), damage, radius);
+    if (m_chrome.effects) {
+        drawChromeRect(CBox{box.x - 4.0, box.y + 6.0 + lift * 10.0, box.w + 8.0, box.h + 8.0},
+            withAlpha(Theme::shadowColor(), alpha * (0.28 + lift * 0.30)), damage, radius + 10);
+        drawChromeRect(CBox{box.x + 6.0, box.y + 10.0 + lift * 6.0, box.w, box.h},
+            withAlpha(Theme::shadowColor(), alpha * (0.44 + lift * 0.28)), damage, radius + 2);
+    }
+    drawChromeRect(box, surfaceColor(0.14F, alpha * 0.96), damage, radius);
     renderWindowPreview(window, box, alpha * 0.96, damage);
-    drawBorder(box, withAlpha(accent, alpha * std::lerp(0.20, 0.74, lift)), radius, 1);
+    drawSelectedBorder(box, withAlpha(accent, alpha * std::lerp(0.20, 0.74, lift)), radius, 1);
     drawSignalLock(rect, lift, accent, alpha, damage);
 
     // Named while it is in the air: a thumbnail alone is hard to identify at drag size, and the
@@ -2447,7 +2535,7 @@ void OverlayRenderer::renderDragCard(const WindowCard& window, const LayoutRect&
         return;
 
     const auto chip = CBox{box.x + 10.0, box.y + box.h - 32.0 + (1.0 - lift) * 6.0, std::max(1.0, box.w - 20.0), 24.0};
-    drawRect(chip, withAlpha(tintedSurface(surfaceColor(0.08F, 1.0), accent, 0.16), alpha * 0.86 * lift), damage, 8);
+    drawChromeRect(chip, withAlpha(tintedSurface(surfaceColor(0.08F, 1.0), accent, 0.16), alpha * 0.86 * lift), damage, 8);
     m_labels.renderColored(appGlyph(window.appClass), chip.x + 9.0, chip.y + 5.0, 18.0, Theme::hintSize(), accent, alpha * lift, damage);
     m_labels.render(window.label, chip.x + 30.0, chip.y + 5.0, std::max(1.0, chip.w - 40.0), Theme::hintSize(), alpha * 0.86 * lift, damage);
 }
@@ -2473,13 +2561,14 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
     const auto panelBox = CBox{geometry.panelX, geometry.panelY, geometry.panelW, geometry.panelH};
     const auto inputBox = CBox{geometry.inputX, geometry.inputY, geometry.inputW, geometry.inputH};
 
-    drawRect(CBox{panelBox.x + Theme::shadowOffsetX(), panelBox.y + Theme::shadowOffsetY(), panelBox.w, panelBox.h},
-        withAlpha(Theme::shadowColor(), alpha), damage, Theme::searchRadius());
-    drawRect(panelBox, withAlpha(tintedSurface(Theme::searchPanelColor(), background, 0.34), alpha), damage, Theme::searchRadius(), true);
+    if (m_chrome.effects)
+        drawChromeRect(CBox{panelBox.x + Theme::shadowOffsetX(), panelBox.y + Theme::shadowOffsetY(), panelBox.w, panelBox.h},
+            withAlpha(Theme::shadowColor(), alpha), damage, Theme::searchRadius());
+    drawChromeRect(panelBox, withAlpha(tintedSurface(Theme::searchPanelColor(), background, 0.34), alpha), damage, Theme::searchRadius(), true);
 
-    drawBorder(panelBox, withAlpha(accent, alpha * 0.62), Theme::searchRadius(), 1);
+    drawSelectedBorder(panelBox, withAlpha(accent, alpha * 0.62), Theme::searchRadius(), 1);
 
-    drawRect(inputBox, withAlpha(tintedSurface(Theme::searchInputColor(), background, 0.28), alpha), damage, Theme::inputRadius());
+    drawChromeRect(inputBox, withAlpha(tintedSurface(Theme::searchInputColor(), background, 0.28), alpha), damage, Theme::inputRadius());
 
     // Measure through the shared cache rather than a second hand-rolled lookup with its own key
     // format: the old IIFE inserted a differently-keyed entry for the same ">" the renderLabel below
@@ -2511,7 +2600,7 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
             geometry.rowHeight,
         };
 
-        drawRect(row, selected ? withAlpha(accent, alpha * 0.18) : Theme::searchRowFill(false, static_cast<float>(alpha)), damage, Theme::inputRadius());
+        drawChromeRect(row, selected ? withAlpha(accent, alpha * 0.18) : Theme::searchRowFill(false, static_cast<float>(alpha)), damage, Theme::inputRadius());
         if (selected) {
             const auto accentHeight = std::max(1.0, row.h - 20.0);
             drawRect(CBox{row.x, row.y + (row.h - accentHeight) / 2.0, 4.0, accentHeight},
@@ -2548,7 +2637,7 @@ void OverlayRenderer::renderSearchPanel(const WorkspaceWallFrame& frame, double 
 
     if (targets.empty()) {
         const auto emptyBox = CBox{inputBox.x, geometry.resultsY, inputBox.w, 64.0};
-        drawRect(emptyBox, Theme::searchRowFill(false, static_cast<float>(alpha)), damage, Theme::inputRadius());
+        drawChromeRect(emptyBox, Theme::searchRowFill(false, static_cast<float>(alpha)), damage, Theme::inputRadius());
         drawRect(CBox{emptyBox.x, emptyBox.y + 12.0, 3.0, emptyBox.h - 24.0}, withAlpha(accent, alpha * 0.42), damage, 2);
         m_labels.renderColored("NO MATCHES", emptyBox.x + 18.0, emptyBox.y + 12.0,
             emptyBox.w - 36.0, Theme::labelSize(), accent, alpha * 0.78, damage);
@@ -2803,6 +2892,7 @@ int OverlayRenderer::nativeThemeOptionCount() const noexcept {
 
 void OverlayRenderer::rebuildAfterPreferenceChange() {
     applyMotionProfile();
+    refreshChromeStyle();
     m_mode = defaultOverviewMode();
     m_applicationFilter.clear();
     m_previousFrames = m_frames;

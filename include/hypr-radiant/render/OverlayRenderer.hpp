@@ -2,11 +2,13 @@
 
 #include <hypr-radiant/config/Config.hpp>
 #include <hypr-radiant/config/Preferences.hpp>
+#include <hypr-radiant/config/HyprlandDecoration.hpp>
 #include <hypr-radiant/overview/PreferencesPanelGeometry.hpp>
 #include <hypr-radiant/render/FadeAnimation.hpp>
 #include <hypr-radiant/RadiantState.hpp>
 #include <hypr-radiant/overview/HitTester.hpp>
 #include <hypr-radiant/render/LabelRenderer.hpp>
+#include <hypr-radiant/render/ChromeStyle.hpp>
 #include <hypr-radiant/overview/SearchMatcher.hpp>
 #include <hypr-radiant/overview/SearchSuggestions.hpp>
 #include <hypr-radiant/overview/WorkspaceWallLayout.hpp>
@@ -117,6 +119,10 @@ class OverlayRenderer {
     void renderDragCard(const WindowCard& window, const LayoutRect& rect, double alpha, double lift, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderPreferencesPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
+    void refreshChromeStyle();
+    void drawChromeRect(const CBox& box, CHyprColor color, const CRegion& damage, int radiantRound, bool blur = false) const;
+    void drawSelectedBorder(const CBox& box, CHyprColor fallback, int radiantRound, int radiantWidth, int outset = 0) const;
+    void drawInactiveBorder(const CBox& box, CHyprColor fallback, int radiantRound, int radiantWidth, int outset = 0) const;
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
     [[nodiscard]] std::vector<SearchSuggestion> matchingSearchSuggestions() const;
@@ -183,6 +189,9 @@ class OverlayRenderer {
 
     RadiantConfig&                                        m_config;
     PreferencesStore&                                     m_preferences;
+    HyprlandDecorationReader                              m_decoration;
+    ChromeStyle                                           m_chrome;
+    bool                                                  m_nativeWarningIssued = false;
     FadeAnimation                                      m_animation;
     FadeAnimation                                      m_stageTransition;
     FadeAnimation                                      m_selectionTransition;

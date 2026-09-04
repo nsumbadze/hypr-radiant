@@ -47,10 +47,22 @@ bool RadiantConfig::registerValues(HANDLE handle) {
     m_shortcutEnabled = makeShared<Config::Values::CIntValue>(
         "plugin:radiant:shortcut_enabled", "Register SUPER+A as the default overview shortcut.", DEFAULT_SHORTCUT_ENABLED ? 1 : 0,
         Config::Values::SIntValueOptions{.min = 0, .max = 1});
+    m_chrome = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:chrome", "Overlay chrome preset: radiant, native, or flat.", "radiant");
+    m_rounding = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:rounding", "Overlay corner radius, or -1 to follow the chrome preset.", -1,
+        Config::Values::SIntValueOptions{.min = -1, .max = 40});
+    m_borderSize = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:border_size", "Overlay border size, or -1 to follow the chrome preset.", -1,
+        Config::Values::SIntValueOptions{.min = -1, .max = 12});
+    m_borderColor = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:border_color", "Selected border color, or auto to follow the chrome preset.", "auto");
+    m_effects = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:effects", "Overlay shadows, glow, and blur: auto, on, or off.", "auto");
 
     refreshPalette();
 
-    const std::array<SP<Config::Values::IValue>, 10> values{
+    const std::array<SP<Config::Values::IValue>, 15> values{
         m_opacity,
         m_animationDurationMs,
         m_layout,
@@ -61,6 +73,11 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         m_gestureFingers,
         m_gestureDistance,
         m_shortcutEnabled,
+        m_chrome,
+        m_rounding,
+        m_borderSize,
+        m_borderColor,
+        m_effects,
     };
 
     for (const auto& value : values) {
@@ -101,6 +118,26 @@ double RadiantConfig::gestureDistance() const {
 
 bool RadiantConfig::shortcutEnabled() const {
     return !m_shortcutEnabled ? DEFAULT_SHORTCUT_ENABLED : m_shortcutEnabled->value() != 0;
+}
+
+ChromePreset RadiantConfig::chromePreset() const {
+    return m_chrome ? parseChromePreset(m_chrome->value()) : ChromePreset::Radiant;
+}
+
+int RadiantConfig::roundingOverride() const {
+    return m_rounding ? static_cast<int>(std::clamp(m_rounding->value(), static_cast<Config::INTEGER>(-1), static_cast<Config::INTEGER>(40))) : -1;
+}
+
+int RadiantConfig::borderSizeOverride() const {
+    return m_borderSize ? static_cast<int>(std::clamp(m_borderSize->value(), static_cast<Config::INTEGER>(-1), static_cast<Config::INTEGER>(12))) : -1;
+}
+
+std::optional<RadiantRgba> RadiantConfig::borderColorOverride() const {
+    return m_borderColor ? parseAccentColor(m_borderColor->value()) : std::nullopt;
+}
+
+EffectsMode RadiantConfig::effectsMode() const {
+    return m_effects ? parseEffectsMode(m_effects->value()) : EffectsMode::Auto;
 }
 
 float RadiantConfig::opacity() const {

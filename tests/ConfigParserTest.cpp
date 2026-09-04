@@ -152,6 +152,15 @@ void overviewShortcutDefaultIsDiscoverable() {
     assert(DEFAULT_SHORTCUT_ENABLED);
 }
 
+void unregisteredConfigUsesCustomizationDefaults() {
+    RadiantConfig config;
+    assert(config.chromePreset() == ChromePreset::Radiant);
+    assert(config.roundingOverride() == -1);
+    assert(config.borderSizeOverride() == -1);
+    assert(!config.borderColorOverride());
+    assert(config.effectsMode() == EffectsMode::Auto);
+}
+
 void registersEveryPluginOptionBeforeRuntimeSetup() {
     registeredConfigValues.clear();
     rejectedConfigValue.clear();
@@ -170,6 +179,11 @@ void registersEveryPluginOptionBeforeRuntimeSetup() {
         "plugin:radiant:gesture_fingers",
         "plugin:radiant:gesture_distance",
         "plugin:radiant:shortcut_enabled",
+        "plugin:radiant:chrome",
+        "plugin:radiant:rounding",
+        "plugin:radiant:border_size",
+        "plugin:radiant:border_color",
+        "plugin:radiant:effects",
     };
     assert(registeredConfigValues == expected);
     assert(config.registrationError().empty());
@@ -200,6 +214,7 @@ int main() {
     rejectsAutomaticAndInvalidAccents();
     overviewGestureDefaultsAreDiscoverable();
     overviewShortcutDefaultIsDiscoverable();
+    unregisteredConfigUsesCustomizationDefaults();
     registersEveryPluginOptionBeforeRuntimeSetup();
     registrationFailureNamesTheRejectedOption();
     std::cout << "ConfigParserTest passed\n";
