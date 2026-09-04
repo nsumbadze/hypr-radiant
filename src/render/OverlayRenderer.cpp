@@ -794,7 +794,9 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
         const auto pointerTravel = std::hypot(
             x - m_pointerDownPosition.x,
             y - m_pointerDownPosition.y);
-        if (m_pointerDownTarget.type == OverviewTargetType::Workspace && pointerTravel < 8.0) {
+        const auto pressedWorkspace = m_pointerDownTarget.type == OverviewTargetType::Workspace ||
+            m_pointerDownTarget.type == OverviewTargetType::NewWorkspace;
+        if (pressedWorkspace && pointerTravel < 8.0) {
             action = {.type = PointerActionType::Activate, .target = m_pointerDownTarget};
             resetPointerInteraction();
             damageAllMonitors();
@@ -802,7 +804,7 @@ PointerAction OverlayRenderer::pointerButton(bool pressed, double x, double y) {
         }
 
         const auto releasedTarget =
-            m_pointerDownTarget.type == OverviewTargetType::Workspace && sameTarget(stableReleasedTarget, m_pointerDownTarget) ?
+            pressedWorkspace && sameTarget(stableReleasedTarget, m_pointerDownTarget) ?
             stableReleasedTarget : hitTest(x, y);
         if (sameTarget(releasedTarget, m_pointerDownTarget)) {
             if (releasedTarget.windowId == m_closingWindowId) {
