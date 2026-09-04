@@ -457,6 +457,7 @@ void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::s
     m_preferencesVisible = false;
     m_preferencesMonitorId = -1;
     resetPointerInteraction();
+    m_shelfKeyboardRevealed = false;
     m_previousFrames.clear();
     clearSearch();
     rebuildFrames();
@@ -565,8 +566,21 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
     const auto previousWorkspace = m_selectedTarget.workspaceId;
     // rebuildFrames() clears m_frames, so nothing may read through `frame` past that point.
     const auto frameMonitorId = frame->monitorId;
-    m_selectedTarget = m_hitTester.moveSelection(*frame, m_selectedTarget, direction);
+    const auto spatialWindows = m_config.windowNavigation() == WindowNavigation::Spatial;
+    m_selectedTarget = m_hitTester.moveSelection(*frame, m_selectedTarget, direction,
+        {.spatialWindows = spatialWindows});
     m_selectedFrameMonitorId = frameMonitorId;
+    if (effectiveLayoutMode() == LayoutMode::Stage && spatialWindows && effectiveShelfMode() == ShelfMode::Auto) {
+        if (previousTarget.type == OverviewTargetType::Window && m_selectedTarget.type == OverviewTargetType::Workspace &&
+            !m_shelfTransition.targetVisible()) {
+            setWorkspaceShelfVisible(true);
+            m_shelfKeyboardRevealed = true;
+        } else if (previousTarget.type == OverviewTargetType::Workspace && m_selectedTarget.type == OverviewTargetType::Window &&
+            m_shelfKeyboardRevealed) {
+            setWorkspaceShelfVisible(false);
+            m_shelfKeyboardRevealed = false;
+        }
+    }
     if (!sameTarget(previousTarget, m_selectedTarget))
         animateSelection();
     if ((effectiveLayoutMode() == LayoutMode::Stage || effectiveLayoutMode() == LayoutMode::Carousel ||
@@ -582,6 +596,25 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
             std::max(0, static_cast<int>(std::round(effectiveAnimationDurationMs() * pushScale))));
     }
     damageMonitorById(frameMonitorId);
+}
+
+void OverlayRenderer::cycleWindow(int step) {
+    if (m_searchActive || m_preferencesVisible)
+        return;
+    const auto* frame = frameForSelectedTarget();
+    if (!frame)
+        return;
+    const auto target = m_hitTester.cycleWindow(*frame, m_selectedTarget, step);
+    if (sameTarget(target, m_selectedTarget))
+        return;
+    m_selectedTarget = target;
+    m_selectedFrameMonitorId = frame->monitorId;
+    if (m_shelfKeyboardRevealed && target.type == OverviewTargetType::Window) {
+        setWorkspaceShelfVisible(false);
+        m_shelfKeyboardRevealed = false;
+    }
+    animateSelection();
+    damageAllMonitors();
 }
 
 void OverlayRenderer::selectTargetAt(double x, double y) {
@@ -1017,6 +1050,8 @@ PointerAction OverlayRenderer::activatePreference() {
 }
 
 void OverlayRenderer::setWorkspaceShelfVisible(bool visible, bool explicitRequest) {
+    if (explicitRequest || !visible)
+        m_shelfKeyboardRevealed = false;
     if (effectiveLayoutMode() != LayoutMode::Stage || !active() || (!explicitRequest && !shelfAutomationAllowed(visible)) ||
         m_shelfTransition.targetVisible() == visible)
         return;
@@ -1118,6 +1153,7 @@ void OverlayRenderer::hideImmediate() {
     m_selectionTransition.hideImmediate();
     m_windowCloseTransition.hideImmediate();
     m_shelfTransition.hideImmediate();
+    m_shelfKeyboardRevealed = false;
     m_dockTransition.hideImmediate();
     m_dragSettleTransition.hideImmediate();
     m_dragSettle = {};
@@ -1866,23 +1902,24 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
             const char* keys;
             const char* action;
         };
-        static constexpr std::array<DeckHint, 6> STAGE_HINTS{{
-                {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
-                {"\xe2\x86\x91\xe2\x86\x93", "window"},
-                {"tab", "apps/spatial"},
-                {"\xe2\x86\xb5", "open"},
-                {"/", "find"},
-                {"ctrl+,", "settings"},
-            }};
-        static constexpr std::array<DeckHint, 5> WALL_HINTS{{
-                {"\xe2\x86\x90\xe2\x86\x92", "workspace"},
-                {"\xe2\x86\x91\xe2\x86\x93", "window"},
-                {"\xe2\x86\xb5", "open"},
-                {"/", "find"},
-                {"ctrl+,", "settings"},
-            }};
-        const auto hints = effectiveLayoutMode() == LayoutMode::Stage ?
-            std::span<const DeckHint>{STAGE_HINTS} : std::span<const DeckHint>{WALL_HINTS};
+        const auto bindings = KeyboardBindings{
+            .vimKeys = m_config.vimKeys(),
+            .tabCyclesWindows = m_config.tabCyclesWindows(),
+        };
+        std::vector<DeckHint> hints{
+            {bindings.vimKeys ? "\xe2\x86\x90\xe2\x86\x92/hl" : "\xe2\x86\x90\xe2\x86\x92", "workspace"},
+            {bindings.vimKeys ? "\xe2\x86\x91\xe2\x86\x93/kj" : "\xe2\x86\x91\xe2\x86\x93", "window"},
+        };
+        if (bindings.tabCyclesWindows) {
+            hints.push_back({"tab", "next window"});
+            if (effectiveLayoutMode() == LayoutMode::Stage)
+                hints.push_back({"ctrl+tab", "arrangement"});
+        } else if (effectiveLayoutMode() == LayoutMode::Stage) {
+            hints.push_back({"tab", "apps/spatial"});
+        }
+        hints.push_back({"\xe2\x86\xb5", "open"});
+        hints.push_back({"/", "find"});
+        hints.push_back({"ctrl+,", "settings"});
 
         constexpr auto dockHeight   = 26.0;
         constexpr auto dockPadX     = 15.0;
@@ -1898,8 +1935,8 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
         const auto rimShade    = withAlpha(accent, 0.16);
 
         auto contentWidth = dockPadX;
-        std::array<double, STAGE_HINTS.size()> keyWidths{};
-        std::array<double, STAGE_HINTS.size()> actionWidths{};
+        std::array<double, 8> keyWidths{};
+        std::array<double, 8> actionWidths{};
         for (std::size_t i = 0; i < hints.size(); ++i) {
             keyWidths[i]    = m_labels.measure(hints[i].keys, measureWidth, Theme::hintSize(), foreground).width;
             actionWidths[i] = m_labels.measure(hints[i].action, measureWidth, Theme::hintSize(), foreground).width;

@@ -3,6 +3,7 @@
 #include <hypr-radiant/config/Config.hpp>
 #include <hypr-radiant/config/Preferences.hpp>
 #include <hypr-radiant/config/HyprlandDecoration.hpp>
+#include <hypr-radiant/input/KeyboardAction.hpp>
 #include <hypr-radiant/overview/PreferencesPanelGeometry.hpp>
 #include <hypr-radiant/render/FadeAnimation.hpp>
 #include <hypr-radiant/RadiantState.hpp>
@@ -52,6 +53,7 @@ class OverlayRenderer {
     void toggle(RadiantState state);
     void hideImmediate();
     void moveSelection(NavigationDirection direction);
+    void cycleWindow(int step);
     void selectTargetAt(double x, double y);
     void appendSearchChar(char value);
     void beginSearch();
@@ -249,6 +251,7 @@ class OverlayRenderer {
     DragSettle                                            m_dragSettle;
     bool                                                  m_pointerDown = false;
     bool                                                  m_dragging = false;
+    bool                                                  m_shelfKeyboardRevealed = false;
 };
 
 } // namespace hypr_radiant

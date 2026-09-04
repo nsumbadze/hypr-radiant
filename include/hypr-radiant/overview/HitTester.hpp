@@ -5,6 +5,10 @@
 
 namespace hypr_radiant {
 
+struct NavigationOptions {
+    bool spatialWindows = false;
+};
+
 [[nodiscard]] RadiantPoint mapGlobalPointToFrame(
     const LayoutRect& globalBounds,
     const LayoutRect& frameBounds,
@@ -24,7 +28,9 @@ class HitTester {
     [[nodiscard]] OverviewTarget hitTestDisplayedStage(
         const WorkspaceWallFrame& frame, double x, double y, double shelfProgress) const;
     [[nodiscard]] OverviewTarget initialSelection(const WorkspaceWallFrame& frame) const;
-    [[nodiscard]] OverviewTarget moveSelection(const WorkspaceWallFrame& frame, OverviewTarget current, NavigationDirection direction) const;
+    [[nodiscard]] OverviewTarget moveSelection(const WorkspaceWallFrame& frame, OverviewTarget current, NavigationDirection direction,
+        NavigationOptions options = {}) const;
+    [[nodiscard]] OverviewTarget cycleWindow(const WorkspaceWallFrame& frame, OverviewTarget current, int step) const;
 };
 
 } // namespace hypr_radiant

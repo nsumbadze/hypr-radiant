@@ -124,6 +124,12 @@ void parsesShelfModes() {
     assert(parseShelfMode("unknown") == ShelfMode::Auto);
 }
 
+void parsesWindowNavigationModes() {
+    assert(parseWindowNavigation("spatial") == WindowNavigation::Spatial);
+    assert(parseWindowNavigation("list") == WindowNavigation::List);
+    assert(parseWindowNavigation("unknown") == WindowNavigation::List);
+}
+
 void parsesAccentFormats() {
     const auto hex = parseAccentColor("#509475");
     assert(hex.has_value());
@@ -167,6 +173,9 @@ void unregisteredConfigUsesCustomizationDefaults() {
     assert(config.effectsMode() == EffectsMode::Auto);
     assert(config.spacing() == 1.0);
     assert(config.shelfMode() == ShelfMode::Auto);
+    assert(config.windowNavigation() == WindowNavigation::List);
+    assert(!config.vimKeys());
+    assert(!config.tabCyclesWindows());
 }
 
 void registersEveryPluginOptionBeforeRuntimeSetup() {
@@ -194,6 +203,9 @@ void registersEveryPluginOptionBeforeRuntimeSetup() {
         "plugin:radiant:effects",
         "plugin:radiant:spacing",
         "plugin:radiant:shelf",
+        "plugin:radiant:window_navigation",
+        "plugin:radiant:vim_keys",
+        "plugin:radiant:tab_cycles_windows",
     };
     assert(registeredConfigValues == expected);
     assert(config.registrationError().empty());
@@ -221,6 +233,7 @@ int main() {
     unknownLayoutModeFallsBackToStage();
     emptyLayoutModeFallsBackToStage();
     parsesShelfModes();
+    parsesWindowNavigationModes();
     parsesAccentFormats();
     rejectsAutomaticAndInvalidAccents();
     overviewGestureDefaultsAreDiscoverable();

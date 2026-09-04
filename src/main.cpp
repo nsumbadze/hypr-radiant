@@ -190,6 +190,9 @@ void RadiantPlugin::initialize() {
             } },
         .toggleMode = [this] { m_overlay.toggleGroupedMode(); },
         .togglePreferences = [this] { m_overlay.togglePreferences(); },
+        .keyboardBindings = [this] {
+            return KeyboardBindings{.vimKeys = m_config.vimKeys(), .tabCyclesWindows = m_config.tabCyclesWindows()}; },
+        .cycleWindow = [this](int step) { m_overlay.cycleWindow(step); },
     });
     m_gestures.install({
         .enabled = [this] { return m_config.gestureEnabled(); },

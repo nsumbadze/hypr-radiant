@@ -64,10 +64,18 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         Config::Values::SFloatValueOptions{.min = 0.5F, .max = 2.0F});
     m_shelf = makeShared<Config::Values::CStringValue>(
         "plugin:radiant:shelf", "Stage workspace shelf behavior: auto, always, or hidden.", "auto");
+    m_windowNavigation = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:window_navigation", "Window arrow navigation: list or spatial.", "list");
+    m_vimKeys = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:vim_keys", "Enable h, j, k, and l overview navigation.", 0,
+        Config::Values::SIntValueOptions{.min = 0, .max = 1});
+    m_tabCyclesWindows = makeShared<Config::Values::CIntValue>(
+        "plugin:radiant:tab_cycles_windows", "Use Tab and Shift+Tab to cycle overview windows.", 0,
+        Config::Values::SIntValueOptions{.min = 0, .max = 1});
 
     refreshPalette();
 
-    const std::array<SP<Config::Values::IValue>, 17> values{
+    const std::array<SP<Config::Values::IValue>, 20> values{
         m_opacity,
         m_animationDurationMs,
         m_layout,
@@ -85,6 +93,9 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         m_effects,
         m_spacing,
         m_shelf,
+        m_windowNavigation,
+        m_vimKeys,
+        m_tabCyclesWindows,
     };
 
     for (const auto& value : values) {
@@ -155,6 +166,18 @@ ShelfMode RadiantConfig::shelfMode() const {
     return m_shelf ? parseShelfMode(m_shelf->value()) : ShelfMode::Auto;
 }
 
+WindowNavigation RadiantConfig::windowNavigation() const {
+    return m_windowNavigation ? parseWindowNavigation(m_windowNavigation->value()) : WindowNavigation::List;
+}
+
+bool RadiantConfig::vimKeys() const {
+    return m_vimKeys && m_vimKeys->value() != 0;
+}
+
+bool RadiantConfig::tabCyclesWindows() const {
+    return m_tabCyclesWindows && m_tabCyclesWindows->value() != 0;
+}
+
 float RadiantConfig::opacity() const {
     if (!m_opacity)
         return 0.94F;
@@ -221,6 +244,10 @@ ShelfMode parseShelfMode(std::string_view value) {
     if (value == "hidden")
         return ShelfMode::Hidden;
     return ShelfMode::Auto;
+}
+
+WindowNavigation parseWindowNavigation(std::string_view value) {
+    return value == "spatial" ? WindowNavigation::Spatial : WindowNavigation::List;
 }
 
 } // namespace hypr_radiant

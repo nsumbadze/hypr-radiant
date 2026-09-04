@@ -5,7 +5,8 @@
 namespace hypr_radiant {
 
 KeyboardAction resolveKeyboardAction(
-    std::uint32_t key, bool searching, bool controlHeld, std::optional<char> searchCharacter) {
+    std::uint32_t key, bool searching, KeyboardModifiers modifiers, std::optional<char> searchCharacter,
+    KeyboardBindings bindings) {
     if (key == KEY_ESC)
         return {.type = KeyboardActionType::Close};
 
@@ -19,11 +20,16 @@ KeyboardAction resolveKeyboardAction(
     if (key == KEY_SLASH && !searching)
         return {.type = KeyboardActionType::OpenSearch};
 
-    if (key == KEY_COMMA && controlHeld)
+    if (key == KEY_COMMA && modifiers.control)
         return {.type = KeyboardActionType::TogglePreferences};
 
-    if (key == KEY_TAB)
-        return {.type = searching ? KeyboardActionType::None : KeyboardActionType::ToggleMode};
+    if (key == KEY_TAB) {
+        if (searching)
+            return {};
+        if (!bindings.tabCyclesWindows || modifiers.control)
+            return {.type = KeyboardActionType::ToggleMode};
+        return {.type = KeyboardActionType::CycleWindow, .step = modifiers.shift ? -1 : 1};
+    }
 
     if (key >= KEY_1 && key <= KEY_9 && !searching) {
         return {
@@ -45,8 +51,21 @@ KeyboardAction resolveKeyboardAction(
     if (key == KEY_DOWN)
         return {.type = KeyboardActionType::Move, .direction = NavigationDirection::Down};
 
+    if (bindings.vimKeys && !searching && !modifiers.control) {
+        if (key == KEY_H)
+            return {.type = KeyboardActionType::Move, .direction = NavigationDirection::Left};
+        if (key == KEY_J)
+            return {.type = KeyboardActionType::Move, .direction = NavigationDirection::Down};
+        if (key == KEY_K)
+            return {.type = KeyboardActionType::Move, .direction = NavigationDirection::Up};
+        if (key == KEY_L)
+            return {.type = KeyboardActionType::Move, .direction = NavigationDirection::Right};
+        if (searchCharacter)
+            return {};
+    }
+
     // Ctrl combinations are shortcuts, never fallback text input.
-    if (controlHeld || !searchCharacter)
+    if (modifiers.control || !searchCharacter)
         return {};
 
     return {.type = KeyboardActionType::TextInput, .text = *searchCharacter};

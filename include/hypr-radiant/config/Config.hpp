@@ -28,9 +28,11 @@ enum class LayoutMode {
 };
 
 enum class ShelfMode { Auto, Always, Hidden };
+enum class WindowNavigation { List, Spatial };
 
 [[nodiscard]] LayoutMode parseLayoutMode(std::string_view value);
 [[nodiscard]] ShelfMode  parseShelfMode(std::string_view value);
+[[nodiscard]] WindowNavigation parseWindowNavigation(std::string_view value);
 
 class RadiantConfig {
   public:
@@ -59,6 +61,9 @@ class RadiantConfig {
     [[nodiscard]] EffectsMode     effectsMode() const;
     [[nodiscard]] double          spacing() const;
     [[nodiscard]] ShelfMode       shelfMode() const;
+    [[nodiscard]] WindowNavigation windowNavigation() const;
+    [[nodiscard]] bool             vimKeys() const;
+    [[nodiscard]] bool             tabCyclesWindows() const;
 
   private:
     SP<Config::Values::CFloatValue>  m_opacity;
@@ -78,6 +83,9 @@ class RadiantConfig {
     SP<Config::Values::CStringValue> m_effects;
     SP<Config::Values::CFloatValue>  m_spacing;
     SP<Config::Values::CStringValue> m_shelf;
+    SP<Config::Values::CStringValue> m_windowNavigation;
+    SP<Config::Values::CIntValue>    m_vimKeys;
+    SP<Config::Values::CIntValue>    m_tabCyclesWindows;
     OmarchyPalette                   m_palette;
     std::string                      m_registrationError;
 };
