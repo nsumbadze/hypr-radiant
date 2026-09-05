@@ -7,6 +7,8 @@ namespace hypr_radiant {
 
 struct NavigationOptions {
     bool spatialWindows = false;
+    bool allShelfTargets = false;
+    OverviewTarget returnWindow;
 };
 
 [[nodiscard]] RadiantPoint mapGlobalPointToFrame(

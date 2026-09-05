@@ -61,6 +61,7 @@ class RadiantConfig {
     [[nodiscard]] EffectsMode     effectsMode() const;
     [[nodiscard]] double          spacing() const;
     [[nodiscard]] ShelfMode       shelfMode() const;
+    [[nodiscard]] bool            allShelfTargets() const;
     [[nodiscard]] WindowNavigation windowNavigation() const;
     [[nodiscard]] bool             vimKeys() const;
     [[nodiscard]] bool             tabCyclesWindows() const;
@@ -83,6 +84,7 @@ class RadiantConfig {
     SP<Config::Values::CStringValue> m_effects;
     SP<Config::Values::CFloatValue>  m_spacing;
     SP<Config::Values::CStringValue> m_shelf;
+    SP<Config::Values::CStringValue> m_shelfNavigation;
     SP<Config::Values::CStringValue> m_windowNavigation;
     SP<Config::Values::CIntValue>    m_vimKeys;
     SP<Config::Values::CIntValue>    m_tabCyclesWindows;

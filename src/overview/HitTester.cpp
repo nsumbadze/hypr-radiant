@@ -73,7 +73,7 @@ double centerX(const LayoutRect& rect) { return rect.x + rect.width / 2.0; }
 double centerY(const LayoutRect& rect) { return rect.y + rect.height / 2.0; }
 
 std::optional<OverviewTarget> nearestInDirection(const WorkspaceWallFrame& frame, OverviewTarget current,
-    const std::vector<OverviewTarget>& candidates, NavigationDirection direction) {
+    const std::vector<OverviewTarget>& candidates, NavigationDirection direction, bool preferAlignment = false) {
     const auto currentRect = rectFor(frame, current);
     if (!selectable(currentRect))
         return std::nullopt;
@@ -81,6 +81,7 @@ std::optional<OverviewTarget> nearestInDirection(const WorkspaceWallFrame& frame
     const auto cy = centerY(currentRect);
     std::optional<OverviewTarget> best;
     auto bestScore = 1.0e18;
+    bool bestAligned = false;
     for (const auto& target : candidates) {
         if (target.type == current.type && target.workspaceId == current.workspaceId && target.windowId == current.windowId)
             continue;
@@ -97,9 +98,13 @@ std::optional<OverviewTarget> nearestInDirection(const WorkspaceWallFrame& frame
         const auto horizontal = direction == NavigationDirection::Left || direction == NavigationDirection::Right;
         const auto primary = horizontal ? std::abs(dx) : std::abs(dy);
         const auto secondary = horizontal ? std::abs(dy) : std::abs(dx);
-        const auto score = primary * 1000.0 + secondary;
-        if (score < bestScore) {
+        const auto aligned = horizontal
+            ? std::min(rect.y + rect.height, currentRect.y + currentRect.height) > std::max(rect.y, currentRect.y)
+            : std::min(rect.x + rect.width, currentRect.x + currentRect.width) > std::max(rect.x, currentRect.x);
+        const auto score = preferAlignment ? dx * dx + dy * dy : primary * 1000.0 + secondary;
+        if (!best || (preferAlignment && aligned != bestAligned ? aligned : score < bestScore)) {
             bestScore = score;
+            bestAligned = aligned;
             best = target;
         }
     }
@@ -236,7 +241,7 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
 
     if (options.spatialWindows && current.type == OverviewTargetType::Window) {
         const auto targets = windowTargets(frame, current.workspaceId);
-        if (const auto nearest = nearestInDirection(frame, current, targets, direction))
+        if (const auto nearest = nearestInDirection(frame, current, targets, direction, true))
             return *nearest;
         if (direction == NavigationDirection::Up)
             return {.type = OverviewTargetType::Workspace, .workspaceId = current.workspaceId, .monitorId = frame.monitorId};
@@ -272,7 +277,7 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
     }
 
     auto targets = workspaceTargets(frame);
-    if (horizontal) {
+    if (horizontal && !(frame.focusedStage && options.allShelfTargets)) {
         std::erase_if(targets, [](OverviewTarget target) { return target.type == OverviewTargetType::NewWorkspace; });
         // Stepping the rail should land on workspaces that actually hold something. Empty slots are
         // there so the numbering reads correctly, not as stops on the way past. Skipping them keeps
@@ -294,6 +299,15 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
         return {};
 
     if (current.type == OverviewTargetType::Workspace && direction == NavigationDirection::Down) {
+        if (options.spatialWindows && options.returnWindow.workspaceId == current.workspaceId &&
+            options.returnWindow.monitorId == frame.monitorId) {
+            const auto windows = windowTargets(frame, current.workspaceId);
+            const auto remembered = std::ranges::find_if(windows, [&](OverviewTarget target) {
+                return target.windowId == options.returnWindow.windowId;
+            });
+            if (remembered != windows.end())
+                return *remembered;
+        }
         if (frame.focusedStage && current.workspaceId == frame.stage.workspaceId) {
             const auto window = std::ranges::find_if(frame.stage.windows, [](const WindowCard& card) { return selectable(card.rect); });
             if (window != frame.stage.windows.end())

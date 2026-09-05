@@ -252,6 +252,7 @@ class OverlayRenderer {
     bool                                                  m_pointerDown = false;
     bool                                                  m_dragging = false;
     bool                                                  m_shelfKeyboardRevealed = false;
+    OverviewTarget                                        m_shelfReturnWindow;
 };
 
 } // namespace hypr_radiant

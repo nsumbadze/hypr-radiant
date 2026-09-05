@@ -398,6 +398,58 @@ void spatialNavigationBeatsListOrderOnWallFrames() {
     assert(down.windowId == 3);
 }
 
+void fullShelfNavigationIncludesEmptyAndNewCards() {
+    auto testFrame = focusedFrame();
+    testFrame.workspaces[1].empty = true;
+    testFrame.workspaces.push_back({.workspaceId = 3, .rect = {.x = 500, .y = 40, .width = 200, .height = 112}, .createTarget = true});
+    const OverviewTarget first{.type = OverviewTargetType::Workspace, .workspaceId = 1};
+    const NavigationOptions all{.allShelfTargets = true};
+    const auto empty = HitTester{}.moveSelection(testFrame, first, NavigationDirection::Right, all);
+    assert(empty.workspaceId == 2 && empty.type == OverviewTargetType::Workspace);
+    const auto create = HitTester{}.moveSelection(testFrame, empty, NavigationDirection::Right, all);
+    assert(create.workspaceId == 3 && create.type == OverviewTargetType::NewWorkspace);
+    assert(HitTester{}.moveSelection(testFrame, create, NavigationDirection::Right, all).workspaceId == 1);
+    assert(HitTester{}.moveSelection(testFrame, first, NavigationDirection::Left, all).type == OverviewTargetType::NewWorkspace);
+    assert(HitTester{}.moveSelection(testFrame, first, NavigationDirection::Right).workspaceId == 1);
+}
+
+void spatialNavigationPrefersAlignmentThenDistance() {
+    auto testFrame = focusedFrame();
+    testFrame.stage.windows = {
+        {.stableId = 1, .workspaceId = 1, .rect = {.x = 0, .y = 0, .width = 40, .height = 40}},
+        {.stableId = 2, .workspaceId = 1, .rect = {.x = 50, .y = 80, .width = 40, .height = 40}},
+        {.stableId = 3, .workspaceId = 1, .rect = {.x = 200, .y = 0, .width = 40, .height = 40}},
+        {.stableId = 4, .workspaceId = 1, .rect = {.x = 300, .y = 0, .width = 40, .height = 40}},
+    };
+    const OverviewTarget first{.type = OverviewTargetType::Window, .workspaceId = 1, .windowId = 1};
+    const NavigationOptions spatial{.spatialWindows = true};
+    assert(HitTester{}.moveSelection(testFrame, first, NavigationDirection::Right, spatial).windowId == 3);
+    testFrame.stage.windows.resize(2);
+    assert(HitTester{}.moveSelection(testFrame, first, NavigationDirection::Right, spatial).windowId == 2);
+    // The same rule applies to columns.
+    testFrame.stage.windows.push_back({.stableId = 5, .workspaceId = 1, .rect = {.x = 0, .y = 200, .width = 40, .height = 40}});
+    assert(HitTester{}.moveSelection(testFrame, first, NavigationDirection::Down, spatial).windowId == 5);
+}
+
+void spatialShelfReturnValidatesRememberedWindow() {
+    auto testFrame = focusedFrame();
+    const OverviewTarget workspace{.type = OverviewTargetType::Workspace, .workspaceId = 1};
+    NavigationOptions options{.spatialWindows = true, .returnWindow = {
+        .type = OverviewTargetType::Window, .workspaceId = 1, .windowId = 12, .monitorId = 1}};
+    assert(HitTester{}.moveSelection(testFrame, workspace, NavigationDirection::Down, options).windowId == 12);
+    options.spatialWindows = false;
+    assert(HitTester{}.moveSelection(testFrame, workspace, NavigationDirection::Down, options).windowId == 11);
+    options.spatialWindows = true;
+    options.returnWindow.monitorId = 2;
+    assert(HitTester{}.moveSelection(testFrame, workspace, NavigationDirection::Down, options).windowId == 11);
+    options.returnWindow.monitorId = 1;
+    options.returnWindow.workspaceId = 2;
+    assert(HitTester{}.moveSelection(testFrame, workspace, NavigationDirection::Down, options).windowId == 11);
+    options.returnWindow.workspaceId = 1;
+    testFrame.stage.windows.pop_back();
+    assert(HitTester{}.moveSelection(testFrame, workspace, NavigationDirection::Down, options).windowId == 11);
+}
+
 void cycleWindowWrapsAndHandlesWorkspaceStarts() {
     const auto testFrame = focusedFrame();
     const OverviewTarget workspace{.type = OverviewTargetType::Workspace, .workspaceId = 1};
@@ -416,6 +468,9 @@ void cycleWindowWrapsAndHandlesWorkspaceStarts() {
 } // namespace
 
 int main() {
+    fullShelfNavigationIncludesEmptyAndNewCards();
+    spatialNavigationPrefersAlignmentThenDistance();
+    spatialShelfReturnValidatesRememberedWindow();
     windowHitWinsOverWorkspaceHit();
     hoverInsideWindowReturnsWindowTarget();
     workspaceBackgroundHitWorks();

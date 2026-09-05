@@ -66,6 +66,8 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         "plugin:radiant:shelf", "Stage workspace shelf behavior: auto, always, or hidden.", "auto");
     m_windowNavigation = makeShared<Config::Values::CStringValue>(
         "plugin:radiant:window_navigation", "Window arrow navigation: list or spatial.", "list");
+    m_shelfNavigation = makeShared<Config::Values::CStringValue>(
+        "plugin:radiant:shelf_navigation", "Stage shelf arrow targets: occupied or all (including empty and new workspaces).", "occupied");
     m_vimKeys = makeShared<Config::Values::CIntValue>(
         "plugin:radiant:vim_keys", "Enable h, j, k, and l overview navigation.", 0,
         Config::Values::SIntValueOptions{.min = 0, .max = 1});
@@ -75,7 +77,7 @@ bool RadiantConfig::registerValues(HANDLE handle) {
 
     refreshPalette();
 
-    const std::array<SP<Config::Values::IValue>, 20> values{
+    const std::array<SP<Config::Values::IValue>, 21> values{
         m_opacity,
         m_animationDurationMs,
         m_layout,
@@ -94,6 +96,7 @@ bool RadiantConfig::registerValues(HANDLE handle) {
         m_spacing,
         m_shelf,
         m_windowNavigation,
+        m_shelfNavigation,
         m_vimKeys,
         m_tabCyclesWindows,
     };
@@ -168,6 +171,10 @@ ShelfMode RadiantConfig::shelfMode() const {
 
 WindowNavigation RadiantConfig::windowNavigation() const {
     return m_windowNavigation ? parseWindowNavigation(m_windowNavigation->value()) : WindowNavigation::List;
+}
+
+bool RadiantConfig::allShelfTargets() const {
+    return m_shelfNavigation && m_shelfNavigation->value() == "all";
 }
 
 bool RadiantConfig::vimKeys() const {

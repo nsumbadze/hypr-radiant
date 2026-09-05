@@ -12,6 +12,7 @@ namespace {
 std::unordered_map<const Config::Values::IValue*, std::string> configValueNames;
 std::vector<std::string>                                      registeredConfigValues;
 std::string                                                   rejectedConfigValue;
+std::unordered_map<std::string, std::string>                    configStrings;
 
 } // namespace
 
@@ -61,15 +62,16 @@ Config::INTEGER CIntValue::defaultVal() const {
     return 0;
 }
 
-CStringValue::CStringValue(const char* name, const char*, Config::STRING, SStringValueOptions&&) : IValue(0) {
+CStringValue::CStringValue(const char* name, const char*, Config::STRING value, SStringValueOptions&&) : IValue(0) {
     configValueNames.emplace(this, name);
+    configStrings[name] = value;
 }
 const std::type_info* CStringValue::underlying() const {
     return nullptr;
 }
 void CStringValue::commence() {}
 Config::STRING CStringValue::value() const {
-    return {};
+    return configStrings.at(configValueNames.at(this));
 }
 Config::STRING CStringValue::defaultVal() const {
     return {};
@@ -173,6 +175,7 @@ void unregisteredConfigUsesCustomizationDefaults() {
     assert(config.effectsMode() == EffectsMode::Auto);
     assert(config.spacing() == 1.0);
     assert(config.shelfMode() == ShelfMode::Auto);
+    assert(!config.allShelfTargets());
     assert(config.windowNavigation() == WindowNavigation::List);
     assert(!config.vimKeys());
     assert(!config.tabCyclesWindows());
@@ -204,11 +207,17 @@ void registersEveryPluginOptionBeforeRuntimeSetup() {
         "plugin:radiant:spacing",
         "plugin:radiant:shelf",
         "plugin:radiant:window_navigation",
+        "plugin:radiant:shelf_navigation",
         "plugin:radiant:vim_keys",
         "plugin:radiant:tab_cycles_windows",
     };
     assert(registeredConfigValues == expected);
     assert(config.registrationError().empty());
+    assert(!config.allShelfTargets());
+    configStrings["plugin:radiant:shelf_navigation"] = "all";
+    assert(config.allShelfTargets());
+    configStrings["plugin:radiant:shelf_navigation"] = "unknown";
+    assert(!config.allShelfTargets());
 }
 
 void registrationFailureNamesTheRejectedOption() {

@@ -458,6 +458,7 @@ void OverlayRenderer::beginSession(RadiantState state, OverviewMode mode, std::s
     m_preferencesMonitorId = -1;
     resetPointerInteraction();
     m_shelfKeyboardRevealed = false;
+    m_shelfReturnWindow = {};
     m_previousFrames.clear();
     clearSearch();
     rebuildFrames();
@@ -568,10 +569,14 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
     const auto frameMonitorId = frame->monitorId;
     const auto spatialWindows = m_config.windowNavigation() == WindowNavigation::Spatial;
     m_selectedTarget = m_hitTester.moveSelection(*frame, m_selectedTarget, direction,
-        {.spatialWindows = spatialWindows});
+        {.spatialWindows = spatialWindows, .allShelfTargets = m_config.allShelfTargets(), .returnWindow = m_shelfReturnWindow});
+    if (spatialWindows && previousTarget.type == OverviewTargetType::Window && m_selectedTarget.type == OverviewTargetType::Workspace)
+        m_shelfReturnWindow = {.type = OverviewTargetType::Window, .workspaceId = previousTarget.workspaceId,
+            .windowId = previousTarget.windowId, .monitorId = frameMonitorId};
     m_selectedFrameMonitorId = frameMonitorId;
-    if (effectiveLayoutMode() == LayoutMode::Stage && spatialWindows && effectiveShelfMode() == ShelfMode::Auto) {
-        if (previousTarget.type == OverviewTargetType::Window && m_selectedTarget.type == OverviewTargetType::Workspace &&
+    if (effectiveLayoutMode() == LayoutMode::Stage && (spatialWindows || m_config.allShelfTargets()) && effectiveShelfMode() == ShelfMode::Auto) {
+        const auto onShelf = m_selectedTarget.type == OverviewTargetType::Workspace || m_selectedTarget.type == OverviewTargetType::NewWorkspace;
+        if (onShelf && (previousTarget.type == OverviewTargetType::Window || m_config.allShelfTargets()) &&
             !m_shelfTransition.targetVisible()) {
             setWorkspaceShelfVisible(true);
             m_shelfKeyboardRevealed = true;
@@ -1156,6 +1161,7 @@ void OverlayRenderer::hideImmediate() {
     m_windowCloseTransition.hideImmediate();
     m_shelfTransition.hideImmediate();
     m_shelfKeyboardRevealed = false;
+    m_shelfReturnWindow = {};
     m_dockTransition.hideImmediate();
     m_dragSettleTransition.hideImmediate();
     m_dragSettle = {};
