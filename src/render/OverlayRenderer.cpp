@@ -2040,13 +2040,13 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
         case PreferenceControl::WindowView:
             return "WINDOWS";
         case PreferenceControl::Shelf:
-            return "SHELF";
+            return "Workspace bar";
         case PreferenceControl::WindowNavigation:
-            return "NAVIGATION";
+            return "Arrow-key behavior";
         case PreferenceControl::Motion:
             return "MOTION";
         case PreferenceControl::Chrome:
-            return "CHROME";
+            return "Appearance";
         case PreferenceControl::NativeTheme:
             return "THEME";
         case PreferenceControl::None:
@@ -2057,6 +2057,28 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
         return {};
     };
 
+    // Longer, descriptive labels wrap at a word boundary instead of becoming cryptic abbreviations.
+    const auto renderSettingLabel = [&](const std::string& text, const CBox& box, CHyprColor color, double opacity) {
+        auto pointSize = Theme::hintSize();
+        const auto split = text.find(' ');
+        const auto wrap = split != std::string::npos && m_labels.measure(text, 10000.0, pointSize, color).width > box.w - 8.0;
+        const auto first = wrap ? text.substr(0, split) : text;
+        const auto second = wrap ? text.substr(split + 1) : std::string{};
+        while (pointSize > 7) {
+            const auto firstSize = m_labels.measure(first, 10000.0, pointSize, color);
+            const auto secondSize = m_labels.measure(second, 10000.0, pointSize, color);
+            if (std::max(firstSize.width, secondSize.width) <= box.w - 8.0 &&
+                std::max(firstSize.height, secondSize.height) * (wrap ? 2.0 : 1.0) <= box.h)
+                break;
+            --pointSize;
+        }
+        if (wrap) {
+            m_labels.renderCentered(first, CBox{box.x, box.y, box.w, box.h / 2.0}, pointSize, color, opacity, damage);
+            m_labels.renderCentered(second, CBox{box.x, box.y + box.h / 2.0, box.w, box.h / 2.0}, pointSize, color, opacity, damage);
+        } else
+            m_labels.renderCentered(text, box, pointSize, color, opacity, damage);
+    };
+
     for (const auto& row : geometry.rows) {
         const auto selected = row.control == m_selectedPreference;
         if (selected) {
@@ -2064,9 +2086,9 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             drawRect(rowBox, withAlpha(foreground, panelAlpha * 0.08), damage, 0);
             drawBorder(rowBox, withAlpha(foreground, panelAlpha * 0.25), 0, 1);
         }
-        m_labels.renderColored(rowLabel(row.control), row.rect.x + 16.0, row.rect.y + centered(row.rect.height, 12.0),
-            126.0, Theme::hintSize(), selected ? accent : foreground,
-            panelAlpha * (selected ? 1.0 : 0.58), damage);
+        renderSettingLabel(rowLabel(row.control),
+            CBox{row.rect.x + 4.0, row.rect.y, std::min(154.0, row.rect.width * 0.24) - 8.0, row.rect.height},
+            selected ? accent : foreground, panelAlpha * (selected ? 1.0 : 0.58));
     }
 
     const auto activeOption = [this](PreferenceControl control) {
@@ -2107,10 +2129,8 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
         case PreferenceControl::WindowView:
             return value == 0 ? "SPATIAL" : value == 1 ? "GROUPED"
                                                        : "DECK";
-        case PreferenceControl::Shelf: {
-            static constexpr std::array labels{"CONFIG", "AUTO", "ALWAYS", "HIDDEN"};
-            return labels[static_cast<std::size_t>(std::clamp(value, 0, 3))];
-        }
+        case PreferenceControl::Shelf:
+            return std::string{label(static_cast<ShelfPreference>(std::clamp(value, 0, 3)))};
         case PreferenceControl::WindowNavigation:
             return std::string{label(static_cast<WindowNavigationPreference>(std::clamp(value, 0, 2)))};
         case PreferenceControl::Motion: {
@@ -2118,10 +2138,8 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
                 "DEFAULT", "SNAP", "GLITCH", "LIGHT", "SILK", "REDUCED", "OFF"};
             return labels[static_cast<std::size_t>(std::clamp(value, 0, 6))];
         }
-        case PreferenceControl::Chrome: {
-            static constexpr std::array labels{"CONFIG", "RADIANT", "NATIVE", "FLAT"};
-            return labels[static_cast<std::size_t>(std::clamp(value, 0, 3))];
-        }
+        case PreferenceControl::Chrome:
+            return std::string{label(static_cast<ChromePreference>(std::clamp(value, 0, 3)))};
         case PreferenceControl::NativeTheme:
             if (value == 0)
                 return "<";
@@ -2175,8 +2193,8 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             panelAlpha * (active ? 0.18 : 0.0)), damage, 0);
         drawBorder(optionBox, withAlpha(foreground,
             panelAlpha * (focused ? 0.30 : 0.40)), 0, 1);
-        m_labels.renderCentered(optionLabel(option.control, option.value), optionBox, Theme::hintSize(),
-            active ? accent : foreground, panelAlpha * (active ? 1.0 : 0.72), damage);
+        renderSettingLabel(optionLabel(option.control, option.value), optionBox,
+            active ? accent : foreground, panelAlpha * (active ? 1.0 : 0.72));
     }
 
     const auto appSelected = m_selectedPreference == PreferenceControl::AppExpose;

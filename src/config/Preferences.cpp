@@ -308,9 +308,9 @@ std::string_view label(MotionPreference preference) {
 
 std::string_view label(ChromePreference preference) {
     switch (preference) {
-    case ChromePreference::Radiant: return "RADIANT";
-    case ChromePreference::Native: return "NATIVE";
-    case ChromePreference::Flat: return "FLAT";
+    case ChromePreference::Radiant: return "Radiant";
+    case ChromePreference::Native: return "Match desktop";
+    case ChromePreference::Flat: return "Square";
     case ChromePreference::FollowConfig: return "CONFIG";
     }
     return "CONFIG";
@@ -327,8 +327,8 @@ std::string_view label(WindowNavigationPreference preference) {
 
 std::string_view preferenceSourceLabel(bool followsConfig, bool nativeUnavailable) {
     if (nativeUnavailable)
-        return followsConfig ? "Config: Native unavailable; using Flat" : "Saved override: Native unavailable; using Flat";
-    return followsConfig ? "Follows Hyprland config" : "Saved override; choose Config to follow Hyprland";
+        return followsConfig ? "Desktop style unavailable; using Square (configuration)" : "Desktop style unavailable; using Square (saved choice)";
+    return followsConfig ? "Uses your Hyprland configuration" : "Saved choice overrides your Hyprland configuration";
 }
 
 std::string_view label(ShelfPreference preference) {

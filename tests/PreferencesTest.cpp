@@ -94,6 +94,9 @@ void parsesCustomizationPreferences() {
     assert(parsePreferences("shelf = hidden\n").shelf == ShelfPreference::Hidden);
     assert(parsePreferences("shelf = surprise\n").shelf == ShelfPreference::FollowConfig);
     assert(label(ChromePreference::FollowConfig) == "CONFIG");
+    assert(label(ChromePreference::Radiant) == "Radiant");
+    assert(label(ChromePreference::Native) == "Match desktop");
+    assert(label(ChromePreference::Flat) == "Square");
     assert(label(ShelfPreference::Hidden) == "HIDDEN");
 }
 
@@ -141,10 +144,10 @@ int main() {
     assert(usesSpatialNavigation(WindowNavigationPreference::FollowConfig, true));
     assert(!usesSpatialNavigation(WindowNavigationPreference::List, true));
     assert(usesSpatialNavigation(WindowNavigationPreference::Spatial, false));
-    assert(preferenceSourceLabel(true) == "Follows Hyprland config");
-    assert(preferenceSourceLabel(false).starts_with("Saved override"));
-    assert(preferenceSourceLabel(true, true).contains("Native unavailable; using Flat"));
-    assert(preferenceSourceLabel(false, true).starts_with("Saved override"));
+    assert(preferenceSourceLabel(true) == "Uses your Hyprland configuration");
+    assert(preferenceSourceLabel(false).starts_with("Saved choice overrides"));
+    assert(preferenceSourceLabel(true, true).contains("Desktop style unavailable; using Square"));
+    assert(preferenceSourceLabel(false, true).ends_with("(saved choice)"));
     defaultsFollowExistingConfig();
     parsesEveryPreference();
     parsesQuattroPreferences();
