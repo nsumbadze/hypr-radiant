@@ -156,6 +156,7 @@ Press `Ctrl+,` while the overview is open. The native Omarchy-style panel contro
 - Stage, Workspace Wall, Workspace Carousel, or the Omarchy-inspired Ribbon
 - In Stage, Spatial, application-grouped, or hero-and-supporting Deck window arrangement
 - In Stage, Config, Auto, Always, or Hidden workspace shelf behavior
+- Window navigation: Config, List, or Spatial (independent of the window arrangement)
 - Default, Snap, Glitch, Lightcycle, Silk, Reduced, or Off overview animations
 - Config, Radiant, Native, or Flat overlay chrome
 - Any installed Omarchy theme for Radiant, without changing the desktop theme
@@ -166,9 +167,12 @@ Changes are saved immediately to
 survive plugin and Hyprland restarts. `CURRENT` follows Quattro's active
 `~/.local/state/omarchy/current/theme/colors.toml`; selecting an installed theme
 applies its palette to Radiant only.
-The Chrome and Shelf rows use `CONFIG` to follow their `plugin:radiant:*`
+The Chrome, Shelf, and Navigation rows use `CONFIG` to follow their `plugin:radiant:*`
 options; any other choice overrides the corresponding option. Shelf is shown
 only for Stage.
+Focusing Chrome, Shelf, or Navigation shows whether that choice follows Hyprland
+or is a saved override. The Chrome status also reports when Native decoration
+is unavailable and Radiant is using Flat instead.
 
 <!-- SCREENSHOT SLOT: assets/gifs/settings.gif -->
 ![Quattro settings panel](assets/gifs/settings.gif)
@@ -223,7 +227,13 @@ With the keyboard:
 - `Down` drops into the windows of the selected workspace, `Up` goes back
 - With `window_navigation = spatial`, arrows choose windows by geometry. Moving
   `Up` from the top row reveals an Auto shelf; moving back `Down` hides that
-  keyboard-revealed shelf
+  keyboard-revealed shelf and returns to the window you left (or the first window
+  if it has closed). Candidates overlapping the current row/column take priority,
+  then the closest center wins; edges do not wrap between windows
+- With `shelf_navigation = all`, Stage's `Left` / `Right` include empty workspaces
+  and `+ New`, wrapping at either end. Keyboard workspace navigation reveals an
+  Auto shelf, including in List mode; `Enter` activates the selected card.
+  `shelf = hidden` still prevents automatic reveals
 - `1`–`9` jump straight to a workspace
 - Start typing to search windows by title or class
 - `/` opens search with every window listed, and types a slash once search is open,
@@ -265,6 +275,7 @@ if hl.plugin.radiant then
                 spacing = 1.0,
                 shelf = "auto",
                 window_navigation = "list",
+                shelf_navigation = "occupied",
                 vim_keys = false,
                 tab_cycles_windows = false,
             },
@@ -296,6 +307,7 @@ plugin {
         spacing = 1.0
         shelf = auto
         window_navigation = list
+        shelf_navigation = occupied
         vim_keys = 0
         tab_cycles_windows = 0
     }
@@ -321,6 +333,7 @@ plugin {
 | `spacing` | Card padding and gap multiplier, `0.5` to `2.0` |
 | `shelf` | `auto`, `always`, or `hidden`; `radiant:shelf` remains an explicit override |
 | `window_navigation` | `list` preserves the original order-based behavior; `spatial` uses window geometry |
+| `shelf_navigation` | `occupied` (default) preserves Stage workspace stepping; `all` includes empty workspaces and the + New card and reveals an Auto shelf during keyboard workspace navigation |
 | `vim_keys` | Enable `h`, `j`, `k`, and `l` navigation |
 | `tab_cycles_windows` | Make Tab cycle windows and keep arrangement switching on Ctrl+Tab |
 
