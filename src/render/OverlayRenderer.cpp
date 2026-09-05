@@ -2927,6 +2927,7 @@ PointerAction OverlayRenderer::applyPreference(PreferenceControl control, int va
     }
 
     auto& state = m_preferences.state();
+    const auto before = state;
     const auto adjacent = [step](int current, int count) {
         return ((current + step) % count + count) % count;
     };
@@ -2993,7 +2994,6 @@ PointerAction OverlayRenderer::applyPreference(PreferenceControl control, int va
         const auto current = selectedNativeThemeIndex();
         const auto selected = ((current + direction) % count + count) % count;
         state.nativeTheme = selected == 0 ? std::string{} : m_installedThemes[static_cast<std::size_t>(selected - 1)].slug;
-        m_config.refreshPalette(state.nativeTheme);
         break;
     }
     case PreferenceControl::None:
@@ -3002,9 +3002,26 @@ PointerAction OverlayRenderer::applyPreference(PreferenceControl control, int va
         return {};
     }
 
+    const auto update = preferenceUpdate(before, state);
+    if (update == PreferenceUpdate::None)
+        return {};
     if (!m_preferences.save())
         log::warn("could not save preferences to {}", m_preferences.path().string());
-    rebuildAfterPreferenceChange();
+    if (update == PreferenceUpdate::RebuildLayout) {
+        rebuildAfterPreferenceChange();
+        return {};
+    }
+    // Appearance and input changes do not change card geometry. Preserve the selection,
+    // preview frames, transitions, and cached labels instead of restarting the overview.
+    if (before.chrome != state.chrome)
+        refreshChromeStyle();
+    if (before.shelf != state.shelf)
+        normalizeShelfVisibility();
+    if (before.nativeTheme != state.nativeTheme) {
+        m_config.refreshPalette(state.nativeTheme);
+        m_labels.clear();
+    }
+    damageAllMonitors();
     return {};
 }
 

@@ -55,6 +55,9 @@ struct PreferencesState {
     bool operator==(const PreferencesState&) const = default;
 };
 
+enum class PreferenceUpdate { None, Repaint, RebuildLayout };
+[[nodiscard]] PreferenceUpdate preferenceUpdate(const PreferencesState& before, const PreferencesState& after);
+
 [[nodiscard]] PreferencesState parsePreferences(std::string_view contents);
 [[nodiscard]] std::string      serializePreferences(const PreferencesState& preferences);
 [[nodiscard]] std::filesystem::path defaultPreferencesPath();

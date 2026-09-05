@@ -188,6 +188,14 @@ PreferencesState parsePreferences(std::string_view contents) {
     return preferences;
 }
 
+PreferenceUpdate preferenceUpdate(const PreferencesState& before, const PreferencesState& after) {
+    if (before == after)
+        return PreferenceUpdate::None;
+    if (before.workspaceView != after.workspaceView || before.windowView != after.windowView || before.motion != after.motion)
+        return PreferenceUpdate::RebuildLayout;
+    return PreferenceUpdate::Repaint;
+}
+
 std::string serializePreferences(const PreferencesState& preferences) {
     return "# hypr-radiant preferences\n"
         "workspace_view = " + std::string{value(preferences.workspaceView)} + "\n"

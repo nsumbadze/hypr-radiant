@@ -133,6 +133,33 @@ void serializationRoundTrips() {
 } // namespace
 
 int main() {
+    const PreferencesState original;
+    assert(preferenceUpdate(original, original) == PreferenceUpdate::None);
+    for (const auto preset : {ChromePreference::Radiant, ChromePreference::Native, ChromePreference::Flat}) {
+        auto changed = original;
+        changed.chrome = preset;
+        assert(preferenceUpdate(original, changed) == PreferenceUpdate::Repaint);
+        assert(preferenceUpdate(changed, changed) == PreferenceUpdate::None);
+        assert(preferenceUpdate(changed, original) == PreferenceUpdate::Repaint);
+    }
+    auto changed = original;
+    changed.shelf = ShelfPreference::Always;
+    assert(preferenceUpdate(original, changed) == PreferenceUpdate::Repaint);
+    changed = original;
+    changed.windowNavigation = WindowNavigationPreference::Spatial;
+    assert(preferenceUpdate(original, changed) == PreferenceUpdate::Repaint);
+    changed = original;
+    changed.nativeTheme = "hackerman";
+    assert(preferenceUpdate(original, changed) == PreferenceUpdate::Repaint);
+    changed = original;
+    changed.windowView = WindowViewPreference::Deck;
+    assert(preferenceUpdate(original, changed) == PreferenceUpdate::RebuildLayout);
+    changed = original;
+    changed.workspaceView = WorkspaceViewPreference::Carousel;
+    assert(preferenceUpdate(original, changed) == PreferenceUpdate::RebuildLayout);
+    changed = original;
+    changed.motion = MotionPreference::Off;
+    assert(preferenceUpdate(original, changed) == PreferenceUpdate::RebuildLayout);
     for (const auto value : {"config", "list", "spatial", "unknown"}) {
         const auto preferences = parsePreferences(std::string{"window_navigation = "} + value);
         const auto expected = std::string_view{value} == "list" ? WindowNavigationPreference::List
