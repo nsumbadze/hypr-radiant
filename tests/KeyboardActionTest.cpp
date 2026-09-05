@@ -75,6 +75,13 @@ void vimBindingsOnlyNavigateOutsideSearch() {
     assert(resolveKeyboardAction(KEY_H, false, {.control = true, .shift = false}, 'h', bindings).type == KeyboardActionType::None);
     const auto typed = resolveKeyboardAction(KEY_H, true, none, 'h', bindings);
     assert(typed.type == KeyboardActionType::TextInput && typed.text == 'h');
+    for (const auto key : {KEY_H, KEY_J, KEY_K, KEY_L}) {
+        const auto character = key == KEY_H ? 'h' : key == KEY_J ? 'j' : key == KEY_K ? 'k' : 'l';
+        const auto search = resolveKeyboardAction(key, true, none, character, bindings);
+        assert(search.type == KeyboardActionType::TextInput && search.text == character);
+        const auto defaultTyping = resolveKeyboardAction(key, false, none, character, {});
+        assert(defaultTyping.type == KeyboardActionType::TextInput && defaultTyping.text == character);
+    }
     assert(resolveKeyboardAction(KEY_SLASH, false, none, '/', bindings).type == KeyboardActionType::OpenSearch);
 }
 
