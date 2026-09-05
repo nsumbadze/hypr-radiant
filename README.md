@@ -155,10 +155,10 @@ Press `Ctrl+,` while the overview is open. The native Omarchy-style panel contro
 
 - Stage, Workspace Wall, Workspace Carousel, or the Omarchy-inspired Ribbon
 - In Stage, Spatial, application-grouped, or hero-and-supporting Deck window arrangement
-- In Stage, Config, Auto, Always, or Hidden workspace shelf behavior
-- Window navigation: Config, List, or Spatial (independent of the window arrangement)
+- In Stage, workspace bar: Config, Auto, Always, or Hidden
+- Arrow-key behavior: Config, List, or Spatial (independent of the window arrangement)
 - Default, Snap, Glitch, Lightcycle, Silk, Reduced, or Off overview animations
-- Config, Radiant, Native, or Flat overlay chrome
+- Appearance: Config, Radiant, Match desktop, or Square
 - Any installed Omarchy theme for Radiant, without changing the desktop theme
 - App Exposé for the focused application
 
@@ -167,12 +167,28 @@ Changes are saved immediately to
 survive plugin and Hyprland restarts. `CURRENT` follows Quattro's active
 `~/.local/state/omarchy/current/theme/colors.toml`; selecting an installed theme
 applies its palette to Radiant only.
-The Chrome, Shelf, and Navigation rows use `CONFIG` to follow their `plugin:radiant:*`
-options; any other choice overrides the corresponding option. Shelf is shown
+The Appearance, Workspace bar, and Arrow-key behavior rows use `CONFIG` to follow their `plugin:radiant:*`
+options; any other choice overrides the corresponding option. Workspace bar is shown
 only for Stage.
-Focusing Chrome, Shelf, or Navigation shows whether that choice follows Hyprland
-or is a saved override. The Chrome status also reports when Native decoration
-is unavailable and Radiant is using Flat instead.
+Focusing these rows shows whether that choice follows Hyprland or is a saved
+override. Appearance also reports when desktop decoration is unavailable and
+Radiant is using Square instead.
+
+### What the customization settings mean
+
+| Setting | Meaning |
+| --- | --- |
+| Appearance (previously Chrome) | The borders, corner shape, and visual effects around previews—not the Chrome browser. |
+| Radiant | Radiant's original rounded appearance, with shadows, glow, and blur. |
+| Match desktop (`chrome = native`) | Uses Hyprland's corner radius, border thickness, and active/inactive border colors or gradients. Reads them when Radiant opens; effects are off by default. |
+| Square (`chrome = flat`) | Square corners, a 2-pixel accent border, and no shadows, glow, or blur by default. |
+| Workspace bar (previously Shelf) | The strip of workspace previews at the top of Stage. Auto reveals it on demand, Always keeps it visible, and Hidden prevents automatic reveals. The explicit `radiant:shelf` command still works. |
+| Arrow-key behavior (previously Navigation) | How arrow keys select windows. List follows window order; Spatial selects by window position, preferring the same row or column. It does not change the window arrangement. |
+| Config | Follow the corresponding Hyprland plugin option instead of a saved panel choice. |
+
+The configuration keys and saved values have **not** changed. For example, the
+panel's Match desktop choice still saves `chrome = native`. Explicit rounding,
+border, and effects options can override an appearance preset.
 
 <!-- SCREENSHOT SLOT: assets/gifs/settings.gif -->
 ![Quattro settings panel](assets/gifs/settings.gif)
@@ -247,6 +263,31 @@ With the keyboard:
 - In preferences, `Left` / `Right` change and save a value; `Enter` confirms it and closes the panel
 - `Enter` activates the selection
 - `Esc` closes search first, the overview second
+
+### Letter shortcuts and searching
+
+`vim_keys` is an optional keyboard setting, **off by default**. It is independent
+of Appearance, Arrow-key behavior, and the selected workspace view; selecting
+Spatial does not enable letter shortcuts. There is currently no panel toggle
+for `vim_keys` or `tab_cycles_windows`.
+
+| State | What H / J / K / L do |
+| --- | --- |
+| `vim_keys = 0` (default) | Type normally and start search, like other letters. |
+| `vim_keys = 1`, search closed | Move the selection: H = left, J = down, K = up, L = right. Other ordinary letters do not start search. |
+| Search open, either setting | Type normally, including every H, J, K, and L in your search text. |
+
+With letter shortcuts enabled, **press `/` first, then type your search**. For
+example, press `/` and type `kitty`, `chrome`, or `jekyll`; none of those letters
+move the selection while search is open. The opening slash is not added to the
+query. Search matches open windows by title or application class; it is not an
+installed-application launcher. `Esc` leaves search and restores letter navigation.
+
+`tab_cycles_windows = 1` means **Tab selects the next window** and **Shift+Tab
+selects the previous window**, wrapping at the ends. This moves the selection
+only; press Enter to activate it. Ctrl+Tab still changes the window arrangement
+in Stage. With the option off, Tab changes the Stage arrangement instead.
+Tab does nothing while search is open.
 
 ## Configuration
 
