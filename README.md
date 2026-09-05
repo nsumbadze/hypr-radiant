@@ -173,6 +173,9 @@ only for Stage.
 Focusing these rows shows whether that choice follows Hyprland or is a saved
 override. Appearance also reports when desktop decoration is unavailable and
 Radiant is using Square instead.
+The Appearance status also shows the effective corner shape, border width, and
+whether effects are on. Switching appearance keeps the current layout and window
+selection; clicking an already-selected option does not restart animations.
 
 ### What the customization settings mean
 
@@ -189,6 +192,14 @@ Radiant is using Square instead.
 The configuration keys and saved values have **not** changed. For example, the
 panel's Match desktop choice still saves `chrome = native`. Explicit rounding,
 border, and effects options can override an appearance preset.
+
+**Why can Match desktop and Square look alike?** If your desktop already uses
+square corners and 2-pixel borders, both have the same shape and thickness.
+Match desktop follows Hyprland's active/inactive border colors and gradients when
+the overview opens. Square keeps a fixed, solid-accent style regardless of desktop
+border changes. They are different ways to choose the style, not a promise of
+visibly different results on every theme. Radiant keeps the original rounded,
+effect-rich look unless you override its settings.
 
 <!-- SCREENSHOT SLOT: assets/gifs/settings.gif -->
 ![Quattro settings panel](assets/gifs/settings.gif)
