@@ -33,6 +33,13 @@ enum class MotionPreference {
 
 enum class ChromePreference { FollowConfig, Radiant, Native, Flat };
 enum class ShelfPreference { FollowConfig, Auto, Always, Hidden };
+enum class WindowNavigationPreference { FollowConfig, List, Spatial };
+
+[[nodiscard]] constexpr bool usesSpatialNavigation(WindowNavigationPreference preference, bool configuredSpatial) {
+    return preference == WindowNavigationPreference::FollowConfig ? configuredSpatial : preference == WindowNavigationPreference::Spatial;
+}
+
+[[nodiscard]] std::string_view preferenceSourceLabel(bool followsConfig, bool nativeUnavailable = false);
 
 struct PreferencesState {
     WorkspaceViewPreference workspaceView = WorkspaceViewPreference::FollowConfig;
@@ -40,6 +47,7 @@ struct PreferencesState {
     MotionPreference motion = MotionPreference::FollowConfig;
     ChromePreference chrome = ChromePreference::FollowConfig;
     ShelfPreference  shelf  = ShelfPreference::FollowConfig;
+    WindowNavigationPreference windowNavigation = WindowNavigationPreference::FollowConfig;
     /// Empty follows the desktop's active Omarchy theme. Otherwise this is an installed theme
     /// slug whose palette is applied to Radiant only.
     std::string nativeTheme;
@@ -72,5 +80,6 @@ class PreferencesStore {
 [[nodiscard]] std::string_view label(MotionPreference preference);
 [[nodiscard]] std::string_view label(ChromePreference preference);
 [[nodiscard]] std::string_view label(ShelfPreference preference);
+[[nodiscard]] std::string_view label(WindowNavigationPreference preference);
 
 } // namespace hypr_radiant

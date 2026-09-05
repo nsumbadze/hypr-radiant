@@ -14,6 +14,7 @@ void defaultsFollowExistingConfig() {
     assert(preferences.motion == MotionPreference::FollowConfig);
     assert(preferences.chrome == ChromePreference::FollowConfig);
     assert(preferences.shelf == ShelfPreference::FollowConfig);
+    assert(preferences.windowNavigation == WindowNavigationPreference::FollowConfig);
     assert(preferences.nativeTheme.empty());
 }
 
@@ -120,6 +121,7 @@ void serializationRoundTrips() {
         .motion      = MotionPreference::Quattro,
         .chrome      = ChromePreference::Flat,
         .shelf       = ShelfPreference::Hidden,
+        .windowNavigation = WindowNavigationPreference::Spatial,
         .nativeTheme = "tokyo-night",
     };
     assert(parsePreferences(serializePreferences(expected)) == expected);
@@ -128,6 +130,21 @@ void serializationRoundTrips() {
 } // namespace
 
 int main() {
+    for (const auto value : {"config", "list", "spatial", "unknown"}) {
+        const auto preferences = parsePreferences(std::string{"window_navigation = "} + value);
+        const auto expected = std::string_view{value} == "list" ? WindowNavigationPreference::List
+            : std::string_view{value} == "spatial" ? WindowNavigationPreference::Spatial : WindowNavigationPreference::FollowConfig;
+        assert(preferences.windowNavigation == expected);
+        assert(parsePreferences(serializePreferences(preferences)) == preferences);
+    }
+    assert(!usesSpatialNavigation(WindowNavigationPreference::FollowConfig, false));
+    assert(usesSpatialNavigation(WindowNavigationPreference::FollowConfig, true));
+    assert(!usesSpatialNavigation(WindowNavigationPreference::List, true));
+    assert(usesSpatialNavigation(WindowNavigationPreference::Spatial, false));
+    assert(preferenceSourceLabel(true) == "Follows Hyprland config");
+    assert(preferenceSourceLabel(false).starts_with("Saved override"));
+    assert(preferenceSourceLabel(true, true).contains("Native unavailable; using Flat"));
+    assert(preferenceSourceLabel(false, true).starts_with("Saved override"));
     defaultsFollowExistingConfig();
     parsesEveryPreference();
     parsesQuattroPreferences();

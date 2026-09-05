@@ -527,6 +527,7 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
             PreferenceControl::WorkspaceView,
             PreferenceControl::WindowView,
             PreferenceControl::Shelf,
+            PreferenceControl::WindowNavigation,
             PreferenceControl::Motion,
             PreferenceControl::Chrome,
             PreferenceControl::NativeTheme,
@@ -534,6 +535,7 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
         };
         static constexpr std::array globalControls{
             PreferenceControl::WorkspaceView,
+            PreferenceControl::WindowNavigation,
             PreferenceControl::Motion,
             PreferenceControl::Chrome,
             PreferenceControl::NativeTheme,
@@ -567,7 +569,8 @@ void OverlayRenderer::moveSelection(NavigationDirection direction) {
     const auto previousWorkspace = m_selectedTarget.workspaceId;
     // rebuildFrames() clears m_frames, so nothing may read through `frame` past that point.
     const auto frameMonitorId = frame->monitorId;
-    const auto spatialWindows = m_config.windowNavigation() == WindowNavigation::Spatial;
+    const auto spatialWindows = usesSpatialNavigation(m_preferences.state().windowNavigation,
+        m_config.windowNavigation() == WindowNavigation::Spatial);
     m_selectedTarget = m_hitTester.moveSelection(*frame, m_selectedTarget, direction,
         {.spatialWindows = spatialWindows, .allShelfTargets = m_config.allShelfTargets(), .returnWindow = m_shelfReturnWindow});
     if (spatialWindows && previousTarget.type == OverviewTargetType::Window && m_selectedTarget.type == OverviewTargetType::Workspace)
@@ -2017,6 +2020,19 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
     m_labels.renderCentered("X", closeBox, Theme::hintSize(),
         closeSelected ? accent : foreground, panelAlpha * (closeSelected ? 1.0 : 0.72), damage);
 
+    // Explain precedence for the focused row without making every row taller.
+    std::string_view source;
+    const auto& preferences = m_preferences.state();
+    if (m_selectedPreference == PreferenceControl::Chrome)
+        source = preferenceSourceLabel(preferences.chrome == ChromePreference::FollowConfig, m_chrome.nativeUnavailable);
+    else if (m_selectedPreference == PreferenceControl::Shelf)
+        source = preferenceSourceLabel(preferences.shelf == ShelfPreference::FollowConfig);
+    else if (m_selectedPreference == PreferenceControl::WindowNavigation)
+        source = preferenceSourceLabel(preferences.windowNavigation == WindowNavigationPreference::FollowConfig);
+    if (!source.empty())
+        m_labels.renderColored(std::string{source}, panelBox.x + 22.0, panelBox.y + 10.0,
+            std::max(1.0, panelBox.w - 76.0), Theme::hintSize(), foreground, panelAlpha * 0.78, damage);
+
     const auto rowLabel = [](PreferenceControl control) -> std::string {
         switch (control) {
         case PreferenceControl::WorkspaceView:
@@ -2025,6 +2041,8 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             return "WINDOWS";
         case PreferenceControl::Shelf:
             return "SHELF";
+        case PreferenceControl::WindowNavigation:
+            return "NAVIGATION";
         case PreferenceControl::Motion:
             return "MOTION";
         case PreferenceControl::Chrome:
@@ -2065,6 +2083,8 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             return static_cast<int>(m_preferences.state().windowView);
         case PreferenceControl::Shelf:
             return static_cast<int>(m_preferences.state().shelf);
+        case PreferenceControl::WindowNavigation:
+            return static_cast<int>(m_preferences.state().windowNavigation);
         case PreferenceControl::Motion:
             return static_cast<int>(m_preferences.state().motion);
         case PreferenceControl::Chrome:
@@ -2091,6 +2111,8 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
             static constexpr std::array labels{"CONFIG", "AUTO", "ALWAYS", "HIDDEN"};
             return labels[static_cast<std::size_t>(std::clamp(value, 0, 3))];
         }
+        case PreferenceControl::WindowNavigation:
+            return std::string{label(static_cast<WindowNavigationPreference>(std::clamp(value, 0, 2)))};
         case PreferenceControl::Motion: {
             static constexpr std::array labels{
                 "DEFAULT", "SNAP", "GLITCH", "LIGHT", "SILK", "REDUCED", "OFF"};
@@ -2923,6 +2945,10 @@ PointerAction OverlayRenderer::applyPreference(PreferenceControl control, int va
             state.shelf = static_cast<ShelfPreference>(value);
         else
             state.shelf = static_cast<ShelfPreference>(adjacent(static_cast<int>(state.shelf), 4));
+        break;
+    case PreferenceControl::WindowNavigation:
+        state.windowNavigation = static_cast<WindowNavigationPreference>(value >= 0 && value <= 2
+            ? value : adjacent(static_cast<int>(state.windowNavigation), 3));
         break;
     case PreferenceControl::Motion:
         if (value >= 0 && value <= 6)

@@ -89,6 +89,9 @@ void parseLine(PreferencesState& preferences, std::string_view line) {
             preferences.shelf = ShelfPreference::Hidden;
         else
             preferences.shelf = ShelfPreference::FollowConfig;
+    } else if (key == "window_navigation") {
+        preferences.windowNavigation = value == "list" ? WindowNavigationPreference::List
+            : value == "spatial" ? WindowNavigationPreference::Spatial : WindowNavigationPreference::FollowConfig;
     } else if (key == "native_theme") {
         preferences.nativeTheme = themeSlug(value);
     }
@@ -152,6 +155,15 @@ std::string_view value(ChromePreference preference) {
     return "config";
 }
 
+std::string_view value(WindowNavigationPreference preference) {
+    switch (preference) {
+    case WindowNavigationPreference::List: return "list";
+    case WindowNavigationPreference::Spatial: return "spatial";
+    case WindowNavigationPreference::FollowConfig: return "config";
+    }
+    return "config";
+}
+
 std::string_view value(ShelfPreference preference) {
     switch (preference) {
     case ShelfPreference::Auto: return "auto";
@@ -183,6 +195,7 @@ std::string serializePreferences(const PreferencesState& preferences) {
         "motion = " + std::string{value(preferences.motion)} + "\n"
         "chrome = " + std::string{value(preferences.chrome)} + "\n"
         "shelf = " + std::string{value(preferences.shelf)} + "\n"
+        "window_navigation = " + std::string{value(preferences.windowNavigation)} + "\n"
         "native_theme = " + (preferences.nativeTheme.empty() ? "auto" : preferences.nativeTheme) + "\n";
 }
 
@@ -301,6 +314,21 @@ std::string_view label(ChromePreference preference) {
     case ChromePreference::FollowConfig: return "CONFIG";
     }
     return "CONFIG";
+}
+
+std::string_view label(WindowNavigationPreference preference) {
+    switch (preference) {
+    case WindowNavigationPreference::List: return "LIST";
+    case WindowNavigationPreference::Spatial: return "SPATIAL";
+    case WindowNavigationPreference::FollowConfig: return "CONFIG";
+    }
+    return "CONFIG";
+}
+
+std::string_view preferenceSourceLabel(bool followsConfig, bool nativeUnavailable) {
+    if (nativeUnavailable)
+        return followsConfig ? "Config: Native unavailable; using Flat" : "Saved override: Native unavailable; using Flat";
+    return followsConfig ? "Follows Hyprland config" : "Saved override; choose Config to follow Hyprland";
 }
 
 std::string_view label(ShelfPreference preference) {

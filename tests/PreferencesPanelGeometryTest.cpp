@@ -12,16 +12,16 @@ namespace {
 void centersPreferredPanelOnLargeMonitor() {
     const auto frame = computePreferencesPanel({.width = 1920.0, .height = 1080.0});
     assert(frame.panel.width == 720.0);
-    assert(frame.panel.height == 422.0);
+    assert(frame.panel.height == 482.0);
     assert(frame.panel.x == 600.0);
-    assert(frame.panel.y == 329.0);
+    assert(frame.panel.y == 299.0);
 }
 
 void wallAndCarouselOmitWindowArrangement() {
     const auto frame = computePreferencesPanel({.width = 1920.0, .height = 1080.0}, false);
-    assert(frame.panel.height == 302.0);
-    assert(frame.rows.size() == 3);
-    assert(frame.options.size() == 15);
+    assert(frame.panel.height == 362.0);
+    assert(frame.rows.size() == 4);
+    assert(frame.options.size() == 18);
     assert(std::ranges::none_of(frame.rows, [](const PreferenceRow& row) {
         return row.control == PreferenceControl::WindowView;
     }));
@@ -61,11 +61,11 @@ void presentsInstalledThemesAsACompactSelector() {
     constexpr auto themeCount = 28;
     const auto frame = computePreferencesPanel({.width = 1920.0, .height = 1080.0}, true, themeCount);
     assert(frame.panel.width == 820.0);
-    assert(frame.panel.height == 482.0);
+    assert(frame.panel.height == 542.0);
     assert(frame.panel.x == 550.0);
-    assert(frame.panel.y == 299.0);
+    assert(frame.panel.y == 269.0);
     assert(frame.nativeThemesPane.width == 0.0);
-    assert(frame.rows.size() == 6);
+    assert(frame.rows.size() == 7);
     assert(frame.rows.back().control == PreferenceControl::NativeTheme);
     assert(frame.appExposeButton.y > frame.rows.back().rect.y + frame.rows.back().rect.height);
 
@@ -97,11 +97,13 @@ void keepsStageRowsOrderedAndFitsSmallMonitors() {
         PreferenceControl::WorkspaceView,
         PreferenceControl::WindowView,
         PreferenceControl::Shelf,
+        PreferenceControl::WindowNavigation,
         PreferenceControl::Motion,
         PreferenceControl::Chrome,
         PreferenceControl::NativeTheme,
     };
     assert(frame.rows.size() == expected.size());
+    assert(frame.rows.front().rect.y >= frame.closeButton.y + frame.closeButton.height);
     for (std::size_t index = 0; index < expected.size(); ++index)
         assert(frame.rows[index].control == expected[index]);
     assert(frame.appExposeButton.y >= frame.rows.back().rect.y + frame.rows.back().rect.height);

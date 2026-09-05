@@ -19,6 +19,7 @@ PreferencesPanelFrame computePreferencesPanel(
         controls.push_back(PreferenceControl::WindowView);
         controls.push_back(PreferenceControl::Shelf);
     }
+    controls.push_back(PreferenceControl::WindowNavigation);
     controls.push_back(PreferenceControl::Motion);
     controls.push_back(PreferenceControl::Chrome);
     if (showNativeThemes)
@@ -36,13 +37,15 @@ PreferencesPanelFrame computePreferencesPanel(
         .height = height,
     };
 
-    const auto verticalScale = std::clamp(height / preferredHeight, 0.54, 1.0);
+    // Keep the header clear of the fixed-size close button, even when rows shrink.
+    constexpr auto headerHeight = 46.0;
+    const auto verticalScale = std::clamp((height - headerHeight) / (preferredHeight - headerHeight), 0.0, 1.0);
     const auto rowHeight     = 52.0 * verticalScale;
     const auto rowGap        = 8.0 * verticalScale;
     const auto rowX          = panel.x + 22.0;
     const auto innerWidth    = std::max(1.0, panel.width - 44.0);
     const auto rowWidth = innerWidth;
-    const auto paneY = panel.y + 46.0 * verticalScale;
+    const auto paneY = panel.y + std::min(headerHeight, height);
     const auto paneHeight = std::max(1.0, panel.height - 68.0 * verticalScale);
     PreferencesPanelFrame frame{
         .panel = panel,
@@ -81,6 +84,7 @@ PreferencesPanelFrame computePreferencesPanel(
         case PreferenceControl::WorkspaceView:
             return 4;
         case PreferenceControl::WindowView:
+        case PreferenceControl::WindowNavigation:
             return 3;
         case PreferenceControl::Shelf:
         case PreferenceControl::Chrome:

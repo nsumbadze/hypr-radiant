@@ -11,6 +11,7 @@ enum class PreferenceControl {
     WorkspaceView,
     WindowView,
     Shelf,
+    WindowNavigation,
     Motion,
     Chrome,
     NativeTheme,
