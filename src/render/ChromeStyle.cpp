@@ -16,6 +16,22 @@ int ChromeStyle::borderWidth(int radiantWidth) const {
     return borderSize.value_or(radiantWidth);
 }
 
+bool ChromeStyle::usesRadiantGradient() const {
+    return preset == ChromePreset::Radiant && !selectedBorder;
+}
+
+std::string chromeStyleDescription(const ChromeStyle& style) {
+    std::string description = style.preset == ChromePreset::Native ? "Desktop borders" :
+        style.preset == ChromePreset::Flat ? "Fixed style" : "Radiant style";
+    if (style.nativeUnavailable)
+        description = "Desktop unavailable; Square fallback";
+    description += ": ";
+    description += !style.rounding ? "rounded cards" : *style.rounding == 0 ? "square corners" : std::to_string(*style.rounding) + "px corners";
+    description += style.borderSize ? ", " + std::to_string(*style.borderSize) + "px borders" : ", accent borders";
+    description += style.effects ? "; effects on" : "; effects off";
+    return description;
+}
+
 ChromePreset parseChromePreset(std::string_view value) {
     if (value == "native")
         return ChromePreset::Native;

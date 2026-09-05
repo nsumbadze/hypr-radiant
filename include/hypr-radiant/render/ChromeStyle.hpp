@@ -4,6 +4,7 @@
 
 #include <optional>
 #include <string_view>
+#include <string>
 #include <vector>
 
 namespace hypr_radiant {
@@ -43,10 +44,12 @@ struct ChromeStyle {
 
     [[nodiscard]] int radius(int radiantRadius, int outset = 0) const;
     [[nodiscard]] int borderWidth(int radiantWidth) const;
+    [[nodiscard]] bool usesRadiantGradient() const;
 };
 
 [[nodiscard]] ChromePreset parseChromePreset(std::string_view value);
 [[nodiscard]] EffectsMode  parseEffectsMode(std::string_view value);
 [[nodiscard]] ChromeStyle  resolveChromeStyle(const ChromeInputs& inputs);
+[[nodiscard]] std::string chromeStyleDescription(const ChromeStyle& style);
 
 } // namespace hypr_radiant

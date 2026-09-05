@@ -70,9 +70,52 @@ void parsersFallBackToDefaults() {
     assert(parseEffectsMode("unknown") == EffectsMode::Auto);
 }
 
+void presetSwitchingDoesNotRetainPreviousStyle() {
+    ChromeInputs inputs;
+    assert(resolveChromeStyle(inputs).usesRadiantGradient());
+    inputs.preset = ChromePreset::Native;
+    inputs.native = NativeDecoration{.rounding = 0, .borderSize = 2,
+        .activeBorder = gradient(0.7F), .inactiveBorder = gradient(0.3F)};
+    const auto desktop = resolveChromeStyle(inputs);
+    assert(!desktop.usesRadiantGradient());
+    assert(chromeStyleDescription(desktop) == "Desktop borders: square corners, 2px borders; effects off");
+    inputs.preset = ChromePreset::Flat;
+    const auto square = resolveChromeStyle(inputs);
+    assert(!square.usesRadiantGradient());
+    assert(!square.selectedBorder && !square.inactiveBorder);
+    assert(chromeStyleDescription(square) == "Fixed style: square corners, 2px borders; effects off");
+    inputs.preset = ChromePreset::Radiant;
+    const auto radiant = resolveChromeStyle(inputs);
+    assert(radiant.usesRadiantGradient() && radiant.effects);
+    assert(!radiant.rounding && !radiant.borderSize && !radiant.inactiveBorder);
+    inputs.borderColorOverride = RadiantRgba{.red = 1.F};
+    assert(!resolveChromeStyle(inputs).usesRadiantGradient());
+    inputs.preset = ChromePreset::Native;
+    inputs.native.reset();
+    const auto fallback = resolveChromeStyle(inputs);
+    assert(!fallback.usesRadiantGradient());
+    assert(chromeStyleDescription(fallback).starts_with("Desktop unavailable; Square fallback"));
+}
+
+void descriptionsReflectOverridesAndZeroBorders() {
+    ChromeInputs inputs;
+    inputs.preset = ChromePreset::Flat;
+    inputs.roundingOverride = 8;
+    inputs.borderSizeOverride = 0;
+    inputs.effects = EffectsMode::On;
+    const auto style = resolveChromeStyle(inputs);
+    assert(style.borderWidth(2) == 0);
+    assert(style.radius(14, 1) == 9);
+    assert(chromeStyleDescription(style) == "Fixed style: 8px corners, 0px borders; effects on");
+    inputs.roundingOverride = 0;
+    assert(resolveChromeStyle(inputs).radius(14, 20) == 0);
+}
+
 } // namespace
 
 int main() {
+    presetSwitchingDoesNotRetainPreviousStyle();
+    descriptionsReflectOverridesAndZeroBorders();
     radiantPassesThroughLiterals();
     flatIsSquareThickAndEffectless();
     nativeMirrorsDecorationAndFallsBackSafely();

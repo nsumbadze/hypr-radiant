@@ -114,7 +114,7 @@ void drawRect(const CBox& box, CHyprColor color, const CRegion& damage, int roun
 // Single-stop border. Folds in the g_pHyprRenderer guard that four of the seven old call sites were
 // missing, so a border can never be the thing that dereferences a null renderer.
 void drawBorder(const CBox& box, CHyprColor color, int round, int borderSize) {
-    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
+    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0 || borderSize <= 0)
         return;
 
     CBorderPassElement::SBorderData border;
@@ -128,7 +128,7 @@ void drawBorder(const CBox& box, CHyprColor color, int round, int borderSize) {
 
 // Two-stop gradient border at an angle — Hyprland's own border idiom, used by the dock rim.
 void drawBorder(const CBox& box, CHyprColor from, CHyprColor to, float angle, float alpha, int round, int borderSize) {
-    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0)
+    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0 || borderSize <= 0)
         return;
 
     CBorderPassElement::SBorderData border;
@@ -141,7 +141,7 @@ void drawBorder(const CBox& box, CHyprColor from, CHyprColor to, float angle, fl
 }
 
 void drawBorder(const CBox& box, const BorderGradient& gradient, float alpha, int round, int borderSize) {
-    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0 || gradient.stops.empty())
+    if (!g_pHyprRenderer || box.w <= 0.0 || box.h <= 0.0 || borderSize <= 0 || gradient.stops.empty())
         return;
 
     std::vector<CHyprColor> colors;
@@ -1660,13 +1660,13 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
                 workspaceBox.w + spread * 2.0,
                 workspaceBox.h + spread * 2.0,
             };
-            drawRect(glowBox, withAlpha(accent, cardAlpha * glowStrength), damage, round + static_cast<int>(spread));
+            drawRect(glowBox, withAlpha(accent, cardAlpha * glowStrength), damage, m_chrome.radius(round, static_cast<int>(spread)));
         }
 
         const auto shadowLift = workspaceSelected ? 9.0 * selection : ownsSelection ? 4.0 * selection : 0.0;
         if (m_chrome.effects && (!carouselThumbnail || ribbonBlade)) {
             drawRect(CBox{workspaceBox.x + 5.0, workspaceBox.y + 7.0 + shadowLift * 0.30, workspaceBox.w, workspaceBox.h},
-                withAlpha(Theme::shadowColor(), cardAlpha * (ribbonBlade ? 0.50 : 0.34 + hoverLift * 0.12)), damage, round + 2);
+                withAlpha(Theme::shadowColor(), cardAlpha * (ribbonBlade ? 0.50 : 0.34 + hoverLift * 0.12)), damage, m_chrome.radius(round, 2));
         }
 
         const auto surfaceLift = workspace.createTarget ? 0.075F : workspace.empty ? 0.085F :
@@ -1686,7 +1686,7 @@ void OverlayRenderer::renderFrame(const WorkspaceWallFrame& frame, double alpha,
         // its only bright signal, echoing Quattro's restrained theme-switcher selection state.
         drawInactiveBorder(workspaceBox, withAlpha(foreground, cardAlpha * (ribbonBlade ? 0.16 : 0.065)), round, 1);
         if (carouselFocused) {
-            if (m_chrome.selectedBorder)
+            if (!m_chrome.usesRadiantGradient())
                 drawSelectedBorder(workspaceBox, withAlpha(accentLit, cardAlpha * 0.76), round, ribbonFocused ? 3 : 2);
             else
                 drawBorder(workspaceBox, withAlpha(accentLit, cardAlpha * 0.62), withAlpha(accent, cardAlpha * 0.18),
@@ -1967,7 +1967,7 @@ void OverlayRenderer::renderHintDock(const WorkspaceWallFrame& frame, double con
                 withAlpha(Theme::shadowColor(), dockAlpha * 0.55), damage, radius);
         }
         drawChromeRect(dock, withAlpha(railSurface, dockAlpha * 0.90), damage, radius, true);
-        if (m_chrome.inactiveBorder)
+        if (m_chrome.preset != ChromePreset::Radiant || m_chrome.inactiveBorder)
             drawInactiveBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), radius, 1);
         else
             drawBorder(dock, withAlpha(rimLit, dockAlpha * 0.55), rimShade, rimAngle,
@@ -2031,7 +2031,10 @@ void OverlayRenderer::renderPreferencesPanel(const WorkspaceWallFrame& frame, do
         source = preferenceSourceLabel(preferences.windowNavigation == WindowNavigationPreference::FollowConfig);
     if (!source.empty())
         m_labels.renderColored(std::string{source}, panelBox.x + 22.0, panelBox.y + 10.0,
-            std::max(1.0, panelBox.w - 76.0), Theme::hintSize(), foreground, panelAlpha * 0.78, damage);
+            std::max(1.0, panelBox.w - 76.0), 9, foreground, panelAlpha * 0.78, damage);
+    if (m_selectedPreference == PreferenceControl::Chrome)
+        m_labels.renderColored(chromeStyleDescription(m_chrome), panelBox.x + 22.0, panelBox.y + 26.0,
+            std::max(1.0, panelBox.w - 44.0), 9, accent, panelAlpha * 0.90, damage);
 
     const auto rowLabel = [](PreferenceControl control) -> std::string {
         switch (control) {
@@ -2275,7 +2278,7 @@ void OverlayRenderer::renderStageWindows(const WorkspaceWallFrame& frame, const 
 
         if (selected) {
             drawSelectedBorder(CBox{windowBox.x - 1.0, windowBox.y - 1.0, windowBox.w + 2.0, windowBox.h + 2.0}, withAlpha(ctx.accent, cardAlpha * 0.82),
-                radius + 1, 1);
+                radius + 1, 1, 1);
             drawSignalLock(displayRect, ctx.selectionTransition, ctx.accent, windowAlpha, damage);
         } else if (m_chrome.inactiveBorder)
             drawInactiveBorder(windowBox, withAlpha(ctx.accent, cardAlpha), radius, 1);
