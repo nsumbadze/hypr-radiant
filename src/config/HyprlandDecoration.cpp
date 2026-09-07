@@ -38,9 +38,9 @@ std::optional<BorderGradient> readGradient(const CConfigValue<Config::IComplexCo
     result.stops.reserve(gradient->m_colors.size());
     for (const auto& color : gradient->m_colors) {
         result.stops.push_back({
-            .red = static_cast<float>(color.r),
+            .red   = static_cast<float>(color.r),
             .green = static_cast<float>(color.g),
-            .blue = static_cast<float>(color.b),
+            .blue  = static_cast<float>(color.b),
             .alpha = static_cast<float>(color.a),
         });
     }

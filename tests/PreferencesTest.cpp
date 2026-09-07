@@ -148,7 +148,7 @@ int main() {
     changed = original;
     changed.windowNavigation = WindowNavigationPreference::Spatial;
     assert(preferenceUpdate(original, changed) == PreferenceUpdate::Repaint);
-    changed = original;
+    changed             = original;
     changed.nativeTheme = "hackerman";
     assert(preferenceUpdate(original, changed) == PreferenceUpdate::Repaint);
     changed = original;
@@ -157,7 +157,7 @@ int main() {
     changed = original;
     changed.workspaceView = WorkspaceViewPreference::Carousel;
     assert(preferenceUpdate(original, changed) == PreferenceUpdate::RebuildLayout);
-    changed = original;
+    changed        = original;
     changed.motion = MotionPreference::Off;
     assert(preferenceUpdate(original, changed) == PreferenceUpdate::RebuildLayout);
     for (const auto value : {"config", "list", "spatial", "unknown"}) {

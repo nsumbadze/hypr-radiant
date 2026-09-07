@@ -181,7 +181,7 @@ void RadiantPlugin::initialize() {
         .jump = [this](std::int64_t workspaceId) {
             if (!m_overlay.preferencesVisible())
                 activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
-        .close = [this] {
+        .close            = [this] {
             const auto wasActive = m_overlay.active();
             m_overlay.clearSearchOrHide();
             if (wasActive && !m_overlay.active()) {

@@ -434,7 +434,8 @@ void spatialNavigationPrefersAlignmentThenDistance() {
 void spatialShelfReturnValidatesRememberedWindow() {
     auto testFrame = focusedFrame();
     const OverviewTarget workspace{.type = OverviewTargetType::Workspace, .workspaceId = 1};
-    NavigationOptions options{.spatialWindows = true, .returnWindow = {
+    NavigationOptions options{
+        .spatialWindows = true, .returnWindow = {
         .type = OverviewTargetType::Window, .workspaceId = 1, .windowId = 12, .monitorId = 1}};
     assert(HitTester{}.moveSelection(testFrame, workspace, NavigationDirection::Down, options).windowId == 12);
     options.spatialWindows = false;

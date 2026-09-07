@@ -31,9 +31,17 @@ enum class MotionPreference {
     Off,
 };
 
-enum class ChromePreference { FollowConfig, Radiant, Native, Flat };
-enum class ShelfPreference { FollowConfig, Auto, Always, Hidden };
-enum class WindowNavigationPreference { FollowConfig, List, Spatial };
+enum class ChromePreference { FollowConfig,
+    Radiant,
+    Native,
+    Flat };
+enum class ShelfPreference { FollowConfig,
+    Auto,
+    Always,
+    Hidden };
+enum class WindowNavigationPreference { FollowConfig,
+    List,
+    Spatial };
 
 [[nodiscard]] constexpr bool usesSpatialNavigation(WindowNavigationPreference preference, bool configuredSpatial) {
     return preference == WindowNavigationPreference::FollowConfig ? configuredSpatial : preference == WindowNavigationPreference::Spatial;
@@ -55,7 +63,9 @@ struct PreferencesState {
     bool operator==(const PreferencesState&) const = default;
 };
 
-enum class PreferenceUpdate { None, Repaint, RebuildLayout };
+enum class PreferenceUpdate { None,
+    Repaint,
+    RebuildLayout };
 [[nodiscard]] PreferenceUpdate preferenceUpdate(const PreferencesState& before, const PreferencesState& after);
 
 [[nodiscard]] PreferencesState parsePreferences(std::string_view contents);

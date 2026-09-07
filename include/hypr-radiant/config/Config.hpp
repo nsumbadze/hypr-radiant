@@ -27,8 +27,11 @@ enum class LayoutMode {
     Ribbon,
 };
 
-enum class ShelfMode { Auto, Always, Hidden };
-enum class WindowNavigation { List, Spatial };
+enum class ShelfMode { Auto,
+    Always,
+    Hidden };
+enum class WindowNavigation { List,
+    Spatial };
 
 [[nodiscard]] LayoutMode parseLayoutMode(std::string_view value);
 [[nodiscard]] ShelfMode  parseShelfMode(std::string_view value);

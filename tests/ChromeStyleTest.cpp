@@ -49,11 +49,11 @@ void nativeMirrorsDecorationAndFallsBackSafely() {
 
 void overridesWinAndClamp() {
     ChromeInputs inputs;
-    inputs.preset = ChromePreset::Flat;
-    inputs.roundingOverride = 80;
-    inputs.borderSizeOverride = 20;
+    inputs.preset              = ChromePreset::Flat;
+    inputs.roundingOverride    = 80;
+    inputs.borderSizeOverride  = 20;
     inputs.borderColorOverride = RadiantRgba{.red = 1.F};
-    inputs.effects = EffectsMode::On;
+    inputs.effects             = EffectsMode::On;
     const auto style = resolveChromeStyle(inputs);
     assert(style.radius(2) == 40);
     assert(style.borderWidth(1) == 12);
@@ -74,8 +74,7 @@ void presetSwitchingDoesNotRetainPreviousStyle() {
     ChromeInputs inputs;
     assert(resolveChromeStyle(inputs).usesRadiantGradient());
     inputs.preset = ChromePreset::Native;
-    inputs.native = NativeDecoration{.rounding = 0, .borderSize = 2,
-        .activeBorder = gradient(0.7F), .inactiveBorder = gradient(0.3F)};
+    inputs.native = NativeDecoration{.rounding = 0, .borderSize = 2, .activeBorder = gradient(0.7F), .inactiveBorder = gradient(0.3F)};
     const auto desktop = resolveChromeStyle(inputs);
     assert(!desktop.usesRadiantGradient());
     assert(chromeStyleDescription(desktop) == "Desktop borders: square corners, 2px borders; effects off");
@@ -99,10 +98,10 @@ void presetSwitchingDoesNotRetainPreviousStyle() {
 
 void descriptionsReflectOverridesAndZeroBorders() {
     ChromeInputs inputs;
-    inputs.preset = ChromePreset::Flat;
-    inputs.roundingOverride = 8;
+    inputs.preset             = ChromePreset::Flat;
+    inputs.roundingOverride   = 8;
     inputs.borderSizeOverride = 0;
-    inputs.effects = EffectsMode::On;
+    inputs.effects            = EffectsMode::On;
     const auto style = resolveChromeStyle(inputs);
     assert(style.borderWidth(2) == 0);
     assert(style.radius(14, 1) == 9);

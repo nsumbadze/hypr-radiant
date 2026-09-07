@@ -577,7 +577,7 @@ void deckArrangementBuildsAHeroAndSupportingColumn() {
 void scalesOnlySpacingMetrics() {
     WorkspaceWallOptions options;
     options.outerPadding = 100.0;
-    options.cardGap = 20.0;
+    options.cardGap      = 20.0;
     options.windowGap = 10.0;
     options.windowInset = 8.0;
     assert(scaledSpacing(options, 1.0).outerPadding == 100.0);

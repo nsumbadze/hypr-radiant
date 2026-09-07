@@ -21,8 +21,8 @@ bool ChromeStyle::usesRadiantGradient() const {
 }
 
 std::string chromeStyleDescription(const ChromeStyle& style) {
-    std::string description = style.preset == ChromePreset::Native ? "Desktop borders" :
-        style.preset == ChromePreset::Flat ? "Fixed style" : "Radiant style";
+    std::string description = style.preset == ChromePreset::Native ? "Desktop borders" : style.preset == ChromePreset::Flat ? "Fixed style"
+                                                                                                                : "Radiant style";
     if (style.nativeUnavailable)
         description = "Desktop unavailable; Square fallback";
     description += ": ";
@@ -52,9 +52,9 @@ ChromeStyle resolveChromeStyle(const ChromeInputs& inputs) {
     ChromeStyle style;
     style.preset = inputs.preset;
     if (inputs.preset == ChromePreset::Flat) {
-        style.rounding = 0;
+        style.rounding   = 0;
         style.borderSize = 2;
-        style.effects = false;
+        style.effects    = false;
     } else if (inputs.preset == ChromePreset::Native) {
         style.effects = false;
         if (inputs.native) {
@@ -65,8 +65,8 @@ ChromeStyle resolveChromeStyle(const ChromeInputs& inputs) {
             if (!inputs.native->inactiveBorder.stops.empty())
                 style.inactiveBorder = inputs.native->inactiveBorder;
         } else {
-            style.rounding = 0;
-            style.borderSize = 2;
+            style.rounding          = 0;
+            style.borderSize        = 2;
             style.nativeUnavailable = true;
         }
     }

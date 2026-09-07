@@ -91,7 +91,8 @@ void parseLine(PreferencesState& preferences, std::string_view line) {
             preferences.shelf = ShelfPreference::FollowConfig;
     } else if (key == "window_navigation") {
         preferences.windowNavigation = value == "list" ? WindowNavigationPreference::List
-            : value == "spatial" ? WindowNavigationPreference::Spatial : WindowNavigationPreference::FollowConfig;
+                                     : value == "spatial" ? WindowNavigationPreference::Spatial
+                                                          : WindowNavigationPreference::FollowConfig;
     } else if (key == "native_theme") {
         preferences.nativeTheme = themeSlug(value);
     }
@@ -147,29 +148,40 @@ std::string_view value(MotionPreference preference) {
 
 std::string_view value(ChromePreference preference) {
     switch (preference) {
-    case ChromePreference::Radiant: return "radiant";
-    case ChromePreference::Native: return "native";
-    case ChromePreference::Flat: return "flat";
-    case ChromePreference::FollowConfig: return "config";
+    case ChromePreference::Radiant:
+        return "radiant";
+    case ChromePreference::Native:
+        return "native";
+    case ChromePreference::Flat:
+        return "flat";
+    case ChromePreference::FollowConfig:
+        return "config";
     }
     return "config";
 }
 
 std::string_view value(WindowNavigationPreference preference) {
     switch (preference) {
-    case WindowNavigationPreference::List: return "list";
-    case WindowNavigationPreference::Spatial: return "spatial";
-    case WindowNavigationPreference::FollowConfig: return "config";
+    case WindowNavigationPreference::List:
+        return "list";
+    case WindowNavigationPreference::Spatial:
+        return "spatial";
+    case WindowNavigationPreference::FollowConfig:
+        return "config";
     }
     return "config";
 }
 
 std::string_view value(ShelfPreference preference) {
     switch (preference) {
-    case ShelfPreference::Auto: return "auto";
-    case ShelfPreference::Always: return "always";
-    case ShelfPreference::Hidden: return "hidden";
-    case ShelfPreference::FollowConfig: return "config";
+    case ShelfPreference::Auto:
+        return "auto";
+    case ShelfPreference::Always:
+        return "always";
+    case ShelfPreference::Hidden:
+        return "hidden";
+    case ShelfPreference::FollowConfig:
+        return "config";
     }
     return "config";
 }
@@ -316,19 +328,26 @@ std::string_view label(MotionPreference preference) {
 
 std::string_view label(ChromePreference preference) {
     switch (preference) {
-    case ChromePreference::Radiant: return "Radiant";
-    case ChromePreference::Native: return "Match desktop";
-    case ChromePreference::Flat: return "Square";
-    case ChromePreference::FollowConfig: return "CONFIG";
+    case ChromePreference::Radiant:
+        return "Radiant";
+    case ChromePreference::Native:
+        return "Match desktop";
+    case ChromePreference::Flat:
+        return "Square";
+    case ChromePreference::FollowConfig:
+        return "CONFIG";
     }
     return "CONFIG";
 }
 
 std::string_view label(WindowNavigationPreference preference) {
     switch (preference) {
-    case WindowNavigationPreference::List: return "LIST";
-    case WindowNavigationPreference::Spatial: return "SPATIAL";
-    case WindowNavigationPreference::FollowConfig: return "CONFIG";
+    case WindowNavigationPreference::List:
+        return "LIST";
+    case WindowNavigationPreference::Spatial:
+        return "SPATIAL";
+    case WindowNavigationPreference::FollowConfig:
+        return "CONFIG";
     }
     return "CONFIG";
 }
@@ -341,10 +360,14 @@ std::string_view preferenceSourceLabel(bool followsConfig, bool nativeUnavailabl
 
 std::string_view label(ShelfPreference preference) {
     switch (preference) {
-    case ShelfPreference::Auto: return "AUTO";
-    case ShelfPreference::Always: return "ALWAYS";
-    case ShelfPreference::Hidden: return "HIDDEN";
-    case ShelfPreference::FollowConfig: return "CONFIG";
+    case ShelfPreference::Auto:
+        return "AUTO";
+    case ShelfPreference::Always:
+        return "ALWAYS";
+    case ShelfPreference::Hidden:
+        return "HIDDEN";
+    case ShelfPreference::FollowConfig:
+        return "CONFIG";
     }
     return "CONFIG";
 }

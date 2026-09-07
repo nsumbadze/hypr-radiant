@@ -103,9 +103,9 @@ std::optional<OverviewTarget> nearestInDirection(const WorkspaceWallFrame& frame
             : std::min(rect.x + rect.width, currentRect.x + currentRect.width) > std::max(rect.x, currentRect.x);
         const auto score = preferAlignment ? dx * dx + dy * dy : primary * 1000.0 + secondary;
         if (!best || (preferAlignment && aligned != bestAligned ? aligned : score < bestScore)) {
-            bestScore = score;
+            bestScore   = score;
             bestAligned = aligned;
-            best = target;
+            best        = target;
         }
     }
     return best;

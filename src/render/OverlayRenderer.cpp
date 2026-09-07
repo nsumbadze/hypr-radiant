@@ -3083,9 +3083,12 @@ LayoutMode OverlayRenderer::effectiveLayoutMode() const {
 
 ChromePreset OverlayRenderer::effectiveChromePreset() const {
     switch (m_preferences.state().chrome) {
-    case ChromePreference::Radiant: return ChromePreset::Radiant;
-    case ChromePreference::Native: return ChromePreset::Native;
-    case ChromePreference::Flat: return ChromePreset::Flat;
+    case ChromePreference::Radiant:
+        return ChromePreset::Radiant;
+    case ChromePreference::Native:
+        return ChromePreset::Native;
+    case ChromePreference::Flat:
+        return ChromePreset::Flat;
     case ChromePreference::FollowConfig: return m_config.chromePreset();
     }
     return m_config.chromePreset();
@@ -3093,9 +3096,12 @@ ChromePreset OverlayRenderer::effectiveChromePreset() const {
 
 ShelfMode OverlayRenderer::effectiveShelfMode() const {
     switch (m_preferences.state().shelf) {
-    case ShelfPreference::Auto: return ShelfMode::Auto;
-    case ShelfPreference::Always: return ShelfMode::Always;
-    case ShelfPreference::Hidden: return ShelfMode::Hidden;
+    case ShelfPreference::Auto:
+        return ShelfMode::Auto;
+    case ShelfPreference::Always:
+        return ShelfMode::Always;
+    case ShelfPreference::Hidden:
+        return ShelfMode::Hidden;
     case ShelfPreference::FollowConfig: return m_config.shelfMode();
     }
     return m_config.shelfMode();

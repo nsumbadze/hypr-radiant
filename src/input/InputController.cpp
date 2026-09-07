@@ -39,7 +39,7 @@ KeyboardModifiers currentModifiers() {
     const auto modifiers = keyboard->getModifiers();
     return {
         .control = (modifiers & HL_MODIFIER_CTRL) != 0,
-        .shift = (modifiers & HL_MODIFIER_SHIFT) != 0,
+        .shift   = (modifiers & HL_MODIFIER_SHIFT) != 0,
     };
 }
 

@@ -9,12 +9,16 @@
 
 namespace hypr_radiant {
 
-enum class ChromePreset { Radiant, Native, Flat };
-enum class EffectsMode { Auto, On, Off };
+enum class ChromePreset { Radiant,
+    Native,
+    Flat };
+enum class EffectsMode { Auto,
+    On,
+    Off };
 
 struct BorderGradient {
     std::vector<RadiantRgba> stops;
-    float                    angle = 0.F;
+    float angle = 0.F;
 };
 
 struct NativeDecoration {
@@ -25,16 +29,16 @@ struct NativeDecoration {
 };
 
 struct ChromeInputs {
-    ChromePreset                    preset = ChromePreset::Radiant;
+    ChromePreset preset  = ChromePreset::Radiant;
     int                             roundingOverride = -1;
     int                             borderSizeOverride = -1;
     std::optional<RadiantRgba>      borderColorOverride;
-    EffectsMode                     effects = EffectsMode::Auto;
+    EffectsMode  effects = EffectsMode::Auto;
     std::optional<NativeDecoration> native;
 };
 
 struct ChromeStyle {
-    ChromePreset                  preset = ChromePreset::Radiant;
+    ChromePreset preset = ChromePreset::Radiant;
     std::optional<int>            rounding;
     std::optional<int>            borderSize;
     std::optional<BorderGradient> selectedBorder;
