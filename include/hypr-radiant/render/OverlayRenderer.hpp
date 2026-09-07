@@ -2,11 +2,14 @@
 
 #include <hypr-radiant/config/Config.hpp>
 #include <hypr-radiant/config/Preferences.hpp>
+#include <hypr-radiant/config/HyprlandDecoration.hpp>
+#include <hypr-radiant/input/KeyboardAction.hpp>
 #include <hypr-radiant/overview/PreferencesPanelGeometry.hpp>
 #include <hypr-radiant/render/FadeAnimation.hpp>
 #include <hypr-radiant/RadiantState.hpp>
 #include <hypr-radiant/overview/HitTester.hpp>
 #include <hypr-radiant/render/LabelRenderer.hpp>
+#include <hypr-radiant/render/ChromeStyle.hpp>
 #include <hypr-radiant/overview/SearchMatcher.hpp>
 #include <hypr-radiant/overview/SearchSuggestions.hpp>
 #include <hypr-radiant/overview/WorkspaceWallLayout.hpp>
@@ -50,6 +53,7 @@ class OverlayRenderer {
     void toggle(RadiantState state);
     void hideImmediate();
     void moveSelection(NavigationDirection direction);
+    void cycleWindow(int step);
     void selectTargetAt(double x, double y);
     void appendSearchChar(char value);
     void beginSearch();
@@ -58,7 +62,7 @@ class OverlayRenderer {
     void toggleGroupedMode();
     void togglePreferences();
     [[nodiscard]] PointerAction activatePreference();
-    void setWorkspaceShelfVisible(bool visible);
+    void setWorkspaceShelfVisible(bool visible, bool explicitRequest = false);
     void setHintDockVisible(bool visible);
     void toggleWorkspaceShelf();
     void setWorkspaceShelfGestureProgress(bool revealing, double progress);
@@ -117,6 +121,10 @@ class OverlayRenderer {
     void renderDragCard(const WindowCard& window, const LayoutRect& rect, double alpha, double lift, const CRegion& damage);
     void renderSearchPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
     void renderPreferencesPanel(const WorkspaceWallFrame& frame, double alpha, const CRegion& damage);
+    void refreshChromeStyle();
+    void drawChromeRect(const CBox& box, CHyprColor color, const CRegion& damage, int radiantRound, bool blur = false) const;
+    void drawSelectedBorder(const CBox& box, CHyprColor fallback, int radiantRound, int radiantWidth, int outset = 0) const;
+    void drawInactiveBorder(const CBox& box, CHyprColor fallback, int radiantRound, int radiantWidth, int outset = 0) const;
 
     [[nodiscard]] std::vector<OverviewTarget> matchingSearchTargets() const;
     [[nodiscard]] std::vector<SearchSuggestion> matchingSearchSuggestions() const;
@@ -130,6 +138,10 @@ class OverlayRenderer {
     [[nodiscard]] const WorkspaceWallFrame* activeMonitorFrame() const noexcept;
     [[nodiscard]] CHyprColor resolvedAccentColor() const;
     [[nodiscard]] LayoutMode effectiveLayoutMode() const;
+    [[nodiscard]] ChromePreset effectiveChromePreset() const;
+    [[nodiscard]] ShelfMode    effectiveShelfMode() const;
+    [[nodiscard]] bool         shelfAutomationAllowed(bool visible) const;
+    void                       normalizeShelfVisibility();
     [[nodiscard]] int        effectiveAnimationDurationMs() const;
     [[nodiscard]] AnimationCurve effectiveAnimationCurve() const;
     void applyMotionProfile();
@@ -183,6 +195,9 @@ class OverlayRenderer {
 
     RadiantConfig&                                        m_config;
     PreferencesStore&                                     m_preferences;
+    HyprlandDecorationReader                              m_decoration;
+    ChromeStyle                                           m_chrome;
+    bool                                                  m_nativeWarningIssued = false;
     FadeAnimation                                      m_animation;
     FadeAnimation                                      m_stageTransition;
     FadeAnimation                                      m_selectionTransition;
@@ -236,6 +251,8 @@ class OverlayRenderer {
     DragSettle                                            m_dragSettle;
     bool                                                  m_pointerDown = false;
     bool                                                  m_dragging = false;
+    bool                                                  m_shelfKeyboardRevealed = false;
+    OverviewTarget                                        m_shelfReturnWindow;
 };
 
 } // namespace hypr_radiant

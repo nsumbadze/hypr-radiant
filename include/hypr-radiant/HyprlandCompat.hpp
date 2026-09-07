@@ -47,9 +47,12 @@ inline Vector2D windowPosition(const PHLWINDOW& window) {
         return {};
 
 #if HYPR_RADIANT_HYPRLAND_STATE_API
-    return window->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
+    // An overview opened while Hyprland is moving a window must lay out the preview at the
+    // compositor's settled destination. Capturing CURRENT here freezes an in-flight animation
+    // into the session, leaving cards offset or clipped until the overview is reopened.
+    return window->position(Desktop::View::IGeometric::GEOMETRIC_GOAL);
 #else
-    return window->m_realPosition->value();
+    return window->m_realPosition->goal();
 #endif
 }
 
@@ -58,9 +61,9 @@ inline Vector2D windowSize(const PHLWINDOW& window) {
         return {};
 
 #if HYPR_RADIANT_HYPRLAND_STATE_API
-    return window->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
+    return window->size(Desktop::View::IGeometric::GEOMETRIC_GOAL);
 #else
-    return window->m_realSize->value();
+    return window->m_realSize->goal();
 #endif
 }
 

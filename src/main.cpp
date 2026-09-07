@@ -181,7 +181,7 @@ void RadiantPlugin::initialize() {
         .jump = [this](std::int64_t workspaceId) {
             if (!m_overlay.preferencesVisible())
                 activate({.type = OverviewTargetType::Workspace, .workspaceId = workspaceId}, "number activation"); },
-        .close = [this] {
+        .close            = [this] {
             const auto wasActive = m_overlay.active();
             m_overlay.clearSearchOrHide();
             if (wasActive && !m_overlay.active()) {
@@ -190,6 +190,9 @@ void RadiantPlugin::initialize() {
             } },
         .toggleMode = [this] { m_overlay.toggleGroupedMode(); },
         .togglePreferences = [this] { m_overlay.togglePreferences(); },
+        .keyboardBindings = [this] {
+            return KeyboardBindings{.vimKeys = m_config.vimKeys(), .tabCyclesWindows = m_config.tabCyclesWindows()}; },
+        .cycleWindow = [this](int step) { m_overlay.cycleWindow(step); },
     });
     m_gestures.install({
         .enabled = [this] { return m_config.gestureEnabled(); },
@@ -386,9 +389,9 @@ SDispatchResult RadiantPlugin::shelf(const std::string& args) {
     if (args.empty() || args == "toggle")
         m_overlay.toggleWorkspaceShelf();
     else if (args == "show" || args == "open")
-        m_overlay.setWorkspaceShelfVisible(true);
+        m_overlay.setWorkspaceShelfVisible(true, true);
     else if (args == "hide" || args == "close")
-        m_overlay.setWorkspaceShelfVisible(false);
+        m_overlay.setWorkspaceShelfVisible(false, true);
     else
         return {.passEvent = false, .success = false, .error = "expected show, hide, or toggle"};
 

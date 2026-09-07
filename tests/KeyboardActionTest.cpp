@@ -64,6 +64,38 @@ void printableKeysFeedSearch() {
     assert(resolveKeyboardAction(KEY_A, false, false, std::nullopt).type == KeyboardActionType::None);
 }
 
+void vimBindingsOnlyNavigateOutsideSearch() {
+    const KeyboardBindings bindings{.vimKeys = true, .tabCyclesWindows = false};
+    const KeyboardModifiers none{};
+    assert(resolveKeyboardAction(KEY_H, false, none, 'h', bindings).direction == NavigationDirection::Left);
+    assert(resolveKeyboardAction(KEY_J, false, none, 'j', bindings).direction == NavigationDirection::Down);
+    assert(resolveKeyboardAction(KEY_K, false, none, 'k', bindings).direction == NavigationDirection::Up);
+    assert(resolveKeyboardAction(KEY_L, false, none, 'l', bindings).direction == NavigationDirection::Right);
+    assert(resolveKeyboardAction(KEY_G, false, none, 'g', bindings).type == KeyboardActionType::None);
+    assert(resolveKeyboardAction(KEY_H, false, {.control = true, .shift = false}, 'h', bindings).type == KeyboardActionType::None);
+    const auto typed = resolveKeyboardAction(KEY_H, true, none, 'h', bindings);
+    assert(typed.type == KeyboardActionType::TextInput && typed.text == 'h');
+    for (const auto key : {KEY_H, KEY_J, KEY_K, KEY_L}) {
+        const auto character = key == KEY_H ? 'h' : key == KEY_J ? 'j' : key == KEY_K ? 'k' : 'l';
+        const auto search = resolveKeyboardAction(key, true, none, character, bindings);
+        assert(search.type == KeyboardActionType::TextInput && search.text == character);
+        const auto defaultTyping = resolveKeyboardAction(key, false, none, character, {});
+        assert(defaultTyping.type == KeyboardActionType::TextInput && defaultTyping.text == character);
+    }
+    assert(resolveKeyboardAction(KEY_SLASH, false, none, '/', bindings).type == KeyboardActionType::OpenSearch);
+}
+
+void tabCyclingHonorsModifiersAndDefaults() {
+    const KeyboardBindings cycling{.vimKeys = false, .tabCyclesWindows = true};
+    const auto next = resolveKeyboardAction(KEY_TAB, false, {}, std::nullopt, cycling);
+    assert(next.type == KeyboardActionType::CycleWindow && next.step == 1);
+    const auto previous = resolveKeyboardAction(KEY_TAB, false, {.control = false, .shift = true}, std::nullopt, cycling);
+    assert(previous.type == KeyboardActionType::CycleWindow && previous.step == -1);
+    assert(resolveKeyboardAction(KEY_TAB, false, {.control = true, .shift = false}, std::nullopt, cycling).type == KeyboardActionType::ToggleMode);
+    assert(resolveKeyboardAction(KEY_TAB, true, {}, std::nullopt, cycling).type == KeyboardActionType::None);
+    assert(resolveKeyboardAction(KEY_TAB, false, {.control = false, .shift = true}, std::nullopt).type == KeyboardActionType::ToggleMode);
+}
+
 } // namespace
 
 int main() {
@@ -73,6 +105,8 @@ int main() {
     tabOnlyChangesModeOutsideSearch();
     navigationAndCoreControlsRemainMapped();
     printableKeysFeedSearch();
+    vimBindingsOnlyNavigateOutsideSearch();
+    tabCyclingHonorsModifiersAndDefaults();
     std::cout << "KeyboardActionTest passed\n";
     return 0;
 }

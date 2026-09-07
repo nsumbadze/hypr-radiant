@@ -7,6 +7,16 @@
 #include <utility>
 
 namespace hypr_radiant {
+
+WorkspaceWallOptions scaledSpacing(WorkspaceWallOptions options, double multiplier) {
+    const auto scale = std::clamp(multiplier, 0.5, 2.0);
+    options.outerPadding *= scale;
+    options.cardGap *= scale;
+    options.windowGap *= scale;
+    options.windowInset *= scale;
+    return options;
+}
+
 namespace {
 
 bool containsPositiveWorkspaceId(const WorkspaceSnapshot& workspace) {

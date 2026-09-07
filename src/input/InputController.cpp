@@ -29,12 +29,22 @@ bool pointerPressed(wl_pointer_button_state state) {
     return state == WL_POINTER_BUTTON_STATE_PRESSED;
 }
 
-bool ctrlHeld() {
+KeyboardModifiers currentModifiers() {
     if (!g_pSeatManager)
-        return false;
+        return {};
 
     const auto keyboard = g_pSeatManager->m_keyboard.lock();
-    return keyboard && (keyboard->getModifiers() & HL_MODIFIER_CTRL) != 0;
+    if (!keyboard)
+        return {};
+    const auto modifiers = keyboard->getModifiers();
+    return {
+        .control = (modifiers & HL_MODIFIER_CTRL) != 0,
+        .shift   = (modifiers & HL_MODIFIER_SHIFT) != 0,
+    };
+}
+
+bool ctrlHeld() {
+    return currentModifiers().control;
 }
 
 // Touchpads report FINGER/CONTINUOUS scroll, which stays bound to the shelf. Only a physical
@@ -152,6 +162,8 @@ void InputController::install(Callbacks callbacks) {
     m_close         = std::move(callbacks.close);
     m_toggleMode    = std::move(callbacks.toggleMode);
     m_togglePreferences = std::move(callbacks.togglePreferences);
+    m_keyboardBindings = std::move(callbacks.keyboardBindings);
+    m_cycleWindow = std::move(callbacks.cycleWindow);
 
     m_mouseMoveListener = Event::bus()->m_events.input.mouse.move.listen([this](Vector2D position, Event::SCallbackInfo& info) {
         if (!m_active || !m_active())
@@ -247,7 +259,9 @@ void InputController::install(Callbacks callbacks) {
 
         const auto key        = event.keycode;
         const auto searching  = m_searchActive && m_searchActive();
-        const auto action     = resolveKeyboardAction(key, searching, ctrlHeld(), searchCharForKey(key));
+        const auto modifiers  = currentModifiers();
+        const auto bindings   = m_keyboardBindings ? m_keyboardBindings() : KeyboardBindings{};
+        const auto action     = resolveKeyboardAction(key, searching, modifiers, searchCharForKey(key), bindings);
 
         switch (action.type) {
         case KeyboardActionType::Close:
@@ -277,6 +291,10 @@ void InputController::install(Callbacks callbacks) {
         case KeyboardActionType::ToggleMode:
             if (m_toggleMode)
                 m_toggleMode();
+            return;
+        case KeyboardActionType::CycleWindow:
+            if (m_cycleWindow)
+                m_cycleWindow(action.step);
             return;
         case KeyboardActionType::JumpWorkspace:
             if (m_jump)
@@ -339,6 +357,8 @@ void InputController::uninstall() {
     m_close = {};
     m_toggleMode = {};
     m_togglePreferences = {};
+    m_keyboardBindings = {};
+    m_cycleWindow = {};
     m_scrollAccumulator = 0.0;
     m_acceptInputAfter = Clock::time_point::min();
     m_acceptActivationAfter = Clock::time_point::min();

@@ -12,6 +12,7 @@ namespace {
 std::unordered_map<const Config::Values::IValue*, std::string> configValueNames;
 std::vector<std::string>                                      registeredConfigValues;
 std::string                                                   rejectedConfigValue;
+std::unordered_map<std::string, std::string>                    configStrings;
 
 } // namespace
 
@@ -61,15 +62,16 @@ Config::INTEGER CIntValue::defaultVal() const {
     return 0;
 }
 
-CStringValue::CStringValue(const char* name, const char*, Config::STRING, SStringValueOptions&&) : IValue(0) {
+CStringValue::CStringValue(const char* name, const char*, Config::STRING value, SStringValueOptions&&) : IValue(0) {
     configValueNames.emplace(this, name);
+    configStrings[name] = value;
 }
 const std::type_info* CStringValue::underlying() const {
     return nullptr;
 }
 void CStringValue::commence() {}
 Config::STRING CStringValue::value() const {
-    return {};
+    return configStrings.at(configValueNames.at(this));
 }
 Config::STRING CStringValue::defaultVal() const {
     return {};
@@ -118,6 +120,18 @@ void emptyLayoutModeFallsBackToStage() {
     assert(parseLayoutMode("") == LayoutMode::Stage);
 }
 
+void parsesShelfModes() {
+    assert(parseShelfMode("always") == ShelfMode::Always);
+    assert(parseShelfMode("hidden") == ShelfMode::Hidden);
+    assert(parseShelfMode("unknown") == ShelfMode::Auto);
+}
+
+void parsesWindowNavigationModes() {
+    assert(parseWindowNavigation("spatial") == WindowNavigation::Spatial);
+    assert(parseWindowNavigation("list") == WindowNavigation::List);
+    assert(parseWindowNavigation("unknown") == WindowNavigation::List);
+}
+
 void parsesAccentFormats() {
     const auto hex = parseAccentColor("#509475");
     assert(hex.has_value());
@@ -152,6 +166,21 @@ void overviewShortcutDefaultIsDiscoverable() {
     assert(DEFAULT_SHORTCUT_ENABLED);
 }
 
+void unregisteredConfigUsesCustomizationDefaults() {
+    RadiantConfig config;
+    assert(config.chromePreset() == ChromePreset::Radiant);
+    assert(config.roundingOverride() == -1);
+    assert(config.borderSizeOverride() == -1);
+    assert(!config.borderColorOverride());
+    assert(config.effectsMode() == EffectsMode::Auto);
+    assert(config.spacing() == 1.0);
+    assert(config.shelfMode() == ShelfMode::Auto);
+    assert(!config.allShelfTargets());
+    assert(config.windowNavigation() == WindowNavigation::List);
+    assert(!config.vimKeys());
+    assert(!config.tabCyclesWindows());
+}
+
 void registersEveryPluginOptionBeforeRuntimeSetup() {
     registeredConfigValues.clear();
     rejectedConfigValue.clear();
@@ -170,9 +199,25 @@ void registersEveryPluginOptionBeforeRuntimeSetup() {
         "plugin:radiant:gesture_fingers",
         "plugin:radiant:gesture_distance",
         "plugin:radiant:shortcut_enabled",
+        "plugin:radiant:chrome",
+        "plugin:radiant:rounding",
+        "plugin:radiant:border_size",
+        "plugin:radiant:border_color",
+        "plugin:radiant:effects",
+        "plugin:radiant:spacing",
+        "plugin:radiant:shelf",
+        "plugin:radiant:window_navigation",
+        "plugin:radiant:shelf_navigation",
+        "plugin:radiant:vim_keys",
+        "plugin:radiant:tab_cycles_windows",
     };
     assert(registeredConfigValues == expected);
     assert(config.registrationError().empty());
+    assert(!config.allShelfTargets());
+    configStrings["plugin:radiant:shelf_navigation"] = "all";
+    assert(config.allShelfTargets());
+    configStrings["plugin:radiant:shelf_navigation"] = "unknown";
+    assert(!config.allShelfTargets());
 }
 
 void registrationFailureNamesTheRejectedOption() {
@@ -196,10 +241,13 @@ int main() {
     parsesRibbonLayoutMode();
     unknownLayoutModeFallsBackToStage();
     emptyLayoutModeFallsBackToStage();
+    parsesShelfModes();
+    parsesWindowNavigationModes();
     parsesAccentFormats();
     rejectsAutomaticAndInvalidAccents();
     overviewGestureDefaultsAreDiscoverable();
     overviewShortcutDefaultIsDiscoverable();
+    unregisteredConfigUsesCustomizationDefaults();
     registersEveryPluginOptionBeforeRuntimeSetup();
     registrationFailureNamesTheRejectedOption();
     std::cout << "ConfigParserTest passed\n";

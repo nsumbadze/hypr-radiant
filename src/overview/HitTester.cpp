@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <vector>
 
 namespace hypr_radiant {
@@ -49,8 +50,66 @@ std::vector<OverviewTarget> workspaceTargets(const WorkspaceWallFrame& frame) {
     return targets;
 }
 
+std::vector<OverviewTarget> windowTargets(const WorkspaceWallFrame& frame, std::int64_t workspaceId) {
+    std::vector<OverviewTarget> targets;
+    const auto append = [&targets, &frame](const auto& windows) {
+        for (const auto& window : windows) {
+            if (selectable(window.rect))
+                targets.push_back({.type = OverviewTargetType::Window, .workspaceId = window.workspaceId,
+                    .windowId = window.stableId, .monitorId = frame.monitorId});
+        }
+    };
+    if (frame.focusedStage && frame.stage.workspaceId == workspaceId) {
+        append(frame.stage.windows);
+        return targets;
+    }
+    const auto workspace = std::ranges::find(frame.workspaces, workspaceId, &WorkspaceCard::workspaceId);
+    if (workspace != frame.workspaces.end())
+        append(workspace->windows);
+    return targets;
+}
+
 double centerX(const LayoutRect& rect) { return rect.x + rect.width / 2.0; }
 double centerY(const LayoutRect& rect) { return rect.y + rect.height / 2.0; }
+
+std::optional<OverviewTarget> nearestInDirection(const WorkspaceWallFrame& frame, OverviewTarget current,
+    const std::vector<OverviewTarget>& candidates, NavigationDirection direction, bool preferAlignment = false) {
+    const auto currentRect = rectFor(frame, current);
+    if (!selectable(currentRect))
+        return std::nullopt;
+    const auto cx = centerX(currentRect);
+    const auto cy = centerY(currentRect);
+    std::optional<OverviewTarget> best;
+    auto bestScore = 1.0e18;
+    bool bestAligned = false;
+    for (const auto& target : candidates) {
+        if (target.type == current.type && target.workspaceId == current.workspaceId && target.windowId == current.windowId)
+            continue;
+        const auto rect = rectFor(frame, target);
+        const auto dx = centerX(rect) - cx;
+        const auto dy = centerY(rect) - cy;
+        const auto inDirection =
+            (direction == NavigationDirection::Left && dx < -1.0) ||
+            (direction == NavigationDirection::Right && dx > 1.0) ||
+            (direction == NavigationDirection::Up && dy < -1.0) ||
+            (direction == NavigationDirection::Down && dy > 1.0);
+        if (!inDirection)
+            continue;
+        const auto horizontal = direction == NavigationDirection::Left || direction == NavigationDirection::Right;
+        const auto primary = horizontal ? std::abs(dx) : std::abs(dy);
+        const auto secondary = horizontal ? std::abs(dy) : std::abs(dx);
+        const auto aligned = horizontal
+            ? std::min(rect.y + rect.height, currentRect.y + currentRect.height) > std::max(rect.y, currentRect.y)
+            : std::min(rect.x + rect.width, currentRect.x + currentRect.width) > std::max(rect.x, currentRect.x);
+        const auto score = preferAlignment ? dx * dx + dy * dy : primary * 1000.0 + secondary;
+        if (!best || (preferAlignment && aligned != bestAligned ? aligned : score < bestScore)) {
+            bestScore   = score;
+            bestAligned = aligned;
+            best        = target;
+        }
+    }
+    return best;
+}
 
 } // namespace
 
@@ -176,8 +235,18 @@ OverviewTarget HitTester::initialSelection(const WorkspaceWallFrame& frame) cons
     return {};
 }
 
-OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, OverviewTarget current, NavigationDirection direction) const {
+OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, OverviewTarget current, NavigationDirection direction,
+    NavigationOptions options) const {
     const auto horizontal = direction == NavigationDirection::Left || direction == NavigationDirection::Right;
+
+    if (options.spatialWindows && current.type == OverviewTargetType::Window) {
+        const auto targets = windowTargets(frame, current.workspaceId);
+        if (const auto nearest = nearestInDirection(frame, current, targets, direction, true))
+            return *nearest;
+        if (direction == NavigationDirection::Up)
+            return {.type = OverviewTargetType::Workspace, .workspaceId = current.workspaceId, .monitorId = frame.monitorId};
+        return current;
+    }
 
     // Carousel cards are a logical sequence displayed as a centered hero with stacked side
     // columns. Resolve horizontal motion directly from that sequence: this avoids both ambiguous
@@ -208,7 +277,7 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
     }
 
     auto targets = workspaceTargets(frame);
-    if (horizontal) {
+    if (horizontal && !(frame.focusedStage && options.allShelfTargets)) {
         std::erase_if(targets, [](OverviewTarget target) { return target.type == OverviewTargetType::NewWorkspace; });
         // Stepping the rail should land on workspaces that actually hold something. Empty slots are
         // there so the numbering reads correctly, not as stops on the way past. Skipping them keeps
@@ -230,6 +299,15 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
         return {};
 
     if (current.type == OverviewTargetType::Workspace && direction == NavigationDirection::Down) {
+        if (options.spatialWindows && options.returnWindow.workspaceId == current.workspaceId &&
+            options.returnWindow.monitorId == frame.monitorId) {
+            const auto windows = windowTargets(frame, current.workspaceId);
+            const auto remembered = std::ranges::find_if(windows, [&](OverviewTarget target) {
+                return target.windowId == options.returnWindow.windowId;
+            });
+            if (remembered != windows.end())
+                return *remembered;
+        }
         if (frame.focusedStage && current.workspaceId == frame.stage.workspaceId) {
             const auto window = std::ranges::find_if(frame.stage.windows, [](const WindowCard& card) { return selectable(card.rect); });
             if (window != frame.stage.windows.end())
@@ -302,39 +380,10 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
     if (current.type == OverviewTargetType::None || currentRect.width <= 0.0 || currentRect.height <= 0.0)
         return initialSelection(frame);
 
-    const auto cx = centerX(currentRect);
-    const auto cy = centerY(currentRect);
+    if (const auto best = nearestInDirection(frame, current, targets, direction))
+        return *best;
 
-    auto best      = current;
-    auto bestScore = 1.0e18;
-
-    for (const auto& target : targets) {
-        if (target.type == current.type && target.workspaceId == current.workspaceId && target.windowId == current.windowId)
-            continue;
-
-        const auto rect = rectFor(frame, target);
-        const auto dx   = centerX(rect) - cx;
-        const auto dy   = centerY(rect) - cy;
-
-        const auto inDirection =
-            (direction == NavigationDirection::Left && dx < -1.0) ||
-            (direction == NavigationDirection::Right && dx > 1.0) ||
-            (direction == NavigationDirection::Up && dy < -1.0) ||
-            (direction == NavigationDirection::Down && dy > 1.0);
-
-        if (!inDirection)
-            continue;
-
-        const auto primary   = direction == NavigationDirection::Left || direction == NavigationDirection::Right ? std::abs(dx) : std::abs(dy);
-        const auto secondary = direction == NavigationDirection::Left || direction == NavigationDirection::Right ? std::abs(dy) : std::abs(dx);
-        const auto score     = primary * 1000.0 + secondary;
-        if (score < bestScore) {
-            bestScore = score;
-            best      = target;
-        }
-    }
-
-    if (bestScore == 1.0e18 && horizontal) {
+    if (horizontal) {
         const auto compareX = [&frame](OverviewTarget lhs, OverviewTarget rhs) {
             return centerX(rectFor(frame, lhs)) < centerX(rectFor(frame, rhs));
         };
@@ -342,7 +391,23 @@ OverviewTarget HitTester::moveSelection(const WorkspaceWallFrame& frame, Overvie
                                                         *std::ranges::min_element(targets, compareX);
     }
 
-    return best;
+    return current;
+}
+
+OverviewTarget HitTester::cycleWindow(const WorkspaceWallFrame& frame, OverviewTarget current, int step) const {
+    auto workspaceId = current.workspaceId;
+    if (workspaceId <= 0 && frame.focusedStage)
+        workspaceId = frame.stage.workspaceId;
+    const auto targets = windowTargets(frame, workspaceId);
+    if (targets.empty())
+        return current;
+    if (current.type != OverviewTargetType::Window)
+        return step < 0 ? targets.back() : targets.front();
+    const auto found = std::ranges::find_if(targets, [current](OverviewTarget target) { return target.windowId == current.windowId; });
+    if (found == targets.end())
+        return step < 0 ? targets.back() : targets.front();
+    const auto index = static_cast<std::size_t>(std::distance(targets.begin(), found));
+    return step < 0 ? targets[(index + targets.size() - 1) % targets.size()] : targets[(index + 1) % targets.size()];
 }
 
 } // namespace hypr_radiant

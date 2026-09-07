@@ -2,6 +2,7 @@
 
 #include <hypr-radiant/OverviewTarget.hpp>
 #include <hypr-radiant/input/OpeningInputGuard.hpp>
+#include <hypr-radiant/input/KeyboardAction.hpp>
 
 #include <hyprland/src/helpers/signal/Signal.hpp>
 #include <hyprland/src/managers/eventLoop/EventLoopTimer.hpp>
@@ -33,6 +34,8 @@ class InputController {
     using CloseFn    = std::function<void()>;
     using ToggleModeFn = std::function<void()>;
     using TogglePreferencesFn = std::function<void()>;
+    using KeyboardBindingsFn = std::function<KeyboardBindings()>;
+    using CycleWindowFn = std::function<void(int)>;
 
     // One named field per callback: the previous 13 positional std::functions were transposable at
     // the call site — two same-typed lambdas 30 lines apart compiled fine while silently swapping,
@@ -52,6 +55,8 @@ class InputController {
         CloseFn             close;
         ToggleModeFn        toggleMode;
         TogglePreferencesFn togglePreferences;
+        KeyboardBindingsFn  keyboardBindings;
+        CycleWindowFn       cycleWindow;
     };
 
     void install(Callbacks callbacks);
@@ -88,6 +93,8 @@ class InputController {
     CloseFn             m_close;
     ToggleModeFn        m_toggleMode;
     TogglePreferencesFn m_togglePreferences;
+    KeyboardBindingsFn  m_keyboardBindings;
+    CycleWindowFn       m_cycleWindow;
     CHyprSignalListener m_mouseMoveListener;
     CHyprSignalListener m_mouseButtonListener;
     CHyprSignalListener m_mouseAxisListener;
